@@ -23,6 +23,8 @@
 #include "config.h"
 #include "logging.h"
 
+#include <stdlib.h> //for gcc4.2
+
 #if defined(_MSC_VER)
 # include <sys/types.h>
 # include <sys/stat.h>

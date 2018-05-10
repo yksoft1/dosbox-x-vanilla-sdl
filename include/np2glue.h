@@ -294,7 +294,8 @@ extern NP2CFG pccore;
 #define CopyMemory(d,s,n)   memcpy((d), (s), (n))
 #endif
 
-typedef FILE *			FILEH;
+//typedef FILE *			FILEH;
+//defined in src/hardware/snd_pc98/x11/dosio.h
 
 #ifndef	FASTCALL
 #define	FASTCALL

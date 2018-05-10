@@ -439,7 +439,7 @@ public:
 		/* Check to see for extra command line options to be added (before the command specified on commandline) */
 		/* Maximum of extra commands: 10 */
 		Bitu i = 1;
-		for (auto it=control->opt_c.begin();i <= 11 && it!=control->opt_c.end();it++) /* -c switches */
+		for (std::vector<std::string>::iterator it=control->opt_c.begin();i <= 11 && it!=control->opt_c.end();it++) /* -c switches */
 			autoexec[i++].Install(*it);
 
 		/* Check for the -exit switch which causes dosbox to when the command on the commandline has finished */
