@@ -2874,7 +2874,7 @@ class ViBRA_PnP : public ISAPnPDevice {
 			write_Logical_Device_ID('C','T','L',0x0,0x0,0x0,0x1); // CTL0001
 			write_Identifier_String("Audio");
 
-			write_Dependent_Function_Start(ISAPnPDevice::DependentFunctionConfig::PreferredDependentConfiguration);
+			write_Dependent_Function_Start(ISAPnPDevice::PreferredDependentConfiguration);
 			write_IRQ_Format(
 				ISAPnPDevice::irq2mask(5));
 			write_DMA_Format(
@@ -2895,7 +2895,7 @@ class ViBRA_PnP : public ISAPnPDevice {
 			write_IO_Port(/*min*/0x330,/*max*/0x330,/*count*/0x02,/*align*/0x01);
 			write_IO_Port(/*min*/0x388,/*max*/0x388,/*count*/0x04,/*align*/0x01);
 
-			write_Dependent_Function_Start(ISAPnPDevice::DependentFunctionConfig::AcceptableDependentConfiguration,true);
+			write_Dependent_Function_Start(ISAPnPDevice::AcceptableDependentConfiguration,true);
 			write_IRQ_Format(
 				ISAPnPDevice::irq2mask(5,7,9,10));
 			write_DMA_Format(
@@ -2916,7 +2916,7 @@ class ViBRA_PnP : public ISAPnPDevice {
 			write_IO_Port(/*min*/0x300,/*max*/0x330,/*count*/0x02,/*align*/0x30);
 			write_IO_Port(/*min*/0x388,/*max*/0x388,/*count*/0x04,/*align*/0x01);
 
-			write_Dependent_Function_Start(ISAPnPDevice::DependentFunctionConfig::AcceptableDependentConfiguration,true);
+			write_Dependent_Function_Start(ISAPnPDevice::AcceptableDependentConfiguration,true);
 			write_IRQ_Format(
 				ISAPnPDevice::irq2mask(5,7,9,10));
 			write_DMA_Format(
@@ -2936,7 +2936,7 @@ class ViBRA_PnP : public ISAPnPDevice {
 			write_IO_Port(/*min*/0x220,/*max*/0x280,/*count*/0x10,/*align*/0x20);
 			write_IO_Port(/*min*/0x300,/*max*/0x330,/*count*/0x02,/*align*/0x30);
 
-			write_Dependent_Function_Start(ISAPnPDevice::DependentFunctionConfig::SubOptimalDependentConfiguration);
+			write_Dependent_Function_Start(ISAPnPDevice::SubOptimalDependentConfiguration);
 			write_IRQ_Format(
 				ISAPnPDevice::irq2mask(5,7,9,10));
 			write_DMA_Format(
@@ -2955,7 +2955,7 @@ class ViBRA_PnP : public ISAPnPDevice {
 				DMASpeedSupported_Compat);
 			write_IO_Port(/*min*/0x220,/*max*/0x280,/*count*/0x10,/*align*/0x20);
 
-			write_Dependent_Function_Start(ISAPnPDevice::DependentFunctionConfig::SubOptimalDependentConfiguration);
+			write_Dependent_Function_Start(ISAPnPDevice::SubOptimalDependentConfiguration);
 			write_IRQ_Format(
 				ISAPnPDevice::irq2mask(5,7,9,10));
 			write_DMA_Format(
@@ -2969,7 +2969,7 @@ class ViBRA_PnP : public ISAPnPDevice {
 			write_IO_Port(/*min*/0x300,/*max*/0x330,/*count*/0x02,/*align*/0x30);
 			write_IO_Port(/*min*/0x388,/*max*/0x388,/*count*/0x04,/*align*/0x01);
 
-			write_Dependent_Function_Start(ISAPnPDevice::DependentFunctionConfig::SubOptimalDependentConfiguration);
+			write_Dependent_Function_Start(ISAPnPDevice::SubOptimalDependentConfiguration);
 			write_IRQ_Format(
 				ISAPnPDevice::irq2mask(5,7,9,10));
 			write_DMA_Format(

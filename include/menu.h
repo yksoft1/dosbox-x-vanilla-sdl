@@ -130,8 +130,8 @@ void GUI_Shortcut(int select);
 
 class DOSBoxMenu {
     public:
-        DOSBoxMenu(const DOSBoxMenu &src) = delete;             /* don't copy me */
-        DOSBoxMenu(const DOSBoxMenu &&src) = delete;            /* don't move me */
+        //DOSBoxMenu(const DOSBoxMenu &src) = delete;             /* don't copy me */
+        //DOSBoxMenu(const DOSBoxMenu &&src) = delete;            /* don't move me */
     public:
         class item;
     public:
@@ -149,10 +149,13 @@ class DOSBoxMenu {
         typedef std::string             mapper_event_t;     /* event name */
     public:
         class displaylist {
-            friend DOSBoxMenu;
+            friend class DOSBoxMenu;
 
             public:
-                                        displaylist();
+                                        displaylist():
+										items_changed(false),
+										order_changed(false)
+										{};
                                         ~displaylist();
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
             public:
@@ -160,8 +163,8 @@ class DOSBoxMenu {
                 item_handle_t           itemFromPoint(DOSBoxMenu &menu,int x,int y);
 #endif
             protected:
-                bool                    items_changed = false;
-                bool                    order_changed = false;
+                bool                    items_changed;
+                bool                    order_changed;
                 std::vector<item_handle_t> disp_list;
             public:
                 const std::vector<item_handle_t> &get_disp_list(void) const {
@@ -169,23 +172,45 @@ class DOSBoxMenu {
                 }
         };
     public:
-        static constexpr item_handle_t  unassigned_item_handle = ((item_handle_t)(0xFFFFU)); 
-        static constexpr callback_t     unassigned_callback = NULL;
+        static item_handle_t  unassigned_item_handle; 
+        static callback_t     unassigned_callback;
         static const mapper_event_t     unassigned_mapper_event; /* empty std::string */
     public:
         struct accelerator {
                                         accelerator() { }
                                         accelerator(char _key,unsigned char _instance=0) : key(_key), key_instance(_instance) { }
 
-            char                        key = 0;            /* ascii code i.e. 'g' */
-            unsigned char               key_instance = 0;   /* which occurrence of the letter in the text */
+            char                        key;            /* ascii code i.e. 'g' */
+            unsigned char               key_instance;   /* which occurrence of the letter in the text */
         };
     public:
         class item {
-            friend DOSBoxMenu;
+            friend class DOSBoxMenu;
 
             public:
-                                        item();
+                                        item():
+#if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
+										winMenu(NULL),
+#endif
+#if DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU
+										nsMenuItem(NULL),
+										nsMenu(NULL),
+#endif
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+										boxInit(false),
+										itemHover(false),
+										needRedraw(false),
+										itemHilight(false),
+										itemVisible(false),
+										borderTop(false),
+#endif
+										type(item_type_id),
+										parent_id(unassigned_item_handle),
+										master_id(unassigned_item_handle),
+										callback_func(unassigned_callback),
+										mapper_event(unassigned_mapper_event),
+										user_defined(0)
+										{};
                                         ~item();
             protected:
                 std::string             name;               /* item name */
@@ -194,9 +219,9 @@ class DOSBoxMenu {
                 std::string             description;        /* description text */
                 struct accelerator      accelerator;        /* menu accelerator */
             protected:
-                item_handle_t           parent_id = unassigned_item_handle;
-                item_handle_t           master_id = unassigned_item_handle;
-                enum item_type_t        type = item_type_id;
+                item_handle_t           parent_id;
+                item_handle_t           master_id;
+                enum item_type_t        type;
             protected:
                 struct status {
                                         status() : changed(false), allocated(false),
@@ -210,23 +235,23 @@ class DOSBoxMenu {
                     unsigned int        in_use:1;
                 } status;
             protected:
-                callback_t              callback_func = unassigned_callback;
-                mapper_event_t          mapper_event = unassigned_mapper_event;
+                callback_t              callback_func;
+                mapper_event_t          mapper_event;
             public:
                 displaylist             display_list;
             public:
-                uint64_t                user_defined = 0;
+                uint64_t                user_defined;
 #if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU /* Windows menu handle */
             protected:
-                HMENU                   winMenu = NULL;
+                HMENU                   winMenu;
             protected:
                 void                    winAppendMenu(HMENU handle);
                 std::string             winConstructMenuText(void);
 #endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU /* Mac OS X menu handle */
             protected:
-                void*                   nsMenuItem = NULL;
-                void*                   nsMenu = NULL;
+                void*                   nsMenuItem;
+                void*                   nsMenu;
             protected:
                 void                    nsAppendMenu(void *nsMenu);
 #endif
@@ -237,12 +262,12 @@ class DOSBoxMenu {
                 SDL_Rect                textBox;        /* relative to screenbox */
                 SDL_Rect                shortBox;       /* relative to screenbox */
                 SDL_Rect                popupBox;       /* absolute screen coords */
-                bool                    boxInit = false;
-                bool                    itemHover = false;
-                bool                    needRedraw = false;
-                bool                    itemHilight = false;
-                bool                    itemVisible = false;
-                bool                    borderTop = false;
+                bool                    boxInit;
+                bool                    itemHover;
+                bool                    needRedraw;
+                bool                    itemHilight;
+                bool                    itemVisible;
+                bool                    borderTop;
             public:
                 void                    removeFocus(DOSBoxMenu &menu);
                 void                    removeHover(DOSBoxMenu &menu);
@@ -394,7 +419,30 @@ class DOSBoxMenu {
                 }
         };
     public:
-                                        DOSBoxMenu();
+                                        DOSBoxMenu():
+#if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
+										winMenu(NULL),
+#endif									
+#if DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU 
+										nsMenu(NULL),
+#endif
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+										menuBarHeight((16+1)),
+										screenWidth(320),
+										needRedraw(false),
+										menuVisible(false),
+										menuUserAttentionAt(unassigned_item_handle),
+										menuUserHoverAt(unassigned_item_handle),										
+#endif
+										master_list_alloc(0)
+										{
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW		
+										menuBox.x=0;
+										menuBox.y=0;
+										menuBox.w=0;
+										menuBox.h=0;
+#endif										
+										};
                                         ~DOSBoxMenu();
     public:
         bool                            item_exists(const item_handle_t i);
@@ -415,10 +463,10 @@ class DOSBoxMenu {
     protected:
         std::vector<item>               master_list;
         std::map<std::string,item_handle_t> name_map;
-        item_handle_t                   master_list_alloc = 0;
+        item_handle_t                   master_list_alloc;
 #if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU /* Windows menu handle */
     protected:
-        HMENU                           winMenu = NULL;
+        HMENU                           winMenu;
         bool                            winMenuInit(void);
         void                            winMenuDestroy(void);
         bool                            winMenuSubInit(DOSBoxMenu::item &item);
@@ -426,11 +474,11 @@ class DOSBoxMenu {
         HMENU                           getWinMenu(void) const;
         bool                            mainMenuWM_COMMAND(unsigned int id);
     public:
-        static constexpr unsigned int   winMenuMinimumID = 0x1000;
+        static const unsigned int   winMenuMinimumID;
 #endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU /* Mac OS X NSMenu / NSMenuItem handle */
     protected:
-        void*                           nsMenu = NULL;
+        void*                           nsMenu;
         bool                            nsMenuInit(void);
         void                            nsMenuDestroy(void);
         bool                            nsMenuSubInit(DOSBoxMenu::item &item);
@@ -438,16 +486,16 @@ class DOSBoxMenu {
         void*                           getNsMenu(void) const;
         bool                            mainMenuAction(unsigned int id);
     public:
-        static constexpr unsigned int   nsMenuMinimumID = 0x1000;
+       	static const unsigned int   nsMenuMinimumID;
 #endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
     public:
-        bool                            needRedraw = false;
-        bool                            menuVisible = false;
-        item_handle_t                   menuUserAttentionAt = unassigned_item_handle;
-        item_handle_t                   menuUserHoverAt = unassigned_item_handle;
+        bool                            needRedraw;
+        bool                            menuVisible;
+        item_handle_t                   menuUserAttentionAt;
+        item_handle_t                   menuUserHoverAt;
     public:
-        SDL_Rect                        menuBox = {0,0,0,0};
+        SDL_Rect                        menuBox;
     public:
         inline bool isVisible(void) const {
             return menuVisible;
@@ -468,22 +516,23 @@ class DOSBoxMenu {
         void                            updateRect(void);
         void                            layoutMenu(void);
     public:
-        size_t                          menuBarHeight = (16 + 1);
-        size_t                          screenWidth = 320;
+        size_t                          menuBarHeight;
+        size_t                          screenWidth;
     public:
-        static constexpr size_t         fontCharWidth = 8;
-        static constexpr size_t         fontCharHeight = 16;
-        static constexpr size_t         dropshadowX = 8;
-        static constexpr size_t         dropshadowY = 8;
+        static const size_t         fontCharWidth;
+        static const size_t         fontCharHeight;
+        static const size_t         dropshadowX;
+        static const size_t         dropshadowY;
 #endif
     public:
         void                            dispatchItemCommand(item &item);
     public:
-        static constexpr size_t         master_list_limit = 4096;
+         static const size_t         master_list_limit;
     public:
         void                            displaylist_append(displaylist &ls,const DOSBoxMenu::item_handle_t item_id);
         void                            displaylist_clear(displaylist &ls);
 };
+
 
 extern DOSBoxMenu mainMenu;
 

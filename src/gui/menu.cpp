@@ -46,16 +46,33 @@ void sdl_hax_nsMenuItemRelease(void *nsMenuItem);
 
 const DOSBoxMenu::mapper_event_t DOSBoxMenu::unassigned_mapper_event; /* empty std::string */
 
-DOSBoxMenu::DOSBoxMenu() {
-}
+DOSBoxMenu::item_handle_t  DOSBoxMenu::unassigned_item_handle=((DOSBoxMenu::item_handle_t)(0xFFFFU));
+DOSBoxMenu::callback_t DOSBoxMenu::unassigned_callback=NULL;
+#if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
+const unsigned int DOSBoxMenu::winMenuMinimumID = 0x1000;
+#endif
+#if DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU 
+const unsigned int DOSBoxMenu::nsMenuMinimumID = 0x1000;
+#endif
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+const size_t DOSBoxMenu::fontCharWidth = 8;
+const size_t DOSBoxMenu::fontCharHeight = 16;
+const size_t DOSBoxMenu::dropshadowX = 8;
+const size_t DOSBoxMenu::dropshadowY = 8;
+#endif
+const size_t  DOSBoxMenu::master_list_limit = 4096;
+
+//DOSBoxMenu::DOSBoxMenu() 
+//{
+//}
 
 DOSBoxMenu::~DOSBoxMenu() {
     unbuild();
     clear_all_menu_items();
 }
 
-DOSBoxMenu::displaylist::displaylist() {
-}
+//DOSBoxMenu::displaylist::displaylist() {
+//}
 
 DOSBoxMenu::displaylist::~displaylist() {
 }
@@ -237,8 +254,8 @@ void DOSBoxMenu::clear_all_menu_items(void) {
     name_map.clear();
 }
 
-DOSBoxMenu::item::item() {
-}
+//DOSBoxMenu::item::item() {
+//}
 
 DOSBoxMenu::item::~item() {
 }

@@ -3565,8 +3565,8 @@ void MenuFullScreenRedraw(void) {
 }
 
 static struct {
-    unsigned char*      bmp = NULL;
-    unsigned int        stride = 0,height = 0;
+    unsigned char*      bmp;
+    unsigned int        stride,height;
 } menuSavedScreen;
 
 void MenuSaveScreen(void) {
@@ -6097,6 +6097,12 @@ int main(int argc, char* argv[]) {
 
     memset(&sdl,0,sizeof(sdl)); // struct sdl isn't initialized anywhere that I can tell
 
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW	
+	menuSavedScreen.bmp=NULL;
+	menuSavedScreen.stride=0;
+	menuSavedScreen.height=0;
+#endif
+	
     control=&myconf;
 #if defined(WIN32) && !defined(HX_DOS)
     /* Microsoft's IME does not play nice with DOSBox */

@@ -3331,7 +3331,8 @@ private:
 	}
 
 	void AddToDriveManager(const char drive, DOS_Drive* imgDisk, const Bit8u mediaid) {
-		std::vector<DOS_Drive*> imgDisks = { imgDisk };
+		std::vector<DOS_Drive*> imgDisks;
+		imgDisks.push_back(imgDisk);
 		AddToDriveManager(drive, imgDisks, mediaid);
 	}
 

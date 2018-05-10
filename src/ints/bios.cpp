@@ -736,27 +736,27 @@ void ISAPnPDevice::write_Device_ID(const char c1,const char c2,const char c3,con
 }
 
 void ISAPnPDevice::write_Logical_Device_ID(const char c1,const char c2,const char c3,const char c4,const char c5,const char c6,const char c7) {
-	write_begin_SMALLTAG(SmallTags::LogicalDeviceID,5);
+	write_begin_SMALLTAG(LogicalDeviceID,5);
 	write_Device_ID(c1,c2,c3,c4,c5,c6,c7);
 	write_byte(0x00);
 }
 
 void ISAPnPDevice::write_Compatible_Device_ID(const char c1,const char c2,const char c3,const char c4,const char c5,const char c6,const char c7) {
-	write_begin_SMALLTAG(SmallTags::CompatibleDeviceID,4);
+	write_begin_SMALLTAG(CompatibleDeviceID,4);
 	write_Device_ID(c1,c2,c3,c4,c5,c6,c7);
 }
 
 void ISAPnPDevice::write_IRQ_Format(const uint16_t IRQ_mask,const unsigned char IRQ_signal_type) {
 	bool write_irq_info = (IRQ_signal_type != 0);
 
-	write_begin_SMALLTAG(SmallTags::IRQFormat,write_irq_info?3:2);
+	write_begin_SMALLTAG(IRQFormat,write_irq_info?3:2);
 	write_byte(IRQ_mask & 0xFF);
 	write_byte(IRQ_mask >> 8);
 	if (write_irq_info) write_byte(((unsigned char)IRQ_signal_type & 0x0F));
 }
 
 void ISAPnPDevice::write_DMA_Format(const uint8_t DMA_mask,const unsigned char transfer_type_preference,const bool is_bus_master,const bool byte_mode,const bool word_mode,const unsigned char speed_supported) {
-	write_begin_SMALLTAG(SmallTags::DMAFormat,2);
+	write_begin_SMALLTAG(DMAFormat,2);
 	write_byte(DMA_mask);
 	write_byte(
 		(transfer_type_preference & 0x03) |
@@ -767,7 +767,7 @@ void ISAPnPDevice::write_DMA_Format(const uint8_t DMA_mask,const unsigned char t
 }
 
 void ISAPnPDevice::write_IO_Port(const uint16_t min_port,const uint16_t max_port,const uint8_t count,const uint8_t alignment,const bool full16bitdecode) {
-	write_begin_SMALLTAG(SmallTags::IOPortDescriptor,7);
+	write_begin_SMALLTAG(IOPortDescriptor,7);
 	write_byte((full16bitdecode ? 0x01 : 0x00));
 	write_byte(min_port & 0xFF);
 	write_byte(min_port >> 8);
@@ -778,14 +778,14 @@ void ISAPnPDevice::write_IO_Port(const uint16_t min_port,const uint16_t max_port
 }
 
 void ISAPnPDevice::write_Dependent_Function_Start(const ISAPnPDevice::DependentFunctionConfig cfg,const bool force) {
-	bool write_cfg_byte = force || (cfg != ISAPnPDevice::DependentFunctionConfig::AcceptableDependentConfiguration);
+	bool write_cfg_byte = force || (cfg != ISAPnPDevice::AcceptableDependentConfiguration);
 
-	write_begin_SMALLTAG(SmallTags::StartDependentFunctions,write_cfg_byte ? 1 : 0);
+	write_begin_SMALLTAG(StartDependentFunctions,write_cfg_byte ? 1 : 0);
 	if (write_cfg_byte) write_byte((unsigned char)cfg);
 }
 
 void ISAPnPDevice::write_End_Dependent_Functions() {
-	write_begin_SMALLTAG(SmallTags::EndDependentFunctions,0);
+	write_begin_SMALLTAG(EndDependentFunctions,0);
 }
 
 void ISAPnPDevice::write_nstring(const char *str,const size_t l) {
@@ -799,12 +799,12 @@ void ISAPnPDevice::write_Identifier_String(const char *str) {
 	const size_t l = strlen(str);
 	if (l > 4096) return;
 
-	write_begin_LARGETAG(LargeTags::IdentifierStringANSI,l);
+	write_begin_LARGETAG(IdentifierStringANSI,l);
 	if (l != 0) write_nstring(str,l);
 }
 
 void ISAPnPDevice::write_ISAPnP_version(unsigned char major,unsigned char minor,unsigned char vendor) {
-	write_begin_SMALLTAG(SmallTags::PlugAndPlayVersionNumber,2);
+	write_begin_SMALLTAG(PlugAndPlayVersionNumber,2);
 	write_byte((major << 4) + minor);
 	write_byte(vendor);
 }
@@ -813,7 +813,7 @@ void ISAPnPDevice::write_END() {
 	unsigned char sum = 0;
 	size_t i;
 
-	write_begin_SMALLTAG(SmallTags::EndTag,/*length*/1);
+	write_begin_SMALLTAG(EndTag,/*length*/1);
 
 	for (i=0;i < alloc_write;i++) sum += alloc_res[i];
 	write_byte((0x100 - sum) & 0xFF);
