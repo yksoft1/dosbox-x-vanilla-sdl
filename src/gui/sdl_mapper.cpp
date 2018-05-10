@@ -179,7 +179,7 @@ protected:
 };
 
 CEvent *get_mapper_event_by_name(const std::string &x) {
-    auto i = name_to_events.find(x);
+    std::map<std::string, size_t>::iterator i = name_to_events.find(x);
 
     if (i != name_to_events.end()) {
         if (i->second >= events.size())
@@ -632,7 +632,7 @@ std::string CEvent::GetBindMenuText(void) {
     if (bindlist.empty())
         return std::string();
 
-    for (auto i=bindlist.begin();i!=bindlist.end();i++) {
+    for (CBindList::iterator i=bindlist.begin();i!=bindlist.end();i++) {
         CBind *b = *i;
         if (b == NULL) continue;
         if (b->type != CBind::keybind_t) continue;
@@ -3020,7 +3020,7 @@ void MAPPER_AddHandler(MAPPER_Handler * handler,MapKeys key,Bitu mods,char const
         // this event may have appeared in the user's mapper file, and been ignored.
         // now is the time to register it.
         {
-            auto i = pending_string_binds.find(tempname);
+            std::map<std::string,std::string>::iterator i = pending_string_binds.find(tempname);
             char tmp[512];
 
             if (i != pending_string_binds.end()) {
@@ -3504,8 +3504,9 @@ void MAPPER_RunInternal() {
 	GFX_LosingFocus();
 
     /* and then the menu items need to be updated */
-    for (auto &ev : events) {
-        if (ev != NULL) ev->update_menu_shortcut();
+    //for (auto &ev : events) {
+	for(CEventVector_it ev=events.begin(); ev!=events.end(); ++ev) {
+        if (*ev != NULL) (*ev)->update_menu_shortcut();
     }
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
@@ -3560,8 +3561,9 @@ void MAPPER_Init(void) {
 	}
 
     /* and then the menu items need to be updated */
-    for (auto &ev : events) {
-        if (ev != NULL) ev->update_menu_shortcut();
+    //for (auto &ev : events) {
+	for(CEventVector_it ev=events.begin(); ev!=events.end(); ++ev) {
+        if (*ev != NULL) (*ev)->update_menu_shortcut();
     }
 }
 //Somehow including them at the top conflicts with something in setup.h

@@ -142,7 +142,7 @@ static EMM_Mapping emm_segmentmappings[0x40];
 
 bool EMS_GetMapping(Bitu &handle,Bitu &log_page,Bitu ems_page) {
     if (ems_page < EMM_MAX_PHYS) {
-        auto &x = emm_mappings[ems_page];
+        EMM_Mapping &x = emm_mappings[ems_page];
 
         if (x.handle != NULL_HANDLE && x.page != NULL_PAGE) {
             handle = x.handle;
@@ -156,7 +156,7 @@ bool EMS_GetMapping(Bitu &handle,Bitu &log_page,Bitu ems_page) {
 
 bool EMS_GetHandle(Bitu &size,PhysPt &addr,std::string &name,Bitu handle) {
     if (handle < EMM_MAX_HANDLES) {
-        auto &x = emm_handles[handle];
+        EMM_Handle &x = emm_handles[handle];
 
         if (x.pages != NULL_HANDLE) {
             {

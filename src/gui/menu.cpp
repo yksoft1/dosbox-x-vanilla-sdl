@@ -61,7 +61,7 @@ DOSBoxMenu::displaylist::~displaylist() {
 }
         
 bool DOSBoxMenu::item_exists(const std::string &name) {
-    auto i = name_map.find(name);
+    std::map<std::string,item_handle_t>::iterator i = name_map.find(name);
 
     if (i == name_map.end())
        return false;
@@ -86,7 +86,7 @@ bool DOSBoxMenu::item_exists(const item_handle_t i) {
 }
 
 DOSBoxMenu::item_handle_t DOSBoxMenu::get_item_id_by_name(const std::string &name) {
-    auto i = name_map.find(name);
+    std::map<std::string,item_handle_t>::iterator i = name_map.find(name);
 
     if (i == name_map.end())
         return unassigned_item_handle;
@@ -156,7 +156,7 @@ void DOSBoxMenu::delete_item(const item_handle_t i) {
         E_Exit("DOSBoxMenu::delete_item() attempt to get out of range handle");
 
     {
-        auto it = name_map.find(master_list[i].name);
+        std::map<std::string,item_handle_t>::iterator it = name_map.find(master_list[i].name);
         if (it != name_map.end()) {
             if (it->second != i) E_Exit("DOSBoxMenu::delete_item() master_id mismatch");
             name_map.erase(it);
@@ -184,8 +184,8 @@ void DOSBoxMenu::dump_log_displaylist(DOSBoxMenu::displaylist &ls, unsigned int 
     for (unsigned int i=0;i < indent;i++)
         prep += "+ ";
 
-    for (auto &id : ls.disp_list) {
-        DOSBoxMenu::item &item = get_item(id);
+    for (std::vector<item_handle_t>::iterator id = ls.disp_list.begin(); id != ls.disp_list.end(); ++id) {
+        DOSBoxMenu::item &item = get_item(*id);
 
         if (!item.is_allocated()) {
             LOG_MSG("%s (NOT ALLOCATED!!!)",prep.c_str());
@@ -207,7 +207,8 @@ void DOSBoxMenu::dump_log_displaylist(DOSBoxMenu::displaylist &ls, unsigned int 
 void DOSBoxMenu::dump_log_debug(void) {
     LOG_MSG("Menu dump log (%p)",(void*)this);
     LOG_MSG("---- Master list ----");
-    for (auto &id : master_list) {
+    for (std::vector<item>::iterator idi = master_list.begin(); idi != master_list.end(); idi++) {
+		item id = *idi;
         if (id.is_allocated()) {
             LOG_MSG("+ id=%u type=\"%s\" name=\"%s\" text=\"%s\" shortcut=\"%s\" desc=\"%s\"",
                 (unsigned int)id.master_id,
@@ -226,7 +227,8 @@ void DOSBoxMenu::dump_log_debug(void) {
 }
 
 void DOSBoxMenu::clear_all_menu_items(void) {
-    for (auto &id : master_list) {
+    for (std::vector<item>::iterator idi = master_list.begin(); idi != master_list.end(); idi++) {
+		item id = *idi;
         if (id.is_allocated())
             id.deallocate();
     }
@@ -277,9 +279,9 @@ void DOSBoxMenu::displaylist_append(displaylist &ls,const DOSBoxMenu::item_handl
 }
 
 void DOSBoxMenu::displaylist_clear(DOSBoxMenu::displaylist &ls) {
-    for (auto &id : ls.disp_list) {
-        if (id != DOSBoxMenu::unassigned_item_handle) {
-            id = DOSBoxMenu::unassigned_item_handle;
+     for (std::vector<item_handle_t>::iterator id = ls.disp_list.begin(); id != ls.disp_list.end(); ++id) {
+        if (*id != DOSBoxMenu::unassigned_item_handle) {
+            *id = DOSBoxMenu::unassigned_item_handle;
         }
     }
 
@@ -362,8 +364,8 @@ bool DOSBoxMenu::nsMenuSubInit(DOSBoxMenu::item &p_item) {
     if (p_item.nsMenu == NULL) {
         p_item.nsMenu = sdl_hax_nsMenuAlloc(p_item.get_text().c_str());
         if (p_item.nsMenu != NULL) {
-            for (auto id : p_item.display_list.disp_list) {
-                DOSBoxMenu::item &item = get_item(id);
+			for (std::vector<item_handle_t>::iterator id = p_item.display_list.disp_list.begin(); id != p_item.display_list.disp_list.end(); ++id) {
+                DOSBoxMenu::item &item = get_item(*id);
 
                 /* if a submenu, make the submenu */
                 if (item.type == submenu_type_id) {
@@ -389,8 +391,8 @@ bool DOSBoxMenu::nsMenuInit(void) {
 	sdl_hax_nsMenuAddApplicationMenu(nsMenu);
 
         /* top level */
-        for (auto id : display_list.disp_list) {
-            DOSBoxMenu::item &item = get_item(id);
+		for (std::vector<item_handle_t>::iterator id = display_list.disp_list.begin(); id != display_list.disp_list.end(); ++id) {
+            DOSBoxMenu::item &item = get_item(*id);
 
             /* if a submenu, make the submenu */
             if (item.type == submenu_type_id) {
@@ -404,7 +406,8 @@ bool DOSBoxMenu::nsMenuInit(void) {
 	/* release our handle on the nsMenus. Mac OS X will keep them alive with it's
 	   reference until the menu is destroyed at which point all items and submenus
 	   will be automatically destroyed */
-	for (auto &id : master_list) {
+	for (std::vector<item>::iterator idi = master_list.begin(); idi != master_list.end(); idi++) {
+		item id = *idi;
 		if (id.nsMenu != NULL) {
 		    sdl_hax_nsMenuRelease(id.nsMenu);
 		    id.nsMenu = NULL;
@@ -433,7 +436,7 @@ std::string DOSBoxMenu::item::winConstructMenuText(void) {
 
     /* copy text, converting '&' to '&&' for Windows.
      * TODO: Use accelerator to place '&' for underline */
-    for (auto i=text.begin();i!=text.end();i++) {
+    for (std::string::iterator i=text.begin();i!=text.end();i++) {
         char c = *i;
 
         if (c == '&') {
@@ -448,7 +451,7 @@ std::string DOSBoxMenu::item::winConstructMenuText(void) {
     if (!shortcut_text.empty()) {
         r += "\t";
 
-        for (auto i=shortcut_text.begin();i!=shortcut_text.end();i++) {
+        for (std::string::iterator i=shortcut_text.begin();i!=shortcut_text.end();i++) {
             char c = *i;
 
             if (c == '&') {
@@ -488,8 +491,8 @@ bool DOSBoxMenu::winMenuSubInit(DOSBoxMenu::item &p_item) {
     if (p_item.winMenu == NULL) {
         p_item.winMenu = CreatePopupMenu();
         if (p_item.winMenu != NULL) {
-            for (auto id : p_item.display_list.disp_list) {
-                DOSBoxMenu::item &item = get_item(id);
+			for (std::vector<item_handle_t>::iterator id = p_item.display_list.disp_list.begin(); id != p_item.display_list.disp_list.end(); ++id) {
+                DOSBoxMenu::item &item = get_item(*id);
 
                 /* if a submenu, make the submenu */
                 if (item.type == submenu_type_id) {
@@ -511,8 +514,8 @@ bool DOSBoxMenu::winMenuInit(void) {
         if (winMenu == NULL) return false;
 
         /* top level */
-        for (auto id : display_list.disp_list) {
-            DOSBoxMenu::item &item = get_item(id);
+		for (std::vector<item_handle_t>::iterator id = display_list.disp_list.begin(); id != display_list.disp_list.end(); ++id) {
+            DOSBoxMenu::item &item = get_item(*id);
 
             /* if a submenu, make the submenu */
             if (item.type == submenu_type_id) {
@@ -530,8 +533,10 @@ bool DOSBoxMenu::winMenuInit(void) {
 void DOSBoxMenu::winMenuDestroy(void) {
     if (winMenu != NULL) {
         /* go through all menu items, and clear the menu handle */
-        for (auto &id : master_list)
+		for (std::vector<item>::iterator idi = master_list.begin(); idi != master_list.end(); idi++) {
+			item id = *idi;
             id.winMenu = NULL;
+		}
 
         /* destroy the menu.
          * By MSDN docs it destroys submenus automatically */
@@ -2807,7 +2812,7 @@ void reflectmenu_INITMENU_cb() {
 // Sets the scaler to use.
 void SetScaler(scalerOperation_t op, Bitu size, std::string prefix)
 {
-	auto value = prefix + (render.scale.forced ? " forced" : "");
+	std::string value = prefix + (render.scale.forced ? " forced" : "");
 	SetVal("render", "scaler", value);
 	render.scale.size = size;
 	render.scale.op = op;
@@ -3831,7 +3836,8 @@ void DOSBoxMenu::showMenu(bool show) {
 
 void DOSBoxMenu::removeFocus(void) {
     if (menuUserAttentionAt != unassigned_item_handle) {
-        for (auto &id : master_list) {
+        for (std::vector<item>::iterator idi = master_list.begin(); idi != master_list.end(); idi++) {
+			item id = *idi;
             id.removeFocus(*this);
             id.showItem(*this,false);
         }
@@ -3862,17 +3868,17 @@ void DOSBoxMenu::layoutMenu(void) {
     x = menuBox.x;
     y = menuBox.y;
 
-    for (auto i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++) {
+    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++) {
         DOSBoxMenu::item &item = get_item(*i);
 
         item.placeItem(*this, x, y, /*toplevel*/true);
         x += item.screenBox.w;
     }
 
-    for (auto i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
+    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
         get_item(*i).placeItemFinal(*this, /*finalwidth*/x - menuBox.x, /*toplevel*/true);
 
-    for (auto i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
+    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
         get_item(*i).layoutSubmenu(*this, /*toplevel*/true);
 
     LOG_MSG("Layout complete");
@@ -3895,7 +3901,7 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
     popupBox.y = y;
 
     maxx = x;
-    for (auto i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++) {
+    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++) {
         DOSBoxMenu::item &item = menu.get_item(*i);
 
         item.placeItem(menu, x, y, /*toplevel*/false);
@@ -3905,10 +3911,10 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
             maxx = (item.screenBox.x + item.screenBox.w);
     }
 
-    for (auto i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
+    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
         menu.get_item(*i).placeItemFinal(menu, /*finalwidth*/maxx - popupBox.x, /*toplevel*/false);
 
-    for (auto i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
+    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
         menu.get_item(*i).layoutSubmenu(menu, /*toplevel*/false);
 
     popupBox.w = maxx - popupBox.x;

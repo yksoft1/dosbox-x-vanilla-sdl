@@ -164,7 +164,7 @@ bool XMS_GetHandleInfo(Bitu &phys_location,Bitu &size,Bitu &lockcount,bool &free
         free = true;
         size = 0;
 
-        auto &x = xms_handles[handle];
+        XMS_Block &x = xms_handles[handle];
 
         if (!x.free) {
             free = false;

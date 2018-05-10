@@ -1365,8 +1365,8 @@ void DOSBoxMenu::item::drawMenuItem(DOSBoxMenu &menu) {
 }
 
 void DOSBoxMenu::displaylist::DrawDisplayList(DOSBoxMenu &menu,bool updateScreen) {
-    for (auto &id : disp_list) {
-        DOSBoxMenu::item &item = menu.get_item(id);
+	for (std::vector<item_handle_t>::iterator id=disp_list.begin();id!=disp_list.end();id++) {
+        DOSBoxMenu::item &item = menu.get_item(*id);
 
         item.drawMenuItem(menu);
         if (updateScreen) item.updateScreenFromItem(menu);
@@ -2326,7 +2326,7 @@ void GetDesktopResolution(int* width, int* height)
 {
 #ifdef WIN32
 	RECT rDdesk;
-	auto hDesk = GetDesktopWindow();
+	HWND hDesk = GetDesktopWindow();
 	GetWindowRect(hDesk, &rDdesk);
 	*width = rDdesk.right - rDdesk.left;
 	*height = rDdesk.bottom - rDdesk.top;
@@ -2385,9 +2385,9 @@ void res_init(void) {
 	int height = 768;
 	
 	// fullresolution == desktop -> get/set desktop size
-	auto sdlSection = control->GetSection("sdl");
-	auto sdlSectionProp = static_cast<Section_prop*>(sdlSection);
-	auto fullRes = sdlSectionProp->Get_string("fullresolution");
+	Section* sdlSection = control->GetSection("sdl");
+	Section_prop* sdlSectionProp = static_cast<Section_prop*>(sdlSection);
+	const char* fullRes = sdlSectionProp->Get_string("fullresolution");
 	if (!strcmp(fullRes, "desktop")) GetDesktopResolution(&width, &height);
 	
 	if (!sdl.desktop.full.width) {
@@ -2508,7 +2508,7 @@ void GFX_SwitchFullScreen(void)
 
 	sdl.desktop.fullscreen = !sdl.desktop.fullscreen;
 
-	auto full = sdl.desktop.fullscreen;
+	bool full = sdl.desktop.fullscreen;
 
 	// if we're going fullscreen and current scaler exceeds screen size,
 	// cancel the fullscreen change -> fixes scaler crashes
@@ -2517,8 +2517,8 @@ void GFX_SwitchFullScreen(void)
 	{
 		int width, height;
 		GetDesktopResolution(&width, &height);
-		auto width1 = sdl.draw.width;
-		auto height1 = sdl.draw.height;
+		unsigned int width1 = sdl.draw.width;
+		unsigned int height1 = sdl.draw.height;
 		if ((unsigned int)width < width1 || (unsigned int)height < height1) {
 			sdl.desktop.fullscreen = false;
 			LOG_MSG("WARNING: full screen canceled, surface size (%ix%i) exceeds screen size (%ix%i).",
@@ -2536,7 +2536,7 @@ void GFX_SwitchFullScreen(void)
 #endif
 
 	// ensure mouse capture when fullscreen || (re-)capture if user said so when windowed
-	auto locked = sdl.mouse.locked;
+	bool locked = sdl.mouse.locked;
 	if ((full && !locked) || (!full && locked)) GFX_CaptureMouse();
 
 	// disable/enable sticky keys for fullscreen/desktop
@@ -2551,10 +2551,10 @@ void GFX_SwitchFullScreen(void)
 #ifdef WIN32
 	if (menu.startup) // NOTE should be always true I suppose ???
 	{
-		auto vsync = static_cast<Section_prop *>(control->GetSection("vsync"));
+		Section_prop * vsync = static_cast<Section_prop *>(control->GetSection("vsync"));
 		if (vsync)
 		{
-			auto vsyncMode = vsync->Get_string("vsyncmode");
+			const char* vsyncMode = vsync->Get_string("vsyncmode");
 			if (!strcmp(vsyncMode, "host")) SetVal("vsync", "vsyncmode", "host");
 		}
 	}
@@ -3407,13 +3407,13 @@ int user_cursor_sw = 640,user_cursor_sh = 480;
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW /* SDL drawn menus */
 DOSBoxMenu::item_handle_t DOSBoxMenu::displaylist::itemFromPoint(DOSBoxMenu &menu,int x,int y) {
-    for (auto &id : disp_list) {
-        DOSBoxMenu::item &item = menu.get_item(id);
+	for (std::vector<item_handle_t>::iterator id=disp_list.begin();id!=disp_list.end();id++) {
+        DOSBoxMenu::item &item = menu.get_item(*id);
         if (x >= item.screenBox.x && y >= item.screenBox.y) {
             int sx = x - item.screenBox.x;
             int sy = y - item.screenBox.y;
             if (sx < item.screenBox.w && sy < item.screenBox.h)
-                return id;
+                return *id;
         }
     }
 
@@ -3694,7 +3694,7 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                                 sel_item = DOSBoxMenu::unassigned_item_handle;
 
                                 bool redrawAll = false;
-                                auto search = popup_stack.end();
+                                std::vector<DOSBoxMenu::item_handle_t>::iterator search = popup_stack.end();
                                 if (search != popup_stack.begin()) {
                                     do {
                                         search--;
@@ -3706,7 +3706,10 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                                             while (search != popup_stack.end()) {
                                                 assert(popup_stack.begin() != popup_stack.end());
 
-                                                for (auto &id : mainMenu.get_item(*search).display_list.get_disp_list()) {
+												std::vector<DOSBoxMenu::item_handle_t> disp_list = mainMenu.get_item(*search).display_list.get_disp_list();
+                                                //for (auto &id : disp_list) {
+												for (std::vector<DOSBoxMenu::item_handle_t>::iterator i=disp_list.begin();i!=disp_list.end();i++) {	
+													DOSBoxMenu::item_handle_t id = *i;
                                                     mainMenu.get_item(id).setHilight(mainMenu,false);
                                                     mainMenu.get_item(id).setHover(mainMenu,false);
                                                 }
@@ -3734,9 +3737,10 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                                         else if (popup_stack.size() == 1)
                                             redrawAll = (popup_stack[0] != sel_item);
 
-                                        for (auto &id : popup_stack) {
-                                            mainMenu.get_item(id).setHilight(mainMenu,false);
-                                            mainMenu.get_item(id).setHover(mainMenu,false);
+                                        //for (auto &id : popup_stack) {
+										for (std::vector<DOSBoxMenu::item_handle_t>::iterator id=popup_stack.begin(); id!=popup_stack.end(); ++id) {
+                                            mainMenu.get_item(*id).setHilight(mainMenu,false);
+                                            mainMenu.get_item(*id).setHover(mainMenu,false);
                                         }
                                         popup_stack.clear();
                                         popup_stack.push_back(sel_item);
@@ -3771,7 +3775,7 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                                 if (redrawAll) {
                                     MenuRestoreScreen();
                                     mainMenu.display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
-                                    for (auto i=popup_stack.begin();i!=popup_stack.end();i++) {
+                                    for (std::vector<DOSBoxMenu::item_handle_t>::iterator i=popup_stack.begin();i!=popup_stack.end();i++) {
                                         mainMenu.get_item(*i).drawBackground(mainMenu);
                                         mainMenu.get_item(*i).display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
                                     }
@@ -3792,7 +3796,10 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 while (!popup_stack.empty()) {
                     DOSBoxMenu::item &item = mainMenu.get_item(popup_stack.back());
  
-                    for (auto &id : item.display_list.get_disp_list()) {
+					std::vector<DOSBoxMenu::item_handle_t> disp_list = item.display_list.get_disp_list();
+                    //for (auto &id : disp_list) {
+					for (std::vector<DOSBoxMenu::item_handle_t>::iterator i=disp_list.begin();i!=disp_list.end();i++) {	
+						DOSBoxMenu::item_handle_t id = *i;					
                         mainMenu.get_item(id).setHilight(mainMenu,false);
                         mainMenu.get_item(id).setHover(mainMenu,false);
                     }
