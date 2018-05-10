@@ -954,7 +954,7 @@ HWND GetHWND(void) {
 	return wmi.window;
 }
 
-HWND GetSurfaceHWND(void) {
+/*HWND GetSurfaceHWND(void) {
 	SDL_SysWMinfo wmi;
 	SDL_VERSION(&wmi.version);
 
@@ -962,7 +962,7 @@ HWND GetSurfaceHWND(void) {
 		return NULL;
 	}
 	return wmi.child_window;
-}
+}*/
 # endif
 #endif
 
@@ -981,7 +981,7 @@ HWND GetHWND(void) {
 	return wmi.window;
 }
 
-HWND GetSurfaceHWND(void) {
+/*HWND GetSurfaceHWND(void) {
 	SDL_SysWMinfo wmi;
 	SDL_VERSION(&wmi.version);
 
@@ -989,7 +989,7 @@ HWND GetSurfaceHWND(void) {
 		return NULL;
 	}
 	return wmi.child_window;
-}
+}*/
 
 void GetDefaultSize(void) {
 	char sizetemp[20]="512,32,32765,";
@@ -1671,7 +1671,11 @@ void DOSBox_SetSysMenu(void) {
 #endif
 }
 
-extern "C" void SDL1_hax_SetMenu(HMENU menu);
+void SDL1_hax_SetMenu(HMENU menu) {
+	SetMenu(GetHWND(), menu);
+	DrawMenuBar (GetHWND());
+}
+
 extern HMENU MainMenu;
 
 void DOSBox_SetMenu(void) {

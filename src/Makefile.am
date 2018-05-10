@@ -8,8 +8,7 @@ resdir = $(datarootdir)/dosbox-x
 
 res_DATA = \
 	../dosbox.reference.conf \
-	../font/FREECG98.BMP \
-	../CHANGELOG
+	../font/FREECG98.BMP 
 
 if HAVE_WINDRES
 ico_stuff = winres.rc

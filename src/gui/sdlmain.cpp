@@ -103,13 +103,6 @@ bool OpenGL_using(void);
 #include "keymap.h"
 #include "control.h"
 
-#if !defined(C_SDL2)
-# include "SDL_version.h"
-# ifndef SDL_DOSBOX_X_SPECIAL
-#  error This code must be compiled using the SDL 1.x library provided in this source repository
-# endif
-#endif
-
 #if defined(WIN32) && !defined(C_SDL2)
 HMENU MainMenu = NULL;
 #endif
@@ -194,13 +187,13 @@ void SetMapperKeyboardLayout(const unsigned int dkm) {
         DKM_to_descriptive_string(mapper_keyboard_layout));
 }
 
-#if defined(WIN32) && !defined(C_SDL2)
+#if 0 && defined(WIN32) && !defined(C_SDL2)
 extern "C" unsigned char SDL1_hax_hasLayoutChanged(void);
 extern "C" void SDL1_hax_ackLayoutChanged(void);
 #endif
 
 void CheckMapperKeyboardLayout(void) {
-#if defined(WIN32) && !defined(C_SDL2)
+#if 0 && defined(WIN32) && !defined(C_SDL2)
 	if (SDL1_hax_hasLayoutChanged()) {
 		SDL1_hax_ackLayoutChanged();
 		LOG_MSG("Keyboard layout changed");
@@ -380,7 +373,8 @@ bool						startup_state_numlock = false; // Global for keyboard initialisation
 bool						startup_state_capslock = false; // Global for keyboard initialisation
 
 #if defined(WIN32) && !defined(C_SDL2)
-extern "C" void SDL1_hax_SetMenu(HMENU menu);
+//extern "C" void SDL1_hax_SetMenu(HMENU menu);
+void SDL1_hax_SetMenu(HMENU menu); //now in menu.cpp
 #endif
 
 #ifdef WIN32
@@ -1158,7 +1152,7 @@ static void GFX_ResetSDL() {
 	/* deprecated */
 }
 
-#if defined(WIN32) && !defined(C_SDL2)
+#if 0 && defined(WIN32) && !defined(C_SDL2)
 extern "C" unsigned int SDL1_hax_inhibit_WM_PAINT;
 #endif
 
@@ -1431,7 +1425,7 @@ Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,G
 		sdl.blit.surface=0;
 	}
 
-#if defined(WIN32) && !defined(C_SDL2)
+#if 0 && defined(WIN32) && !defined(C_SDL2)
 	SDL1_hax_inhibit_WM_PAINT = 0;
 #endif
 
@@ -2598,7 +2592,7 @@ bool GFX_GetPreventFullscreen(void) {
     return sdl.desktop.prevent_fullscreen;
 }
 
-#if defined(WIN32) && !defined(C_SDL2)
+#if 0 && defined(WIN32) && !defined(C_SDL2)
 extern "C" unsigned char SDL1_hax_RemoveMinimize;
 #endif
 
@@ -2609,7 +2603,7 @@ void GFX_PreventFullscreen(bool lockout) {
 		void DOSBox_SetSysMenu(void);
 		int Reflect_Menu(void);
 
-		SDL1_hax_RemoveMinimize = lockout ? 1 : 0;
+		//SDL1_hax_RemoveMinimize = lockout ? 1 : 0;
 
 		DOSBox_SetSysMenu();
 		Reflect_Menu();
@@ -5994,12 +5988,12 @@ bool is_always_on_top(void) {
 #endif
 }
 
-#if defined(_WIN32) && !defined(C_SDL2)
+#if 0 && defined(_WIN32) && !defined(C_SDL2)
 extern "C" void sdl1_hax_set_topmost(unsigned char topmost);
 #endif
 
 void toggle_always_on_top(void) {
-#if defined(_WIN32) && !defined(C_SDL2)
+#if 0 && defined(_WIN32) && !defined(C_SDL2)
     bool cur = is_always_on_top();
 	sdl1_hax_set_topmost(!cur);
 #endif
@@ -6668,7 +6662,7 @@ int main(int argc, char* argv[]) {
 		MainMenu = mainMenu.getWinMenu();
         DOSBox_SetMenu();
 #endif
-#if defined(MACOSX)
+#if 0 && defined(MACOSX)
         void sdl_hax_macosx_setmenu(void *nsMenu);
         sdl_hax_macosx_setmenu(mainMenu.getNsMenu());
 #endif
@@ -6968,7 +6962,7 @@ fresh_boot:
 	SDL1_hax_SetMenu(NULL);/* detach menu from window, or else Windows will destroy the menu out from under the C++ class */
 # endif
 #endif
-#if defined(MACOSX)
+#if 0 && defined(MACOSX)
 	void sdl_hax_macosx_setmenu(void *nsMenu);
 	sdl_hax_macosx_setmenu(NULL);
 #endif

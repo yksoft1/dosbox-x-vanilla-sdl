@@ -2878,10 +2878,12 @@ static struct {
     // TODO??
 #else
 	/* hack for Japanese keyboards with \ and _ */
+#if 0
 	{"jp_bckslash",SDLK_JP_RO},	// Same difference
 	{"jp_ro",SDLK_JP_RO}, // DOSBox proprietary
 	/* hack for Japanese keyboards with Yen and | */
 	{"jp_yen",SDLK_JP_YEN },
+#endif
 	/* more */
 	{"jp_hankaku", SDLK_WORLD_12 },
 	{"jp_muhenkan", SDLK_WORLD_13 },
@@ -3198,8 +3200,9 @@ void BIND_MappingEvents(void) {
 #if !defined(HX_DOS) /* I assume HX DOS doesn't bother with keyboard scancode names */
 					GetKeyNameText(s.scancode << 16,nm,sizeof(nm)-1);
 #endif
-
-					tmpl = sprintf(tmp, "Win32: VK=0x%x kn=%s",(unsigned int)s.win32_vk,nm);
+					//Vanilla sdl_keysym don't have win32_vk
+					//tmpl = sprintf(tmp, "Win32: VK=0x%x kn=%s",(unsigned int)s.win32_vk,nm);
+					tmpl = sprintf(tmp, "Win32: kn=%s",nm);
 				}
 # endif
 #endif
