@@ -114,6 +114,37 @@ HMENU MainMenu = NULL;
 
 using namespace std;
 
+const char *scaler_menu_opts[][2] = {
+	{ "none", "None" },
+	{ "normal2x", "Normal 2X" },
+	{ "normal3x", "Normal 3X" },
+	{ "normal4x", "Normal 4X" },
+	{ "normal5x", "Normal 5X" },
+	{ "hardware_none", "Hardware None" },
+	{ "hardware2x", "Hardware 2X" },
+	{ "hardware3x", "Hardware 3X" },
+	{ "hardware4x", "Hardware 4X" },
+	{ "hardware5x", "Hardware 5X" },
+	{ "tv2x", "TV 2X" },
+	{ "tv3x", "TV 3X" },
+	{ "scan2x", "Scan 2X" },
+	{ "scan3x", "Scan 3X" },
+	{ "rgb2x", "RGB 2X" },
+	{ "rgb3x", "RGB 3X" },
+	{ "advmame2x", "Advanced MAME 2X" },
+	{ "advmame3x", "Advanced MAME 3X" },
+	{ "hq2x", "HQ 2X" },
+	{ "hq3x", "HQ 3X" },
+	{ "advinterp2x", "Advanced Interpolation 2X" },
+	{ "advinterp3x", "Advanced Interpolation 3X" },
+	{ "2xsai", "2xSai" },
+	{ "super2xsai", "Super2xSai" },
+	{ "supereagle", "SuperEagle" },
+	{ "xbrz", "xBRZ" }, /* <- FIXME: Not implemented? No ref in the code! */
+
+	{ NULL, NULL }
+};
+
 const char *DKM_to_string(const unsigned int dkm) {
     switch (dkm) {
         case DKM_US:        return "us";
@@ -1358,10 +1389,12 @@ void DOSBoxMenu::item::drawMenuItem(DOSBoxMenu &menu) {
     if (type == submenu_type_id && borderTop/*not toplevel*/)
         MenuDrawText(screenBox.x+screenBox.w - DOSBoxMenu::fontCharWidth - 1, screenBox.y+textBox.y, "\x10", fgcheckcolor);
 
-    if (type >= separator_type_id)
+    if (type == separator_type_id)
         MenuDrawRect(screenBox.x, screenBox.y + (screenBox.h/2), screenBox.w, 1, fgcolor);
-
-    if (SDL_MUSTLOCK(sdl.surface))
+	else if (type == vseparator_type_id)
+		MenuDrawRect(screenBox.x + (screenBox.w/2), screenBox.y, 1, screenBox.h, fgcolor);
+ 
+	if (SDL_MUSTLOCK(sdl.surface))
         SDL_UnlockSurface(sdl.surface);
 }
 
@@ -3430,6 +3463,12 @@ void SDL_rect_cliptoscreen(SDL_Rect &r) {
         r.h += r.y;
         r.y = 0;
     }
+	if ((r.x+r.w) > sdl.surface->w)
+		r.w = sdl.surface->w - r.x;
+	if ((r.y+r.h) > sdl.surface->h)
+		r.h = sdl.surface->h - r.y;
+	if (r.w < 0) r.w = 0;
+	if (r.h < 0) r.h = 0;
 }
 
 void DOSBoxMenu::item::updateScreenFromItem(DOSBoxMenu &menu) {
@@ -3777,8 +3816,10 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                                     MenuRestoreScreen();
                                     mainMenu.display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
                                     for (std::vector<DOSBoxMenu::item_handle_t>::iterator i=popup_stack.begin();i!=popup_stack.end();i++) {
-                                        mainMenu.get_item(*i).drawBackground(mainMenu);
-                                        mainMenu.get_item(*i).display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
+										if (mainMenu.get_item(*i).get_type() == DOSBoxMenu::submenu_type_id) {
+											mainMenu.get_item(*i).drawBackground(mainMenu);
+											mainMenu.get_item(*i).display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
+										}
                                     }
                                     MenuFullScreenRedraw();
                                 }
@@ -5963,6 +6004,45 @@ bool VM_PowerOn() {
 	return true;
 }
 
+void SetScaleForced(bool forced);
+
+bool scaler_forced_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	SetScaleForced(!render.scale.forced);
+	menuitem->check(render.scale.forced);
+	return true;
+}
+
+bool scaler_set_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	const char *scaler = menuitem->get_name().c_str();
+	if (!strncmp(scaler,"scaler_set_",11))
+		scaler += 11;
+	else
+		abort();
+
+	std::string value = std::string(scaler) + (render.scale.forced ? " forced" : "");
+	SetVal("render", "scaler", value);
+
+	void RENDER_UpdateFromScalerSetting(void);
+	RENDER_UpdateFromScalerSetting();
+
+	void RENDER_UpdateScalerMenu(void);
+	RENDER_UpdateScalerMenu();
+
+	void RENDER_CallBack( GFX_CallBackFunctions_t function );
+	RENDER_CallBack(GFX_CallBackReset);
+
+	return true;
+}
+
+bool video_frameskip_common_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	int f = atoi(menuitem->get_text().c_str()); /* Off becomes 0 */
+	char tmp[64];
+
+	sprintf(tmp,"%u",f);
+	SetVal("render", "frameskip", tmp);
+	return true;
+}
+
 bool show_console_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
     DOSBox_ShowConsole();
 	mainMenu.get_item("show_console").check(true).refresh_item(mainMenu);
@@ -6005,6 +6085,13 @@ void toggle_always_on_top(void) {
     bool cur = is_always_on_top();
 	sdl1_hax_set_topmost(!cur);
 #endif
+}
+
+bool showdetails_menu_callback(DOSBoxMenu * const xmenu, DOSBoxMenu::item * const menuitem) {
+	menu.hidecycles = !menu.hidecycles;
+	GFX_SetTitle(CPU_CycleMax, -1, -1, false);
+	mainMenu.get_item("showdetails").check(!menu.hidecycles).refresh_item(mainMenu);
+	return true;
 }
 
 bool alwaysontop_menu_callback(DOSBoxMenu * const menu, DOSBoxMenu::item * const menuitem) {
@@ -6479,6 +6566,37 @@ int main(int argc, char* argv[]) {
         {
             DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"VideoMenu");
             item.set_text("Video");
+			{
+				DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"VideoFrameskipMenu");
+				item.set_text("Frameskip");
+
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"frameskip_0").set_text("Off").
+				set_callback_function(video_frameskip_common_menu_callback);
+
+				for (unsigned int f=1;f <= 10;f++) {
+					char tmp1[64],tmp2[64];
+
+					sprintf(tmp1,"frameskip_%u",f);
+					sprintf(tmp2,"%u frame",f);
+
+					mainMenu.alloc_item(DOSBoxMenu::item_type_id,tmp1).set_text(tmp2).
+					set_callback_function(video_frameskip_common_menu_callback);
+				}
+			}
+			{
+				DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"VideoScalerMenu");
+				item.set_text("Scaler");
+
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"scaler_forced").set_text("Force scaler").
+					set_callback_function(scaler_forced_menu_callback);
+					
+				for (size_t i=0;scaler_menu_opts[i][0] != NULL;i++) {
+					const std::string name = std::string("scaler_set_") + scaler_menu_opts[i][0];
+
+					mainMenu.alloc_item(DOSBoxMenu::item_type_id,name).set_text(scaler_menu_opts[i][1]).
+					set_callback_function(scaler_set_menu_callback);
+				}
+			}
         }
         {
             DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"SoundMenu");
@@ -6649,7 +6767,10 @@ int main(int argc, char* argv[]) {
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"sendkey_cad").set_text("Ctrl+Alt+Del").set_callback_function(sendkey_preset_menu_callback);
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"doublebuf").set_text("Double Buffering (Fullscreen)").set_callback_function(doublebuf_menu_callback).check(!!GetSetSDLValue(1, "desktop.doublebuf", 0));
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"alwaysontop").set_text("Always on top").set_callback_function(alwaysontop_menu_callback).check(is_always_on_top());
-
+		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"showdetails").set_text("Show details").set_callback_function(showdetails_menu_callback).check(!menu.hidecycles);
+		
+		mainMenu.get_item("scaler_forced").check(render.scale.forced);
+		
 		/* The machine just "powered on", and then reset finished */
 		if (!VM_PowerOn()) E_Exit("VM failed to power on");
 

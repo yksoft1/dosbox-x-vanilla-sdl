@@ -715,6 +715,15 @@ void RENDER_SetForceUpdate(bool f) {
 	render.forceUpdate = f;
 }
 
+void RENDER_UpdateFrameskipMenu(void) {
+	char tmp[64];
+
+	for (unsigned int f=0;f <= 10;f++) {
+		sprintf(tmp,"frameskip_%u",f);
+		DOSBoxMenu::item &item = mainMenu.get_item(tmp);
+		item.check(render.frameskip.max == f);
+	}
+}
 void RENDER_OnSectionPropChange(Section *x) {
 	Section_prop * section = static_cast<Section_prop *>(control->GetSection("render"));
 
@@ -726,54 +735,36 @@ void RENDER_OnSectionPropChange(Section *x) {
 	if (render.aspect != p_aspect) {
 		RENDER_CallBack(GFX_CallBackReset);
 	}
+	
+	RENDER_UpdateFrameskipMenu();
 }
 
-void RENDER_Init() {
+std::string RENDER_GetScaler(void) {
 	Section_prop * section=static_cast<Section_prop *>(control->GetSection("render"));
-
-	LOG(LOG_MISC,LOG_DEBUG)("Initializing renderer");
-
-	control->GetSection("render")->onpropchange.push_back(&RENDER_OnSectionPropChange);
-
-	vga.draw.doublescan_set=section->Get_bool("doublescan");
-	vga.draw.char9_set=section->Get_bool("char9");
-
-	//For restarting the renderer.
-	static bool running = false;
-	bool aspect = render.aspect;
-	Bitu scalersize = render.scale.size;
-	bool scalerforced = render.scale.forced;
-	scalerOperation_t scaleOp = render.scale.op;
-
-    render.scale.cacheRead = NULL;
-    render.scale.outWrite = NULL;
-
-	render.pal.first=0;
-	render.pal.last=255;
-	render.aspect=section->Get_bool("aspect");
-	render.frameskip.max=section->Get_int("frameskip");
-
-	/* BUG FIX: Some people's dosbox.conf files have frameskip=-1 WTF?? */
-	/* without this fix, nothing displays, EVER */
-	if ((int)render.frameskip.max < 0) render.frameskip.max = 0;
-								
-	render.frameskip.count=0;
-	render.forceUpdate=false;
-	std::string cline;
-	std::string scaler;
-	//Check for commandline paramters and parse them through the configclass so they get checked against allowed values
-	if (control->cmdline->FindString("-scaler",cline,false)) {
-		section->HandleInputline(std::string("scaler=") + cline);
-	} else if (control->cmdline->FindString("-forcescaler",cline,false)) {
-		section->HandleInputline(std::string("scaler=") + cline + " forced");
-	}
-	   
 	Prop_multival* prop = section->Get_multival("scaler");
-	scaler = prop->GetSection()->Get_string("type");
+	return prop->GetSection()->Get_string("type");
+}
+
+extern const char *scaler_menu_opts[][2];
+
+void RENDER_UpdateScalerMenu(void) {
+	const std::string scaler = RENDER_GetScaler();
+
+	for (size_t i=0;scaler_menu_opts[i][0] != NULL;i++) {
+		const std::string name = std::string("scaler_set_") + scaler_menu_opts[i][0];
+		mainMenu.get_item(name).check(scaler == scaler_menu_opts[i][0]).refresh_item(mainMenu);
+	}
+}
+
+void RENDER_UpdateFromScalerSetting(void) {
+	Section_prop * section=static_cast<Section_prop *>(control->GetSection("render"));
+	Prop_multival* prop = section->Get_multival("scaler");
 	std::string f = prop->GetSection()->Get_string("force");
+	std::string scaler = prop->GetSection()->Get_string("type");
+
 	render.scale.forced = false;
 	if(f == "forced") render.scale.forced = true;
-   
+
 	if (scaler == "none") { render.scale.op = scalerOpNormal; render.scale.size = 1; render.scale.hardware=false; }
 	else if (scaler == "normal2x") { render.scale.op = scalerOpNormal; render.scale.size = 2; render.scale.hardware=false; }
 	else if (scaler == "normal3x") { render.scale.op = scalerOpNormal; render.scale.size = 3; render.scale.hardware=false; }
@@ -803,8 +794,52 @@ void RENDER_Init() {
 	else if (scaler == "hardware3x") { render.scale.op = scalerOpNormal; render.scale.size = 6; render.scale.hardware=true; }
 	else if (scaler == "hardware4x") { render.scale.op = scalerOpNormal; render.scale.size = 8; render.scale.hardware=true; }
 	else if (scaler == "hardware5x") { render.scale.op = scalerOpNormal; render.scale.size = 10; render.scale.hardware=true; }
+}
 
+void RENDER_Init() {
+	Section_prop * section=static_cast<Section_prop *>(control->GetSection("render"));
 
+	LOG(LOG_MISC,LOG_DEBUG)("Initializing renderer");
+
+	control->GetSection("render")->onpropchange.push_back(&RENDER_OnSectionPropChange);
+
+	vga.draw.doublescan_set=section->Get_bool("doublescan");
+	vga.draw.char9_set=section->Get_bool("char9");
+
+	//For restarting the renderer.
+	static bool running = false;
+	bool aspect = render.aspect;
+	Bitu scalersize = render.scale.size;
+	bool scalerforced = render.scale.forced;
+	scalerOperation_t scaleOp = render.scale.op;
+
+    render.scale.cacheRead = NULL;
+    render.scale.outWrite = NULL;
+
+	render.pal.first=0;
+	render.pal.last=255;
+	render.aspect=section->Get_bool("aspect");
+	render.frameskip.max=section->Get_int("frameskip");
+	
+	RENDER_UpdateFrameskipMenu();
+
+	/* BUG FIX: Some people's dosbox.conf files have frameskip=-1 WTF?? */
+	/* without this fix, nothing displays, EVER */
+	if ((int)render.frameskip.max < 0) render.frameskip.max = 0;
+								
+	render.frameskip.count=0;
+	render.forceUpdate=false;
+	std::string cline;
+	std::string scaler;
+	//Check for commandline paramters and parse them through the configclass so they get checked against allowed values
+	if (control->cmdline->FindString("-scaler",cline,false)) {
+		section->HandleInputline(std::string("scaler=") + cline);
+	} else if (control->cmdline->FindString("-forcescaler",cline,false)) {
+		section->HandleInputline(std::string("scaler=") + cline + " forced");
+	}
+	   
+	RENDER_UpdateFromScalerSetting();
+	
 	render.autofit=section->Get_bool("autofit");
 
 
@@ -822,5 +857,7 @@ void RENDER_Init() {
 	MAPPER_AddHandler(IncreaseFrameSkip,MK_nothing,0,"incfskip","Inc Fskip");
 
 	GFX_SetTitle(-1,render.frameskip.max,-1,false);
+	
+	RENDER_UpdateScalerMenu();
 }
 

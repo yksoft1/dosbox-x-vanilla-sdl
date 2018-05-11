@@ -485,10 +485,10 @@ std::string DOSBoxMenu::item::winConstructMenuText(void) {
 
 void DOSBoxMenu::item::winAppendMenu(HMENU handle) {
     if (type == separator_type_id) {
-        AppendMenu(handle, MF_MENUBREAK, 0, NULL);
+        AppendMenu(handle, MF_SEPARATOR, 0, NULL);
     }
     else if (type == vseparator_type_id) {
-        AppendMenu(handle, MF_MENUBARBREAK, 0, NULL);
+        AppendMenu(handle, MF_MENUBREAK, 0, NULL);
     }
     else if (type == submenu_type_id) {
         if (winMenu != NULL)
@@ -655,6 +655,7 @@ static const char *def_menu_main[] = {
     "MainSendKey",
 	"--",
 	"wait_on_error",
+	"showdetails",
 #if C_DEBUG
 	"--",
 	"mapper_debugger",
@@ -737,6 +738,28 @@ static const char *def_menu_cpu[] = {
     NULL
 };
 
+/* video frameskip menu ("VideoFrameskipMenu") */
+static const char *def_menu_video_frameskip[] = {
+	"frameskip_0",
+	"frameskip_1",
+	"frameskip_2",
+	"frameskip_3",
+	"frameskip_4",
+	"frameskip_5",
+	"frameskip_6",
+	"frameskip_7",
+	"frameskip_8",
+	"frameskip_9",
+	"frameskip_10",
+	NULL
+};
+
+/* video scaler menu ("VideoScalerMenu") */
+static const char *def_menu_video_scaler[] = {
+	NULL
+};
+
+
 /* video menu ("VideoMenu") */
 static const char *def_menu_video[] = {
 #if !defined(C_SDL2)
@@ -763,6 +786,11 @@ static const char *def_menu_video[] = {
 #if !defined(C_SDL2) && !defined(HX_DOS)
 	"mapper_resetsize",
 #endif
+	"--",
+	"VideoFrameskipMenu",
+	"--",
+	"scaler_forced",
+	"VideoScalerMenu",
     NULL
 };
 
@@ -798,14 +826,15 @@ static std::string separator_id(const DOSBoxMenu::item_handle_t r) {
     return std::string("_separator_") + std::string(tmp);
 }
 
-static DOSBoxMenu::item_handle_t separator_get(void) {
+static DOSBoxMenu::item_handle_t separator_get(const DOSBoxMenu::item_type_t t=DOSBoxMenu::separator_type_id) {
     assert(separator_alloc <= separators.size());
     if (separator_alloc == separators.size()) {
-        DOSBoxMenu::item &nitem = mainMenu.alloc_item(DOSBoxMenu::separator_type_id, separator_id(separator_alloc));
+        DOSBoxMenu::item &nitem = mainMenu.alloc_item(t, separator_id(separator_alloc));
         separators.push_back(nitem.get_master_id());
     }
 
     assert(separator_alloc < separators.size());
+	mainMenu.get_item(separators[separator_alloc]).set_type(t);
     return separators[separator_alloc++];
 }
 
@@ -829,7 +858,7 @@ void ConstructSubMenu(DOSBoxMenu::item_handle_t item_id, const char * const * li
 
         if (!strcmp(ref,"--")) {
             mainMenu.displaylist_append(
-                mainMenu.get_item(item_id).display_list, separator_get());
+                mainMenu.get_item(item_id).display_list, separator_get(DOSBoxMenu::separator_type_id));
         }
         else if (mainMenu.item_exists(ref)) {
             mainMenu.displaylist_append(
@@ -837,6 +866,8 @@ void ConstructSubMenu(DOSBoxMenu::item_handle_t item_id, const char * const * li
         }
     }
 }
+
+extern const char *scaler_menu_opts[][2];
 
 void ConstructMenu(void) {
     mainMenu.displaylist_clear(mainMenu.display_list);
@@ -865,12 +896,61 @@ void ConstructMenu(void) {
 
     /* video menu */
     ConstructSubMenu(mainMenu.get_item("VideoMenu").get_master_id(), def_menu_video);
+	
+	/* video frameskip menu */
+	ConstructSubMenu(mainMenu.get_item("VideoFrameskipMenu").get_master_id(), def_menu_video_frameskip);
+
+	/* video scaler menu */
+	ConstructSubMenu(mainMenu.get_item("VideoScalerMenu").get_master_id(), def_menu_video_scaler);
+	{
+		size_t count=0;
+
+		for (size_t i=0;scaler_menu_opts[i][0] != NULL;i++) {
+			const std::string name = std::string("scaler_set_") + scaler_menu_opts[i][0];
+
+			if (mainMenu.item_exists(name)) {
+				mainMenu.displaylist_append(
+				mainMenu.get_item("VideoScalerMenu").display_list,
+				mainMenu.get_item_id_by_name(name));
+
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+				if ((count % 15) == 14) {
+					mainMenu.displaylist_append(
+					mainMenu.get_item("VideoScalerMenu").display_list,
+					separator_get(DOSBoxMenu::vseparator_type_id));
+				}
+#endif
+
+				count++;
+			}
+		}
+	}
 
     /* sound menu */
     ConstructSubMenu(mainMenu.get_item("SoundMenu").get_master_id(), def_menu_sound);
 
     /* capture menu */
     ConstructSubMenu(mainMenu.get_item("CaptureMenu").get_master_id(), def_menu_capture);
+}
+
+void RENDER_CallBack( GFX_CallBackFunctions_t function );
+
+// Sets the scaler 'forced' flag.
+void SetScaleForced(bool forced)
+{
+	render.scale.forced = forced;
+	RENDER_CallBack(GFX_CallBackReset);
+	mainMenu.get_item("scaler_forced").check(render.scale.forced);
+}
+
+// Sets the scaler to use.
+void SetScaler(scalerOperation_t op, Bitu size, std::string prefix)
+{
+	std::string value = prefix + (render.scale.forced ? " forced" : "");
+	SetVal("render", "scaler", value);
+	render.scale.size = size;
+	render.scale.op = op;
+	RENDER_CallBack(GFX_CallBackReset);
 }
 
 extern int NonUserResizeCounter;
@@ -2826,23 +2906,6 @@ void reflectmenu_INITMENU_cb() {
 	Reflect_Menu();
 }
 
-// Sets the scaler to use.
-void SetScaler(scalerOperation_t op, Bitu size, std::string prefix)
-{
-	std::string value = prefix + (render.scale.forced ? " forced" : "");
-	SetVal("render", "scaler", value);
-	render.scale.size = size;
-	render.scale.op = op;
-	RENDER_CallBack(GFX_CallBackReset);
-}
-
-// Sets the scaler 'forced' flag.
-void SetScaleForced(bool forced)
-{
-	render.scale.forced = forced;
-	RENDER_CallBack(GFX_CallBackReset);
-}
-
 void MSG_WM_COMMAND_handle(SDL_SysWMmsg &Message) {
 #if !defined(HX_DOS)
 	bool GFX_GetPreventFullscreen(void);
@@ -3902,7 +3965,7 @@ void DOSBoxMenu::layoutMenu(void) {
 }
 
 void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
-    int x, y, maxx;
+    int x, y, minx, maxx;
 
     x = screenBox.x;
     y = screenBox.y;
@@ -3917,20 +3980,44 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
     popupBox.x = x;
     popupBox.y = y;
 
+	minx = x;
     maxx = x;
+	
+	std::vector<item_handle_t>::iterator arr_follow=display_list.disp_list.begin();
     for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++) {
         DOSBoxMenu::item &item = menu.get_item(*i);
 
-        item.placeItem(menu, x, y, /*toplevel*/false);
-        y += item.screenBox.h;
+		if (item.get_type() == DOSBoxMenu::vseparator_type_id) {
+			for (;arr_follow < i;arr_follow++)
+				menu.get_item(*arr_follow).placeItemFinal(menu, /*finalwidth*/maxx - minx, /*toplevel*/false);
 
-        if (maxx < (item.screenBox.x + item.screenBox.w))
-            maxx = (item.screenBox.x + item.screenBox.w);
+			x = maxx;
+
+			item.screenBox.x = x;
+			item.screenBox.y = popupBox.y;
+			item.screenBox.w = 5;
+			item.screenBox.h = y - popupBox.y;
+
+			minx = maxx = x = item.screenBox.x + item.screenBox.w;
+			y = popupBox.y;
+		}
+		else {
+			item.placeItem(menu, x, y, /*toplevel*/false);
+			y += item.screenBox.h;
+
+			if (maxx < (item.screenBox.x + item.screenBox.w))
+				maxx = (item.screenBox.x + item.screenBox.w);
+		}
     }
 
-    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
-        menu.get_item(*i).placeItemFinal(menu, /*finalwidth*/maxx - popupBox.x, /*toplevel*/false);
+	for (;arr_follow < display_list.disp_list.end();arr_follow++)
+		menu.get_item(*arr_follow).placeItemFinal(menu, /*finalwidth*/maxx - minx, /*toplevel*/false);
 
+	for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++) {
+		DOSBoxMenu::item &item = menu.get_item(*i);
+		int my = item.screenBox.y + item.screenBox.h;
+		if (y < my) y = my;
+	}
     for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
         menu.get_item(*i).layoutSubmenu(menu, /*toplevel*/false);
 
@@ -3985,7 +4072,7 @@ void DOSBoxMenu::item::placeItemFinal(DOSBoxMenu &menu,int finalwidth,bool isTop
         /* check */
         if (x > rx) LOG_MSG("placeItemFinal warning: text and shorttext overlap by %d pixels",x-rx);
     }
-    else {
+    else if (type == separator_type_id) {
         if (!isTopLevel) {
             screenBox.w = finalwidth;
         }
