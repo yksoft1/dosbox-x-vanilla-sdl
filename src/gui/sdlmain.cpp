@@ -1602,6 +1602,18 @@ dosurface:
 #endif
 				Bitu consider_height = menu.maxwindow ? currentWindowHeight : (height + menuheight + (sdl.overscan_width * 2));
 				Bitu consider_width = menu.maxwindow ? currentWindowWidth : (width + (sdl.overscan_width * 2));
+
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+				if (mainMenu.isVisible()) {
+				/* enforce a minimum 640x400 surface size.
+				 * the menus are useless below 640x400 */
+				if (consider_width < (640+(sdl.overscan_width * 2)))
+					consider_width = (640+(sdl.overscan_width * 2));
+				if (consider_height < (400+(sdl.overscan_width * 2)+menuheight))
+					consider_height = (400+(sdl.overscan_width * 2)+menuheight);
+				}
+#endif
+
 				int final_height = max(max(consider_height,userResizeWindowHeight),(Bitu)(sdl.clip.y+sdl.clip.h)) - menuheight - (sdl.overscan_width * 2);
 				int final_width = max(max(consider_width,userResizeWindowWidth),(Bitu)(sdl.clip.x+sdl.clip.w)) - (sdl.overscan_width * 2);
 
@@ -6089,6 +6101,22 @@ bool scaler_forced_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * cons
 	return true;
 }
 
+void MENU_swapstereo(bool enabled);
+bool MENU_get_swapstereo(void);
+
+bool mixer_swapstereo_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	MENU_swapstereo(!MENU_get_swapstereo());
+	return true;
+}
+
+void MENU_mute(bool enabled);
+bool MENU_get_mute(void);
+
+bool mixer_mute_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	MENU_mute(!MENU_get_mute());
+	return true;
+}
+
 bool vid_pc98_5mhz_gdc_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
 	if (IS_PC98_ARCH) {
 		void gdc_5mhz_mode_update_vars(void);
@@ -7002,6 +7030,13 @@ int main(int argc, char* argv[]) {
         {
             DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"SoundMenu");
             item.set_text("Sound");
+			
+			{
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"mixer_swapstereo").set_text("Swap stereo").
+					set_callback_function(mixer_swapstereo_menu_callback);
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"mixer_mute").set_text("Mute").
+					set_callback_function(mixer_mute_menu_callback);
+			}
         }
         {
             DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"DOSMenu");
@@ -7172,6 +7207,13 @@ int main(int argc, char* argv[]) {
 		
 		mainMenu.get_item("scaler_forced").check(render.scale.forced);
 		
+		bool MENU_get_swapstereo(void);
+
+		mainMenu.get_item("mixer_swapstereo").check(MENU_get_swapstereo()).refresh_item(mainMenu);
+	
+		bool MENU_get_mute(void);
+		mainMenu.get_item("mixer_mute").check(MENU_get_mute()).refresh_item(mainMenu);
+
 		mainMenu.get_item("vga_9widetext").enable(!IS_PC98_ARCH);
 		mainMenu.get_item("doublescan").enable(!IS_PC98_ARCH);
 

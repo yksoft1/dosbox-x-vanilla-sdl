@@ -90,6 +90,7 @@ static struct {
 	bool			sampleaccurate;
     bool            prebuffer_wait;
     Bitu            prebuffer_samples;
+	bool			mute;
 } mixer;
 
 bool Mixer_SampleAccurate() {
@@ -730,6 +731,9 @@ static void MIXER_CallBack(void * userdata, Uint8 *stream, int len) {
 	int remains;
 	Bit32s *in;
 
+	if (mixer.mute)
+		mixer.work_in = mixer.work_out = 0;
+		
     if (mixer.prebuffer_wait) {
         remains = (int)mixer.work_in - (int)mixer.work_out;
         if (remains < 0) remains += mixer.work_wrap;
@@ -882,11 +886,24 @@ MixerObject::~MixerObject(){
 	MIXER_DelChannel(MIXER_FindChannel(m_name));
 }
 
-#ifdef WIN32
+void MENU_mute(bool enabled) {
+	mixer.mute=enabled;
+	mainMenu.get_item("mixer_mute").check(mixer.mute).refresh_item(mainMenu);
+}
+
+bool MENU_get_mute(void) {
+	return mixer.mute;
+}
+
 void MENU_swapstereo(bool enabled) {
 	mixer.swapstereo=enabled;
+	
+	mainMenu.get_item("mixer_swapstereo").check(mixer.swapstereo).refresh_item(mainMenu);
 }
-#endif
+
+bool MENU_get_swapstereo(void) {
+	return mixer.swapstereo;
+}
 
 void MAPPER_VolumeUp(bool pressed) {
     if (!pressed) return;
@@ -966,6 +983,7 @@ void MIXER_Init() {
 	mixer.blocksize=section->Get_int("blocksize");
 	mixer.swapstereo=section->Get_bool("swapstereo");
 	mixer.sampleaccurate=section->Get_bool("sample accurate");//FIXME: Make this bool mean something again!
+	mixer.mute=false;
 
 	/* Initialize the internal stuff */
     mixer.prebuffer_samples=0;
