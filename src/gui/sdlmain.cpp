@@ -1432,6 +1432,10 @@ void GFX_DrawSDLMenu(DOSBoxMenu &menu,DOSBoxMenu::displaylist &dl) {
 }
 #endif
 
+#if C_OPENGL
+bool initedOpenGL = false;
+#endif
+
 Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,GFX_CallBack_t callback) {
 	if (sdl.updating)
 		GFX_EndUpdate( 0 );
@@ -1699,8 +1703,12 @@ dosurface:
 			free(sdl.opengl.framebuf);
 		}
 
-        glFinish();
-        glFlush();
+		/* NTS: Apparently calling glFinish/glFlush before setup causes a segfault within
+		 * the OpenGL library on Mac OS X. */
+		if (initedOpenGL) {
+			glFinish();
+			glFlush();
+		}
 
 		sdl.opengl.framebuf=0;
 
@@ -1801,6 +1809,8 @@ dosurface:
 
         glFinish();
         glFlush();
+		
+		initedOpenGL = true;
 
 		sdl.desktop.type=SCREEN_OPENGL;
 		retFlags = GFX_CAN_32 | GFX_SCALING;
@@ -2469,6 +2479,10 @@ void change_output(int output) {
 		sdl.desktop.want_type=SCREEN_SURFACE;
 		break;
 	case 2: /* do nothing */
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+		LOG_MSG("FIXME: SDL drawn menus not supported in OpenGL mode");
+		DOSBox_NoMenu();
+#endif
 		break;
 	case 3:
 #if C_OPENGL
@@ -3446,7 +3460,8 @@ DOSBoxMenu::item_handle_t DOSBoxMenu::displaylist::itemFromPoint(DOSBoxMenu &men
         if (x >= item.screenBox.x && y >= item.screenBox.y) {
             int sx = x - item.screenBox.x;
             int sy = y - item.screenBox.y;
-            if (sx < item.screenBox.w && sy < item.screenBox.h)
+			int adj = (this != &menu.display_list && item.get_type() == DOSBoxMenu::submenu_type_id) ? 2 : 0;
+            if (sx < (item.screenBox.w+adj) && sy < item.screenBox.h)
                 return *id;
         }
     }
@@ -3668,7 +3683,9 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 DOSBoxMenu::item_handle_t psel_item;
                 DOSBoxMenu::item_handle_t sel_item;
                 bool button_holding=true;
+				bool resized=false;
                 bool runloop=true;
+				SDL_Rect uprect;
                 SDL_Event event;
 
                 psel_item = DOSBoxMenu::unassigned_item_handle;
@@ -3678,6 +3695,23 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 mainMenu.get_item(mainMenu.menuUserAttentionAt).setHover(mainMenu,false);
                 mainMenu.get_item(mainMenu.menuUserAttentionAt).drawMenuItem(mainMenu);
                 MenuSaveScreen();
+				
+				/* give the menu bar a drop shadow */
+				MenuShadeRect(
+					mainMenu.menuBox.x + DOSBoxMenu::dropshadowX,
+					mainMenu.menuBox.y + mainMenu.menuBox.h,
+					mainMenu.menuBox.w,
+					DOSBoxMenu::dropshadowY - 1/*menubar border*/);
+
+				uprect.x = 0;
+				uprect.y = mainMenu.menuBox.y + mainMenu.menuBox.h;
+				uprect.w = mainMenu.menuBox.w;
+				uprect.h = DOSBoxMenu::dropshadowY;
+#if defined(C_SDL2)
+				SDL_UpdateWindowSurfaceRects(sdl.window, &uprect, 1);
+#else
+				SDL_UpdateRects( sdl.surface, 1, &uprect );
+#endif
 
                 /* show the menu */
                 mainMenu.get_item(mainMenu.menuUserAttentionAt).setHilight(mainMenu,true);
@@ -3695,6 +3729,26 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                     if (!SDL_WaitEvent(&event)) break;
 
                     switch (event.type) {
+						case SDL_QUIT:
+							throw(0);
+							break;
+						case SDL_KEYUP:
+							if (event.key.keysym.sym == SDLK_ESCAPE) {
+								choice_item = DOSBoxMenu::unassigned_item_handle;
+								runloop = false;
+							}
+							break;
+#if !defined(C_SDL2)
+						case SDL_VIDEORESIZE:
+							GFX_SDLMenuTrackHilight(mainMenu,DOSBoxMenu::unassigned_item_handle);
+							GFX_SDLMenuTrackHover(mainMenu,DOSBoxMenu::unassigned_item_handle);
+							UpdateWindowDimensions(); // FIXME: Use SDL window dimensions, except that on Windows, SDL won't tell us our actual dimensions
+							HandleVideoResize(&event.resize);
+
+							runloop = false;
+							resized = true;
+							break;	
+#endif							
                         case SDL_MOUSEBUTTONDOWN:
                             button_holding=true;
                             choice_item = mainMenu.menuUserHoverAt;
@@ -3815,6 +3869,14 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                                 if (redrawAll) {
                                     MenuRestoreScreen();
                                     mainMenu.display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
+									
+									/* give the menu bar a drop shadow */
+									MenuShadeRect(
+										mainMenu.menuBox.x + DOSBoxMenu::dropshadowX,
+										mainMenu.menuBox.y + mainMenu.menuBox.h,
+										mainMenu.menuBox.w,
+										DOSBoxMenu::dropshadowY - 1/*menubar border*/);
+
                                     for (std::vector<DOSBoxMenu::item_handle_t>::iterator i=popup_stack.begin();i!=popup_stack.end();i++) {
 										if (mainMenu.get_item(*i).get_type() == DOSBoxMenu::submenu_type_id) {
 											mainMenu.get_item(*i).drawBackground(mainMenu);
@@ -3831,8 +3893,10 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 /* then return */
                 GFX_SDLMenuTrackHilight(mainMenu,DOSBoxMenu::unassigned_item_handle);
                 GFX_SDLMenuTrackHover(mainMenu,DOSBoxMenu::unassigned_item_handle);
-                MenuRestoreScreen();
-                MenuFullScreenRedraw();
+				if (!resized) {
+					MenuRestoreScreen();
+					MenuFullScreenRedraw();
+				}
                 MenuFreeScreen();
 
                 while (!popup_stack.empty()) {
@@ -3852,7 +3916,7 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 }
 
                 /* action! */
-                if (choice_item != DOSBoxMenu::unassigned_item_handle) {
+                if (!resized && choice_item != DOSBoxMenu::unassigned_item_handle) {
                     DOSBoxMenu::item &item = mainMenu.get_item(choice_item);
 
                     if (item.get_type() == DOSBoxMenu::item_type_id && item.is_enabled())
@@ -6005,10 +6069,207 @@ bool VM_PowerOn() {
 }
 
 void SetScaleForced(bool forced);
+void OutputSettingMenuUpdate(void);
 
 bool scaler_forced_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
 	SetScaleForced(!render.scale.forced);
 	menuitem->check(render.scale.forced);
+	return true;
+}
+
+bool vid_pc98_5mhz_gdc_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	if (IS_PC98_ARCH) {
+		void gdc_5mhz_mode_update_vars(void);
+		extern bool gdc_5mhz_mode;
+
+		gdc_5mhz_mode = !gdc_5mhz_mode;
+		gdc_5mhz_mode_update_vars();
+
+		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+		if (gdc_5mhz_mode)
+			dosbox_section->HandleInputline("pc-98 start gdc at 5mhz=1");
+		else
+			dosbox_section->HandleInputline("pc-98 start gdc at 5mhz=0");
+
+		mainMenu.get_item("pc98_5mhz_gdc").check(gdc_5mhz_mode).refresh_item(mainMenu);
+	}
+
+	return true;
+}
+
+bool vid_pc98_200scanline_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	if (IS_PC98_ARCH) {
+		extern bool pc98_allow_scanline_effect;
+
+		pc98_allow_scanline_effect = !pc98_allow_scanline_effect;
+
+		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+		if (pc98_allow_scanline_effect)
+			dosbox_section->HandleInputline("pc-98 allow scanline effect=1");
+		else
+			dosbox_section->HandleInputline("pc-98 allow scanline effect=0");
+
+		mainMenu.get_item("pc98_allow_200scanline").check(pc98_allow_scanline_effect).refresh_item(mainMenu);
+	}
+
+	return true;
+}
+
+bool vid_pc98_4parts_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	if (IS_PC98_ARCH) {
+		extern bool pc98_allow_4_display_partitions;
+		void updateGDCpartitions4(bool enable);
+
+		updateGDCpartitions4(!pc98_allow_4_display_partitions);
+
+		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+		if (pc98_allow_4_display_partitions)
+			dosbox_section->HandleInputline("pc-98 allow 4 display partition graphics=1");
+		else
+			dosbox_section->HandleInputline("pc-98 allow 4 display partition graphics=0");
+
+		mainMenu.get_item("pc98_allow_4partitions").check(pc98_allow_4_display_partitions).refresh_item(mainMenu);
+	}
+
+	return true;
+}
+
+bool vid_pc98_enable_egc_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	void gdc_egc_enable_update_vars(void);
+	extern bool enable_pc98_egc;
+	extern bool enable_pc98_grcg;
+	extern bool enable_pc98_16color;
+
+	if(IS_PC98_ARCH) {
+		enable_pc98_egc = !enable_pc98_egc;
+		gdc_egc_enable_update_vars();
+	
+		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+		if (enable_pc98_egc) {
+			dosbox_section->HandleInputline("pc-98 enable egc=1");
+
+			if(!enable_pc98_grcg) { //Also enable GRCG if GRCG is disabled when enabling EGC
+				enable_pc98_grcg = !enable_pc98_grcg;
+				mem_writeb(0x54C,(enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00));
+				dosbox_section->HandleInputline("pc-98 enable grcg=1");
+			}
+		}
+		else
+			dosbox_section->HandleInputline("pc-98 enable egc=0");
+
+		mainMenu.get_item("pc98_enable_egc").check(enable_pc98_egc).refresh_item(mainMenu);
+		mainMenu.get_item("pc98_enable_grcg").check(enable_pc98_grcg).refresh_item(mainMenu);
+	}
+
+	return true;
+}
+
+bool vid_pc98_enable_grcg_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	extern bool enable_pc98_grcg;
+	extern bool enable_pc98_egc;
+	void gdc_grcg_enable_update_vars(void);
+
+	if(IS_PC98_ARCH) {
+		enable_pc98_grcg = !enable_pc98_grcg;
+		gdc_grcg_enable_update_vars();
+
+		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+		if (enable_pc98_grcg)
+			dosbox_section->HandleInputline("pc-98 enable grcg=1");
+		else
+			dosbox_section->HandleInputline("pc-98 enable grcg=0");
+
+		if ((!enable_pc98_grcg) && enable_pc98_egc) { // Also disable EGC if switching off GRCG
+			void gdc_egc_enable_update_vars(void);
+			enable_pc98_egc = !enable_pc98_egc;
+			gdc_egc_enable_update_vars();
+			dosbox_section->HandleInputline("pc-98 enable egc=0");
+		}
+
+		mainMenu.get_item("pc98_enable_egc").check(enable_pc98_egc).refresh_item(mainMenu);
+		mainMenu.get_item("pc98_enable_grcg").check(enable_pc98_grcg).refresh_item(mainMenu);
+	}
+
+	return true;
+}
+
+bool vid_pc98_enable_analog_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	//NOTE: I thought that even later PC-9801s and some PC-9821s could use EGC features in digital 8-colors mode?
+	extern bool enable_pc98_16color;
+	void gdc_16color_enable_update_vars(void);
+
+	if(IS_PC98_ARCH) {
+		enable_pc98_16color = !enable_pc98_16color;
+		gdc_16color_enable_update_vars();
+
+	Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+	if (enable_pc98_16color)
+		dosbox_section->HandleInputline("pc-98 enable 16-color=1");
+	else
+		dosbox_section->HandleInputline("pc-98 enable 16-color=0");
+
+		mainMenu.get_item("pc98_enable_analog").check(enable_pc98_16color).refresh_item(mainMenu);
+	}
+
+	return true;
+}
+
+bool vid_pc98_cleartext_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	void pc98_clear_text(void);
+	if (IS_PC98_ARCH) pc98_clear_text();
+	return true;
+}
+
+bool vid_pc98_graphics_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	void pc98_clear_graphics(void);
+	if (IS_PC98_ARCH) pc98_clear_graphics();
+	return true;
+}
+
+bool output_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	const char *what = menuitem->get_name().c_str();
+
+	if (!strncmp(what,"output_",7))
+		what += 7;
+	else
+		return true;
+
+	if (!strcmp(what,"surface")) {
+		if (sdl.desktop.want_type == SCREEN_SURFACE) return true;
+		change_output(0);
+	}
+	else if (!strcmp(what,"opengl")) {
+#if C_OPENGL
+		if (sdl.desktop.want_type == SCREEN_OPENGL && sdl.opengl.bilinear) return true;
+		change_output(3);
+#endif
+	}
+	else if (!strcmp(what,"openglnb")) {
+#if C_OPENGL
+		if (sdl.desktop.want_type == SCREEN_OPENGL && !sdl.opengl.bilinear) return true;
+		change_output(4);
+#endif
+	}
+	else if (!strcmp(what,"direct3d")) {
+		if (sdl.desktop.want_type == SCREEN_DIRECT3D) return true;
+		change_output(5);
+	}
+
+	SetVal("sdl", "output", what);
+	OutputSettingMenuUpdate();
+	return true;
+}
+
+
+bool MENU_SetBool(std::string secname, std::string value);
+
+bool vga_9widetext_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	MENU_SetBool("render", "char9");
+	return true;
+}
+
+bool doublescan_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	MENU_SetBool("render", "doublescan");
 	return true;
 }
 
@@ -6176,6 +6437,15 @@ void HideMenu_mapper_shortcut(bool pressed) {
     ToggleMenu(true);
 
     mainMenu.get_item("mapper_togmenu").check(!menu.toggle).refresh_item(mainMenu);
+}
+
+void OutputSettingMenuUpdate(void) {
+	mainMenu.get_item("output_surface").check(sdl.desktop.want_type==SCREEN_SURFACE).refresh_item(mainMenu);
+	mainMenu.get_item("output_direct3d").check(sdl.desktop.want_type==SCREEN_DIRECT3D).refresh_item(mainMenu);
+#if C_OPENGL
+	mainMenu.get_item("output_opengl").check(sdl.desktop.want_type==SCREEN_OPENGL && sdl.opengl.bilinear).refresh_item(mainMenu);
+	mainMenu.get_item("output_openglnb").check(sdl.desktop.want_type==SCREEN_OPENGL && !sdl.opengl.bilinear).refresh_item(mainMenu);
+#endif
 }
 
 //extern void UI_Init(void);
@@ -6597,7 +6867,50 @@ int main(int argc, char* argv[]) {
 					set_callback_function(scaler_set_menu_callback);
 				}
 			}
+			{
+				DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"VideoCompatMenu");
+				item.set_text("Compatibility");
+
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"vga_9widetext").set_text("Allow 9-pixel wide text mode").
+					set_callback_function(vga_9widetext_menu_callback);
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"doublescan").set_text("Doublescan").
+					set_callback_function(doublescan_menu_callback);
+			}			
+			{
+				DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"VideoOutputMenu");
+				item.set_text("Output");
+
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"output_surface").set_text("Surface").
+					set_callback_function(output_menu_callback);
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"output_direct3d").set_text("Direct3D").
+					set_callback_function(output_menu_callback);
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"output_opengl").set_text("OpenGL").
+					set_callback_function(output_menu_callback);
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"output_openglnb").set_text("OpenGL NB").
+					set_callback_function(output_menu_callback);
+			}
         }
+		{
+			DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"VideoPC98Menu");
+			item.set_text("PC-98");
+
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_5mhz_gdc").set_text("5MHz GDC clock").
+				set_callback_function(vid_pc98_5mhz_gdc_menu_callback);
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_allow_200scanline").set_text("Allow 200-line scanline effect").
+				set_callback_function(vid_pc98_200scanline_menu_callback);
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_allow_4partitions").set_text("Allow 4 display partitions in graphics layer").
+				set_callback_function(vid_pc98_4parts_menu_callback);
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_enable_egc").set_text("Enable EGC").
+				set_callback_function(vid_pc98_enable_egc_menu_callback);
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_enable_grcg").set_text("Enable GRCG").
+				set_callback_function(vid_pc98_enable_grcg_menu_callback);
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_enable_analog").set_text("Enable analog display").
+				set_callback_function(vid_pc98_enable_analog_menu_callback);
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_clear_text").set_text("Clear text layer").
+				set_callback_function(vid_pc98_cleartext_menu_callback);
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_clear_graphics").set_text("Clear graphics layer").
+				set_callback_function(vid_pc98_graphics_menu_callback);
+		}
         {
             DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"SoundMenu");
             item.set_text("Sound");
@@ -6770,6 +7083,20 @@ int main(int argc, char* argv[]) {
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"showdetails").set_text("Show details").set_callback_function(showdetails_menu_callback).check(!menu.hidecycles);
 		
 		mainMenu.get_item("scaler_forced").check(render.scale.forced);
+		
+		mainMenu.get_item("vga_9widetext").enable(!IS_PC98_ARCH);
+		mainMenu.get_item("doublescan").enable(!IS_PC98_ARCH);
+
+		mainMenu.get_item("pc98_5mhz_gdc").enable(IS_PC98_ARCH);
+		mainMenu.get_item("pc98_allow_200scanline").enable(IS_PC98_ARCH);
+		mainMenu.get_item("pc98_allow_4partitions").enable(IS_PC98_ARCH);
+		mainMenu.get_item("pc98_enable_egc").enable(IS_PC98_ARCH);
+		mainMenu.get_item("pc98_enable_grcg").enable(IS_PC98_ARCH);
+		mainMenu.get_item("pc98_enable_analog").enable(IS_PC98_ARCH);
+		mainMenu.get_item("pc98_clear_text").enable(IS_PC98_ARCH);
+		mainMenu.get_item("pc98_clear_graphics").enable(IS_PC98_ARCH);
+
+		OutputSettingMenuUpdate();
 		
 		/* The machine just "powered on", and then reset finished */
 		if (!VM_PowerOn()) E_Exit("VM failed to power on");

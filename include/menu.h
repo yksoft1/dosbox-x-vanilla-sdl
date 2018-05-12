@@ -172,8 +172,8 @@ class DOSBoxMenu {
                 }
         };
     public:
-        static item_handle_t  unassigned_item_handle; 
-        static callback_t     unassigned_callback;
+        static const item_handle_t  unassigned_item_handle; 
+        static const callback_t     unassigned_callback;
         static const mapper_event_t     unassigned_mapper_event; /* empty std::string */
     public:
         struct accelerator {

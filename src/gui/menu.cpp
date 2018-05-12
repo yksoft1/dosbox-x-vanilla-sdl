@@ -46,8 +46,8 @@ void sdl_hax_nsMenuItemRelease(void *nsMenuItem);
 
 const DOSBoxMenu::mapper_event_t DOSBoxMenu::unassigned_mapper_event; /* empty std::string */
 
-DOSBoxMenu::item_handle_t  DOSBoxMenu::unassigned_item_handle=((DOSBoxMenu::item_handle_t)(0xFFFFU));
-DOSBoxMenu::callback_t DOSBoxMenu::unassigned_callback=NULL;
+const DOSBoxMenu::item_handle_t  DOSBoxMenu::unassigned_item_handle=((DOSBoxMenu::item_handle_t)(0xFFFFU));
+const DOSBoxMenu::callback_t DOSBoxMenu::unassigned_callback=NULL;
 #if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
 const unsigned int DOSBoxMenu::winMenuMinimumID = 0x1000;
 #endif
@@ -759,6 +759,42 @@ static const char *def_menu_video_scaler[] = {
 	NULL
 };
 
+/* video output menu ("VideoOutputMenu") */
+static const char *def_menu_video_output[] = {
+	"output_surface",
+#if !defined(C_SDL2) && !defined(HX_DOS)
+# if (HAVE_D3D9_H) && defined(WIN32)
+	"output_direct3d",
+# endif
+# if (C_OPENGL)
+	"output_opengl",
+	"output_openglnb",
+# endif
+#endif
+	NULL
+};
+
+/* video output menu ("VideoCompatMenu") */
+static const char *def_menu_video_compat[] = {
+	"vga_9widetext",
+	"doublescan",
+	NULL
+};
+
+/* video output menu ("VideoPC98Menu") */
+static const char *def_menu_video_pc98[] = {
+	"pc98_5mhz_gdc",
+	"pc98_allow_200scanline",
+	"pc98_allow_4partitions",
+	"--",
+	"pc98_enable_egc",
+	"pc98_enable_grcg",
+	"pc98_enable_analog",
+	"--",
+	"pc98_clear_text",
+	"pc98_clear_graphics",
+	NULL
+};
 
 /* video menu ("VideoMenu") */
 static const char *def_menu_video[] = {
@@ -791,6 +827,9 @@ static const char *def_menu_video[] = {
 	"--",
 	"scaler_forced",
 	"VideoScalerMenu",
+	"VideoOutputMenu",
+	"VideoCompatMenu",
+	"VideoPC98Menu",
     NULL
 };
 
@@ -926,11 +965,26 @@ void ConstructMenu(void) {
 		}
 	}
 
+	/* video output menu */
+	ConstructSubMenu(mainMenu.get_item("VideoOutputMenu").get_master_id(), def_menu_video_output);
+
+	/* video compat menu */
+	ConstructSubMenu(mainMenu.get_item("VideoCompatMenu").get_master_id(), def_menu_video_compat);
+
+	/* video PC-98 menu */
+	ConstructSubMenu(mainMenu.get_item("VideoPC98Menu").get_master_id(), def_menu_video_pc98);
+	
     /* sound menu */
     ConstructSubMenu(mainMenu.get_item("SoundMenu").get_master_id(), def_menu_sound);
 
     /* capture menu */
     ConstructSubMenu(mainMenu.get_item("CaptureMenu").get_master_id(), def_menu_capture);
+}
+
+bool MENU_SetBool(std::string secname, std::string value) {
+	Section_prop * sec = static_cast<Section_prop *>(control->GetSection(secname));
+	if(sec) SetVal(secname, value, sec->Get_bool(value) ? "false" : "true");
+	return sec->Get_bool(value);
 }
 
 void RENDER_CallBack( GFX_CallBackFunctions_t function );
@@ -1926,12 +1980,6 @@ void MENU_Check_Drive(HMENU handle, int cdrom, int floppy, int local, int image,
 	if(sec) EnableMenuItem(handle, automount, AUTOMOUNT(full_drive.c_str(), drive) && !menu.boot && sec->Get_bool("automount") ? MF_ENABLED : MF_GRAYED);
 	EnableMenuItem(handle, umount, (!Drives[drive - 'A']) || menu.boot ? MF_GRAYED : MF_ENABLED);
 #endif
-}
-
-bool MENU_SetBool(std::string secname, std::string value) {
-	Section_prop * sec = static_cast<Section_prop *>(control->GetSection(secname));
-	if(sec) SetVal(secname, value, sec->Get_bool(value) ? "false" : "true");
-	return sec->Get_bool(value);
 }
 
 void MENU_KeyDelayRate(int delay, int rate) {
@@ -3974,7 +4022,7 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
         y += textBox.h;
     }
     else {
-        x += screenBox.w;
+        x += screenBox.w + 2/*popup border*/;
     }
 
     popupBox.x = x;
