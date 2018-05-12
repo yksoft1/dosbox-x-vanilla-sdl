@@ -431,8 +431,8 @@ class DOSBoxMenu {
 										nsMenu(NULL),
 #endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-										menuBarHeight((16+1)),
 										screenWidth(320),
+										fontCharScale(1),
 										needRedraw(false),
 										menuVisible(false),
 										menuUserAttentionAt(unassigned_item_handle),
@@ -440,7 +440,10 @@ class DOSBoxMenu {
 #endif
 										master_list_alloc(0)
 										{
-#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW		
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW	
+										fontCharWidth=fontCharWidthBase;
+										fontCharHeight=fontCharHeightBase;
+										menuBarHeight=menuBarHeightBase;
 										menuBox.x=0;
 										menuBox.y=0;
 										menuBox.w=0;
@@ -515,18 +518,23 @@ class DOSBoxMenu {
         }
     public:
         void                            showMenu(bool show=true);
+		void							setScale(size_t s);
         void                            removeHover(void);
         void                            removeFocus(void);
         void                            updateRect(void);
         void                            layoutMenu(void);
     public:
+		static const size_t				menuBarHeightBase;
         size_t                          menuBarHeight;
         size_t                          screenWidth;
     public:
-        static const size_t         fontCharWidth;
-        static const size_t         fontCharHeight;
+        static const size_t         fontCharWidthBase;
+        static const size_t         fontCharHeightBase;
         static const size_t         dropshadowX;
         static const size_t         dropshadowY;
+		size_t fontCharScale;
+		size_t fontCharWidth;
+		size_t fontCharHeight;
 #endif
     public:
         void                            dispatchItemCommand(item &item);

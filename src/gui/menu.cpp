@@ -55,8 +55,9 @@ const unsigned int DOSBoxMenu::winMenuMinimumID = 0x1000;
 const unsigned int DOSBoxMenu::nsMenuMinimumID = 0x1000;
 #endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-const size_t DOSBoxMenu::fontCharWidth = 8;
-const size_t DOSBoxMenu::fontCharHeight = 16;
+const size_t DOSBoxMenu::fontCharWidthBase = 8;
+const size_t DOSBoxMenu::fontCharHeightBase = 16;
+const size_t DOSBoxMenu::menuBarHeightBase = (16 + 1);
 const size_t DOSBoxMenu::dropshadowX = 8;
 const size_t DOSBoxMenu::dropshadowY = 8;
 #endif
@@ -3996,6 +3997,20 @@ void DOSBoxMenu::item::removeFocus(DOSBoxMenu &menu) {
     }
 }
 
+void DOSBoxMenu::setScale(size_t s) {
+	if (s == 0) s = 1;
+	if (s > 2) s = 2;
+
+	if (fontCharScale != s) {
+		fontCharScale = s;
+		menuBarHeight = menuBarHeightBase * fontCharScale;
+		fontCharWidth = fontCharWidthBase * fontCharScale;
+		fontCharHeight = fontCharHeightBase * fontCharScale;
+		updateRect();
+		layoutMenu();
+	}
+}
+
 void DOSBoxMenu::item::removeHover(DOSBoxMenu &menu) {
     if (menu.menuUserHoverAt == master_id) {
         menu.menuUserHoverAt = unassigned_item_handle;
@@ -4093,7 +4108,7 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
 
 			item.screenBox.x = x;
 			item.screenBox.y = popupBox.y;
-			item.screenBox.w = 5;
+			item.screenBox.w = 5 * menu.fontCharScale;
 			item.screenBox.h = y - popupBox.y;
 
 			minx = maxx = x = item.screenBox.x + item.screenBox.w;
@@ -4158,7 +4173,7 @@ void DOSBoxMenu::item::placeItemFinal(DOSBoxMenu &menu,int finalwidth,bool isTop
         /* from the right */
         rx = screenBox.w;
 
-        rx -= fontCharWidth;
+        rx -= menu.fontCharWidth;
 
         rx -= shortBox.w;
         shortBox.x = rx;
@@ -4190,18 +4205,18 @@ void DOSBoxMenu::item::placeItem(DOSBoxMenu &menu,int x,int y,bool isTopLevel) {
         screenBox.x = x;
         screenBox.y = y;
         screenBox.w = 0;
-        screenBox.h = fontCharHeight;
+        screenBox.h = menu.fontCharHeight;
 
         checkBox.x = 0;
         checkBox.y = 0;
-        checkBox.w = fontCharWidth;
-        checkBox.h = fontCharHeight;
+        checkBox.w = menu.fontCharWidth;
+        checkBox.h = menu.fontCharHeight;
         screenBox.w += checkBox.w;
 
         textBox.x = 0;
         textBox.y = 0;
-        textBox.w = fontCharWidth * text.length();
-        textBox.h = fontCharHeight;
+        textBox.w = menu.fontCharWidth * text.length();
+        textBox.h = menu.fontCharHeight;
         screenBox.w += textBox.w;
 
         shortBox.x = 0;
@@ -4209,19 +4224,19 @@ void DOSBoxMenu::item::placeItem(DOSBoxMenu &menu,int x,int y,bool isTopLevel) {
         shortBox.w = 0;
         shortBox.h = 0;
         if (!isTopLevel && !shortcut_text.empty()) {
-            screenBox.w += fontCharWidth;
-            shortBox.w += fontCharWidth * shortcut_text.length();
-            shortBox.h = fontCharHeight;
+            screenBox.w += menu.fontCharWidth;
+            shortBox.w += menu.fontCharWidth * shortcut_text.length();
+            shortBox.h = menu.fontCharHeight;
             screenBox.w += shortBox.w;
         }
 
-        screenBox.w += fontCharWidth;
+        screenBox.w += menu.fontCharWidth;
     }
     else {
         screenBox.x = x;
         screenBox.y = y;
-        screenBox.w = fontCharWidth * 2;
-        screenBox.h = 5;
+        screenBox.w = menu.fontCharWidth * 2;
+        screenBox.h = 5 * menu.fontCharScale;
 
         checkBox.x = 0;
         checkBox.y = 0;
