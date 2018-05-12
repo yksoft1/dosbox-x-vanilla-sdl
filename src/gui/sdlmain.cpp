@@ -145,6 +145,8 @@ const char *scaler_menu_opts[][2] = {
 	{ NULL, NULL }
 };
 
+void UpdateOverscanMenu(void);
+
 const char *DKM_to_string(const unsigned int dkm) {
     switch (dkm) {
         case DKM_US:        return "us";
@@ -219,13 +221,13 @@ void SetMapperKeyboardLayout(const unsigned int dkm) {
         DKM_to_descriptive_string(mapper_keyboard_layout));
 }
 
-#if 0 && defined(WIN32) && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && defined(WIN32) && !defined(C_SDL2)
 extern "C" unsigned char SDL1_hax_hasLayoutChanged(void);
 extern "C" void SDL1_hax_ackLayoutChanged(void);
 #endif
 
 void CheckMapperKeyboardLayout(void) {
-#if 0 && defined(WIN32) && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && defined(WIN32) && !defined(C_SDL2)
 	if (SDL1_hax_hasLayoutChanged()) {
 		SDL1_hax_ackLayoutChanged();
 		LOG_MSG("Keyboard layout changed");
@@ -405,8 +407,11 @@ bool						startup_state_numlock = false; // Global for keyboard initialisation
 bool						startup_state_capslock = false; // Global for keyboard initialisation
 
 #if defined(WIN32) && !defined(C_SDL2)
-//extern "C" void SDL1_hax_SetMenu(HMENU menu);
+#if SDL_DOSBOX_X_SPECIAL
+extern "C" void SDL1_hax_SetMenu(HMENU menu);
+#else
 void SDL1_hax_SetMenu(HMENU menu); //now in menu.cpp
+#endif
 #endif
 
 #ifdef WIN32
@@ -1184,7 +1189,7 @@ static void GFX_ResetSDL() {
 	/* deprecated */
 }
 
-#if 0 && defined(WIN32) && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && defined(WIN32) && !defined(C_SDL2)
 extern "C" unsigned int SDL1_hax_inhibit_WM_PAINT;
 #endif
 
@@ -1463,7 +1468,7 @@ Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,G
 		sdl.blit.surface=0;
 	}
 
-#if 0 && defined(WIN32) && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && defined(WIN32) && !defined(C_SDL2)
 	SDL1_hax_inhibit_WM_PAINT = 0;
 #endif
 
@@ -1586,8 +1591,8 @@ dosurface:
 				goto dosurface;
 			}
 		} else {
-			sdl.clip.x=sdl.overscan_width;
-            sdl.clip.y=sdl.overscan_width;
+			sdl.clip.x=0;
+            sdl.clip.y=0;
 
 			/* center the screen in the window */
 			{
@@ -1595,18 +1600,20 @@ dosurface:
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
                 if (mainMenu.isVisible()) menuheight = mainMenu.menuBox.h;
 #endif
-                Bitu consider_height = menu.maxwindow ? currentWindowHeight : (height + menuheight);
-                Bitu consider_width = menu.maxwindow ? currentWindowWidth : width;
-                int final_height = max(max(consider_height,userResizeWindowHeight),(Bitu)(sdl.clip.y+sdl.clip.h)) - menuheight;
-                int final_width = max(max(consider_width,userResizeWindowWidth),(Bitu)(sdl.clip.x+sdl.clip.w));
+				Bitu consider_height = menu.maxwindow ? currentWindowHeight : (height + menuheight + (sdl.overscan_width * 2));
+				Bitu consider_width = menu.maxwindow ? currentWindowWidth : (width + (sdl.overscan_width * 2));
+				int final_height = max(max(consider_height,userResizeWindowHeight),(Bitu)(sdl.clip.y+sdl.clip.h)) - menuheight - (sdl.overscan_width * 2);
+				int final_width = max(max(consider_width,userResizeWindowWidth),(Bitu)(sdl.clip.x+sdl.clip.w)) - (sdl.overscan_width * 2);
+
 				int ax = (final_width - (sdl.clip.x + sdl.clip.w)) / 2;
 				int ay = (final_height - (sdl.clip.y + sdl.clip.h)) / 2;
-				sdl.clip.x += ax;
-				sdl.clip.y += ay;
+				sdl.clip.x += ax + sdl.overscan_width;
+				sdl.clip.y += ay + sdl.overscan_width;
 //				sdl.clip.w = currentWindowWidth - sdl.clip.x;
 //				sdl.clip.h = currentWindowHeight - sdl.clip.y;
 
-                final_height += menuheight;
+				final_width += sdl.overscan_width*2;
+				final_height += menuheight + sdl.overscan_width*2;
                 sdl.clip.y += menuheight;
 
                 LOG_MSG("surface consider=%ux%u final=%ux%u",
@@ -1947,7 +1954,9 @@ dosurface:
 
 		if(d3d->dynamic) retFlags |= GFX_HARDWARE;
 
-		//SDL1_hax_inhibit_WM_PAINT = 1;
+#if SDL_DOSBOX_X_SPECIAL
+		SDL1_hax_inhibit_WM_PAINT = 1;
+#endif
 
 		if(GCC_UNLIKELY(d3d->Resize3DEnvironment(window_width,window_height,sdl.clip.w,sdl.clip.h,width,
 						    height,sdl.desktop.fullscreen) != S_OK)) {
@@ -2471,6 +2480,7 @@ void change_output(int output) {
 	Section * sec = control->GetSection("sdl");
 	Section_prop * section=static_cast<Section_prop *>(sec);
 	sdl.overscan_width=section->Get_int("overscan");
+	UpdateOverscanMenu();
 	switch (output) {
 	case 0:
 		sdl.desktop.want_type=SCREEN_SURFACE;
@@ -2640,7 +2650,7 @@ bool GFX_GetPreventFullscreen(void) {
     return sdl.desktop.prevent_fullscreen;
 }
 
-#if 0 && defined(WIN32) && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && defined(WIN32) && !defined(C_SDL2)
 extern "C" unsigned char SDL1_hax_RemoveMinimize;
 #endif
 
@@ -2651,7 +2661,9 @@ void GFX_PreventFullscreen(bool lockout) {
 		void DOSBox_SetSysMenu(void);
 		int Reflect_Menu(void);
 
-		//SDL1_hax_RemoveMinimize = lockout ? 1 : 0;
+#if SDL_DOSBOX_X_SPECIAL
+		SDL1_hax_RemoveMinimize = lockout ? 1 : 0;
+#endif
 
 		DOSBox_SetSysMenu();
 		Reflect_Menu();
@@ -6226,6 +6238,24 @@ bool vid_pc98_graphics_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * 
 	return true;
 }
 
+bool overscan_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	int f = atoi(menuitem->get_text().c_str()); /* Off becomes 0 */
+	char tmp[64];
+
+	sprintf(tmp,"%u",f);
+	SetVal("sdl", "overscan", tmp);
+	change_output(7);
+	return true;
+}
+
+void UpdateOverscanMenu(void) {
+	for (size_t i=0;i <= 10;i++) {
+		char tmp[64];
+		sprintf(tmp,"overscan_%zu",i);
+		mainMenu.get_item(tmp).check(sdl.overscan_width == i).refresh_item(mainMenu);
+	}
+}
+
 bool output_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
 	const char *what = menuitem->get_name().c_str();
 
@@ -6337,12 +6367,12 @@ bool is_always_on_top(void) {
 #endif
 }
 
-#if 0 && defined(_WIN32) && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && defined(_WIN32) && !defined(C_SDL2)
 extern "C" void sdl1_hax_set_topmost(unsigned char topmost);
 #endif
 
 void toggle_always_on_top(void) {
-#if 0 && defined(_WIN32) && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && defined(_WIN32) && !defined(C_SDL2)
     bool cur = is_always_on_top();
 	sdl1_hax_set_topmost(!cur);
 #endif
@@ -6888,6 +6918,22 @@ int main(int argc, char* argv[]) {
 					set_callback_function(output_menu_callback);
 				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"output_openglnb").set_text("OpenGL NB").
 					set_callback_function(output_menu_callback);
+			}
+			{
+				DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"VideoOverscanMenu");
+				item.set_text("Overscan");
+
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"overscan_0").set_text("Off").
+					set_callback_function(overscan_menu_callback);
+
+				for (size_t i=1;i <= 10;i++) {
+					char tmp1[64],tmp2[64];
+
+					sprintf(tmp1,"overscan_%zu",i);
+					sprintf(tmp2,"%zu",i);
+					mainMenu.alloc_item(DOSBoxMenu::item_type_id,tmp1).set_text(tmp2).
+						set_callback_function(overscan_menu_callback);
+				}
 			}
         }
 		{
