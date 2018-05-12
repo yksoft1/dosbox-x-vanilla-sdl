@@ -1915,8 +1915,8 @@ dosurface:
 			}
 		}
 		else {
-			int final_height = max(sdl.clip.h, userResizeWindowHeight);
-			int final_width = max(sdl.clip.w, userResizeWindowWidth);
+			int final_height = max((Bitu)sdl.clip.h, userResizeWindowHeight);
+			int final_width = max((Bitu)sdl.clip.w, userResizeWindowWidth);
 
 			window_width = final_width;
 			window_height = final_height;
@@ -1947,7 +1947,7 @@ dosurface:
 
 		if(d3d->dynamic) retFlags |= GFX_HARDWARE;
 
-		SDL1_hax_inhibit_WM_PAINT = 1;
+		//SDL1_hax_inhibit_WM_PAINT = 1;
 
 		if(GCC_UNLIKELY(d3d->Resize3DEnvironment(window_width,window_height,sdl.clip.w,sdl.clip.h,width,
 						    height,sdl.desktop.fullscreen) != S_OK)) {
@@ -5242,7 +5242,7 @@ void SDL_SetupConfigSection() {
 #ifdef __WIN32__
 # if defined(HX_DOS)
 		Pstring = sdl_sec->Add_string("output", Property::Changeable::Always, "surface"); /* HX DOS should stick to surface */
-# elif defined(__MINGW32__)
+# elif !(HAVE_D3D9_H)
 		Pstring = sdl_sec->Add_string("output", Property::Changeable::Always, "opengl"); /* MinGW builds do not yet have Direct3D */
 # else
 		Pstring = sdl_sec->Add_string("output", Property::Changeable::Always, "direct3d");
