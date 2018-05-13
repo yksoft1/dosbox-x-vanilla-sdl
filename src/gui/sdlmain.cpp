@@ -1707,8 +1707,13 @@ dosurface:
                     (unsigned int)final_width,
                     (unsigned int)final_height);
 
+#if SDL_DOSBOX_X_SPECIAL
+				sdl.surface = SDL_SetVideoMode(final_width, final_height, bpp,
+					((flags & GFX_CAN_RANDOM) ? SDL_SWSURFACE : SDL_HWSURFACE) | SDL_HAX_NOREFRESH | SDL_RESIZABLE);
+#else
 				sdl.surface = SDL_SetVideoMode(final_width, final_height, bpp, (flags & GFX_CAN_RANDOM) ? SDL_SWSURFACE | SDL_RESIZABLE : SDL_HWSURFACE | SDL_RESIZABLE);
-                sdl.deferred_resize = false;
+#endif
+				sdl.deferred_resize = false;
                 sdl.must_redraw_all = true;
 
 				if (SDL_MUSTLOCK(sdl.surface))
@@ -2943,6 +2948,10 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 	if (changedLines != NULL) {
 		sdl.must_redraw_all = false;
 
+#if !defined(C_SDL2) && SDL_DOSBOX_X_SPECIAL
+	sdl.surface->flags &= ~SDL_HAX_NOREFRESH;
+#endif
+
 		if (changedLines != NULL && sdl.deferred_resize) {
 			sdl.deferred_resize = false;
 #if defined(C_SDL2)
@@ -3528,8 +3537,14 @@ static void HandleVideoResize(void * event) {
     if (NonUserResizeCounter > 0)
         NonUserResizeCounter--;
 
-	/* act on resize when updating is complete */
-	sdl.deferred_resize = true;
+	if (sdl.updating && !GFX_MustActOnResize()) {
+		/* act on resize when updating is complete */
+		sdl.deferred_resize = true;
+	}
+	else {
+		sdl.deferred_resize = false;
+		RedrawScreen(ResizeEvent->w, ResizeEvent->h);
+	}
 
 /*	if(sdl.desktop.want_type!=SCREEN_DIRECT3D) {
 		HWND hwnd=GetHWND();
