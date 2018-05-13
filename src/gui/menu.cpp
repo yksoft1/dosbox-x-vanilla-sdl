@@ -1107,6 +1107,10 @@ char hdd_size[20]="";
 #if !(defined(WIN32) && !defined(C_SDL2) && !defined(HX_DOS))
 bool OpenGL_using(void);
 
+bool DOSBox_isMenuVisible(void) {
+	return menu.toggle;
+}
+
 void DOSBox_SetMenu(void) {
 # if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
     /* FIXME: SDL menu is NOT AVAILABLE if OpenGL surface is used */
@@ -4108,7 +4112,7 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
 
 			item.screenBox.x = x;
 			item.screenBox.y = popupBox.y;
-			item.screenBox.w = 5 * menu.fontCharScale;
+			item.screenBox.w = (4 * menu.fontCharScale) + 1;
 			item.screenBox.h = y - popupBox.y;
 
 			minx = maxx = x = item.screenBox.x + item.screenBox.w;
@@ -4236,7 +4240,7 @@ void DOSBoxMenu::item::placeItem(DOSBoxMenu &menu,int x,int y,bool isTopLevel) {
         screenBox.x = x;
         screenBox.y = y;
         screenBox.w = menu.fontCharWidth * 2;
-        screenBox.h = 5 * menu.fontCharScale;
+        screenBox.h = (4 * menu.fontCharScale) + 1;
 
         checkBox.x = 0;
         checkBox.y = 0;
