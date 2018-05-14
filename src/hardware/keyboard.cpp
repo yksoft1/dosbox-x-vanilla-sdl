@@ -1307,8 +1307,12 @@ void KEYBOARD_PC98_AddKey(KBD_KEYS keytype,bool pressed) {
     case KBD_leftctrl:      ret=0x74;break;     // CTRL
     case KBD_rightctrl:     ret=0x74;break;     // CTRL
 	case KBD_grave:
-		if(pc98_force_ibm_layout)
+		if(pc98_force_ibm_layout) {
 			ret=0x1A; //HACK, reuse @ key
+		} //else {
+			//LOG_MSG("We had GRAVE key pressed");
+			//ret=0x33; //use it for _ key
+		//}
 		break;
 	
     case KBD_capslock:                          // CAPS
