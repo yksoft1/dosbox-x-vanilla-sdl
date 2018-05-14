@@ -210,7 +210,34 @@ class DOSBoxMenu {
 										callback_func(unassigned_callback),
 										mapper_event(unassigned_mapper_event),
 										user_defined(0)
-										{};
+										{
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+										screenBox.x=0;
+										screenBox.y=0;
+										screenBox.w=0;
+										screenBox.h=0;
+										
+										checkBox.x=0;
+										checkBox.y=0;
+										checkBox.w=0;
+										checkBox.h=0;	
+
+										textBox.x=0;
+										textBox.y=0;
+										textBox.w=0;
+										textBox.h=0;	
+
+										shortBox.x=0;
+										shortBox.y=0;
+										shortBox.w=0;
+										shortBox.h=0;				
+
+										popupBox.x=0;
+										popupBox.y=0;
+										popupBox.w=0;
+										popupBox.h=0;										
+#endif										
+										};
                                         ~item();
             protected:
                 std::string             name;               /* item name */
