@@ -1138,7 +1138,7 @@ MENU_Block menu;
 unsigned int hdd_defsize=16000;
 char hdd_size[20]="";
 
-#if !(defined(WIN32) && !defined(C_SDL2) && !defined(HX_DOS))
+#if !(defined(WIN32) && !defined(C_SDL2) && !(C_OPENGL))
 bool OpenGL_using(void);
 
 bool DOSBox_isMenuVisible(void) {
@@ -1148,7 +1148,7 @@ bool DOSBox_isMenuVisible(void) {
 void DOSBox_SetMenu(void) {
 # if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
     /* FIXME: SDL menu is NOT AVAILABLE if OpenGL surface is used */
-    if (!OpenGL_using()) {
+    {
         menu.toggle=true;
         mainMenu.showMenu();
         mainMenu.setRedraw();
@@ -1160,7 +1160,7 @@ void DOSBox_SetMenu(void) {
 void DOSBox_NoMenu(void) {
 # if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
     /* FIXME: SDL menu is NOT AVAILABLE if OpenGL surface is used */
-    if (!OpenGL_using()) {
+    {
         menu.toggle=false;
         mainMenu.showMenu(false);
         mainMenu.setRedraw();

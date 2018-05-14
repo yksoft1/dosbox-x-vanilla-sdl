@@ -39,6 +39,7 @@
 #endif
 
 bool OpenGL_using(void);
+void GFX_OpenGLRedrawScreen(void);
 
 #ifndef _GNU_SOURCE
 # define _GNU_SOURCE
@@ -1116,6 +1117,9 @@ void GFX_LogSDLState(void) {
 static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) {
 	Bit16u fixedWidth;
 	Bit16u fixedHeight;
+	Bit16u windowWidth;
+	Bit16u windowHeight;
+
 
     int Voodoo_OGL_GetWidth();
     int Voodoo_OGL_GetHeight();
@@ -1145,14 +1149,31 @@ static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) 
         fixedWidth = final_width;
         fixedHeight = final_height;
     }
+	
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+	/* scale the menu bar if the window is large enough */
+	{
+		int cw = fixedWidth,ch = fixedHeight;
+		Bitu scale = 1;
+
+		if (cw == 0) cw = (Bit16u)(sdl.draw.width*sdl.draw.scalex);
+		if (ch == 0) ch = (Bit16u)(sdl.draw.height*sdl.draw.scaley);
+
+		while ((cw/scale) >= (640*2) && (ch/scale) >= (400*2))
+		scale++;
+
+		LOG_MSG("menuScale=%lu",(unsigned long)scale);
+		mainMenu.setScale(scale);
+
+		if (mainMenu.isVisible()) fixedHeight -= mainMenu.menuBox.h;
+	}
+#endif
+
     if (Voodoo_OGL_GetWidth() != 0 && Voodoo_OGL_GetHeight() != 0 &&
         Voodoo_OGL_Active() && sdl.desktop.prevent_fullscreen) { /* 3Dfx openGL do not allow resize */
         sdl.clip.x=0;sdl.clip.y=0;
-        sdl.clip.w=(Bit16u)Voodoo_OGL_GetWidth();
-        sdl.clip.h=(Bit16u)Voodoo_OGL_GetHeight();
-        sdl.surface=SDL_SetVideoMode(sdl.clip.w,sdl.clip.h,bpp,sdl_flags);
-        sdl.deferred_resize = false;
-        sdl.must_redraw_all = true;
+		sdl.clip.w=windowWidth=(Bit16u)Voodoo_OGL_GetWidth();
+		sdl.clip.h=windowHeight=(Bit16u)Voodoo_OGL_GetHeight();
     }
     else if (fixedWidth && fixedHeight) {
         if (render.aspect) {
@@ -1172,28 +1193,54 @@ static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) 
             sdl.clip.h=fixedHeight;
         }
 
-        sdl.surface = SDL_SetVideoMode(fixedWidth,fixedHeight,bpp,sdl_flags);
 		sdl.clip.x = (fixedWidth - sdl.clip.w) / 2;
         sdl.clip.y = (fixedHeight - sdl.clip.h) / 2;
-        sdl.deferred_resize = false;
-        sdl.must_redraw_all = true;
+		windowWidth = fixedWidth;
+		windowHeight = fixedHeight;
     }
     else {
         sdl.clip.x=0;sdl.clip.y=0;
-        sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex);
-        sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley);
-        sdl.surface=SDL_SetVideoMode(sdl.clip.w,sdl.clip.h,bpp,sdl_flags);
-        sdl.deferred_resize = false;
-        sdl.must_redraw_all = true;
+		sdl.clip.w=windowWidth=(Bit16u)(sdl.draw.width*sdl.draw.scalex);
+		sdl.clip.h=windowHeight=(Bit16u)(sdl.draw.height*sdl.draw.scaley);
     }
+
+	LOG(LOG_MISC,LOG_DEBUG)("GFX_SetSize OpenGL window=%ux%u clip=x,y,w,h=%d,%d,%d,%d",
+		(unsigned int)windowWidth,
+		(unsigned int)windowHeight,
+		(unsigned int)sdl.clip.x,
+		(unsigned int)sdl.clip.y,
+		(unsigned int)sdl.clip.w,
+		(unsigned int)sdl.clip.h);
+		
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+	if (mainMenu.isVisible()) {
+		windowHeight += mainMenu.menuBox.h;
+		sdl.clip.y += mainMenu.menuBox.h;
+	}
+#endif
+
+	sdl.surface=SDL_SetVideoMode(windowWidth,windowHeight,bpp,sdl_flags);
+	sdl.deferred_resize = false;
+	sdl.must_redraw_all = true;
 
 	/* There seems to be a problem with MesaGL in Linux/X11 where
 	 * the first swap buffer we do is misplaced according to the
-	 * previous window size. */
-	sdl.gfx_force_redraw_count = 2;
+	 * previous window size. 
+	 *
+	 * NTS: This seems to have been fixed, which is why this is
+	 * commented out. I guess not calling GFX_SetSize()
+	 * with a 0x0 widthxheight helps! */
+	//sdl.gfx_force_redraw_count = 2;
 
 	UpdateWindowDimensions();
 	GFX_LogSDLState();
+	
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+	mainMenu.screenWidth = sdl.surface->w;
+	mainMenu.updateRect();
+	mainMenu.setRedraw();
+#endif
+
 	return sdl.surface;
 }
 #endif
@@ -1218,112 +1265,168 @@ extern "C" unsigned int SDL1_hax_inhibit_WM_PAINT;
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
 void MenuShadeRect(int x,int y,int w,int h) {
-    if (x < 0) {
-        w += x;
-        x = 0;
-    }
-    if (y < 0) {
-        y += h;
-        y = 0;
-    }
-    if ((x+w) > sdl.surface->w)
-        w = sdl.surface->w - x;
-    if ((y+h) > sdl.surface->h)
-        h = sdl.surface->h - y;
-    if (w <= 0 || h <= 0)
-        return;
+    if (OpenGL_using()) {
+#if C_OPENGL
+		glShadeModel (GL_FLAT);
+		glBlendFunc(GL_ONE, GL_SRC_ALPHA);
+		glDisable (GL_DEPTH_TEST);
+		glDisable (GL_LIGHTING);
+		glEnable(GL_BLEND);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_ALPHA_TEST);
+		glDisable(GL_FOG);
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_STENCIL_TEST);
+		glDisable(GL_TEXTURE_2D);
 
-    if (sdl.surface->format->BitsPerPixel == 32) {
-        unsigned char *scan;
-        uint32_t *row,mask;
+		glColor4ub(0, 0, 0, 64);
+		glBegin(GL_QUADS);
+		glVertex2i(x ,y );
+		glVertex2i(x+w,y );
+		glVertex2i(x+w,y+h);
+		glVertex2i(x ,y+h);
+		glEnd();
 
-        mask = ((sdl.surface->format->Rmask >> 2) & sdl.surface->format->Rmask) |
-               ((sdl.surface->format->Gmask >> 2) & sdl.surface->format->Gmask) |
-               ((sdl.surface->format->Bmask >> 2) & sdl.surface->format->Bmask);
-
-        assert(sdl.surface->pixels != NULL);
-
-        scan  = (unsigned char*)sdl.surface->pixels;
-        scan += y * sdl.surface->pitch;
-        scan += x * 4;
-        while (h-- > 0) {
-            row = (uint32_t*)scan;
-            scan += sdl.surface->pitch;
-            for (unsigned int c=0;c < (unsigned int)w;c++) row[c] = (row[c] >> 2) & mask;
-        }
-    }
-    else if (sdl.surface->format->BitsPerPixel == 16) {
-        unsigned char *scan;
-        uint16_t *row,mask;
-
-        mask = ((sdl.surface->format->Rmask >> 2) & sdl.surface->format->Rmask) |
-               ((sdl.surface->format->Gmask >> 2) & sdl.surface->format->Gmask) |
-               ((sdl.surface->format->Bmask >> 2) & sdl.surface->format->Bmask);
-
-        assert(sdl.surface->pixels != NULL);
-
-        scan  = (unsigned char*)sdl.surface->pixels;
-        scan += y * sdl.surface->pitch;
-        scan += x * 2;
-        while (h-- > 0) {
-            row = (uint16_t*)scan;
-            scan += sdl.surface->pitch;
-            for (unsigned int c=0;c < (unsigned int)w;c++) row[c] = (row[c] >> 2) & mask;
-        }
+		glBlendFunc(GL_ONE, GL_ZERO);
+		glEnable(GL_TEXTURE_2D);
+#endif
     }
     else {
-        /* TODO */
+        if (x < 0) {
+            w += x;
+            x = 0;
+        }
+        if (y < 0) {
+            y += h;
+            y = 0;
+        }
+        if ((x+w) > sdl.surface->w)
+            w = sdl.surface->w - x;
+        if ((y+h) > sdl.surface->h)
+            h = sdl.surface->h - y;
+        if (w <= 0 || h <= 0)
+            return;
+
+        if (sdl.surface->format->BitsPerPixel == 32) {
+            unsigned char *scan;
+            uint32_t *row,mask;
+
+            mask = ((sdl.surface->format->Rmask >> 2) & sdl.surface->format->Rmask) |
+                ((sdl.surface->format->Gmask >> 2) & sdl.surface->format->Gmask) |
+                ((sdl.surface->format->Bmask >> 2) & sdl.surface->format->Bmask);
+
+            assert(sdl.surface->pixels != NULL);
+
+            scan  = (unsigned char*)sdl.surface->pixels;
+            scan += y * sdl.surface->pitch;
+            scan += x * 4;
+            while (h-- > 0) {
+                row = (uint32_t*)scan;
+                scan += sdl.surface->pitch;
+                for (unsigned int c=0;c < (unsigned int)w;c++) row[c] = (row[c] >> 2) & mask;
+            }
+        }
+        else if (sdl.surface->format->BitsPerPixel == 16) {
+            unsigned char *scan;
+            uint16_t *row,mask;
+
+            mask = ((sdl.surface->format->Rmask >> 2) & sdl.surface->format->Rmask) |
+                ((sdl.surface->format->Gmask >> 2) & sdl.surface->format->Gmask) |
+                ((sdl.surface->format->Bmask >> 2) & sdl.surface->format->Bmask);
+
+            assert(sdl.surface->pixels != NULL);
+
+            scan  = (unsigned char*)sdl.surface->pixels;
+            scan += y * sdl.surface->pitch;
+            scan += x * 2;
+            while (h-- > 0) {
+                row = (uint16_t*)scan;
+                scan += sdl.surface->pitch;
+                for (unsigned int c=0;c < (unsigned int)w;c++) row[c] = (row[c] >> 2) & mask;
+            }
+        }
+        else {
+            /* TODO */
+        }
     }
 }
 
 void MenuDrawRect(int x,int y,int w,int h,Bitu color) {
-    if (x < 0) {
-        w += x;
-        x = 0;
-    }
-    if (y < 0) {
-        y += h;
-        y = 0;
-    }
-    if ((x+w) > sdl.surface->w)
-        w = sdl.surface->w - x;
-    if ((y+h) > sdl.surface->h)
-        h = sdl.surface->h - y;
-    if (w <= 0 || h <= 0)
-        return;
+    if (OpenGL_using()) {
+#if C_OPENGL
+		glShadeModel (GL_FLAT);
+		glBlendFunc(GL_ONE, GL_ZERO);
+		glDisable (GL_DEPTH_TEST);
+		glDisable (GL_LIGHTING);
+		glDisable(GL_BLEND);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_ALPHA_TEST);
+		glDisable(GL_FOG);
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_STENCIL_TEST);
+		glDisable(GL_TEXTURE_2D);
 
-    if (sdl.surface->format->BitsPerPixel == 32) {
-        unsigned char *scan;
-        uint32_t *row;
+		glColor3ub((color >> 16UL) & 0xFF,(color >> 8UL) & 0xFF,(color >> 0UL) & 0xFF);
+		glBegin(GL_QUADS);
+		glVertex2i(x ,y );
+		glVertex2i(x+w,y );
+		glVertex2i(x+w,y+h);
+		glVertex2i(x ,y+h);
+		glEnd();
 
-        assert(sdl.surface->pixels != NULL);
-
-        scan  = (unsigned char*)sdl.surface->pixels;
-        scan += y * sdl.surface->pitch;
-        scan += x * 4;
-        while (h-- > 0) {
-            row = (uint32_t*)scan;
-            scan += sdl.surface->pitch;
-            for (unsigned int c=0;c < (unsigned int)w;c++) row[c] = (uint32_t)color;
-        }
-    }
-    else if (sdl.surface->format->BitsPerPixel == 16) {
-        unsigned char *scan;
-        uint16_t *row;
-
-        assert(sdl.surface->pixels != NULL);
-
-        scan  = (unsigned char*)sdl.surface->pixels;
-        scan += y * sdl.surface->pitch;
-        scan += x * 2;
-        while (h-- > 0) {
-            row = (uint16_t*)scan;
-            scan += sdl.surface->pitch;
-            for (unsigned int c=0;c < (unsigned int)w;c++) row[c] = (uint16_t)color;
-        }
+		glBlendFunc(GL_ONE, GL_ZERO);
+		glEnable(GL_TEXTURE_2D);
+#endif
     }
     else {
-        /* TODO */
+        if (x < 0) {
+            w += x;
+            x = 0;
+        }
+        if (y < 0) {
+            y += h;
+            y = 0;
+        }
+        if ((x+w) > sdl.surface->w)
+            w = sdl.surface->w - x;
+        if ((y+h) > sdl.surface->h)
+            h = sdl.surface->h - y;
+        if (w <= 0 || h <= 0)
+            return;
+
+        if (sdl.surface->format->BitsPerPixel == 32) {
+            unsigned char *scan;
+            uint32_t *row;
+
+            assert(sdl.surface->pixels != NULL);
+
+            scan  = (unsigned char*)sdl.surface->pixels;
+            scan += y * sdl.surface->pitch;
+            scan += x * 4;
+            while (h-- > 0) {
+                row = (uint32_t*)scan;
+                scan += sdl.surface->pitch;
+                for (unsigned int c=0;c < (unsigned int)w;c++) row[c] = (uint32_t)color;
+            }
+        }
+        else if (sdl.surface->format->BitsPerPixel == 16) {
+            unsigned char *scan;
+            uint16_t *row;
+
+            assert(sdl.surface->pixels != NULL);
+
+            scan  = (unsigned char*)sdl.surface->pixels;
+            scan += y * sdl.surface->pitch;
+            scan += x * 2;
+            while (h-- > 0) {
+                row = (uint16_t*)scan;
+                scan += sdl.surface->pitch;
+                for (unsigned int c=0;c < (unsigned int)w;c++) row[c] = (uint16_t)color;
+            }
+        }
+        else {
+            /* TODO */
+        }
     }
 }
 
@@ -1337,83 +1440,91 @@ void MenuDrawTextChar(int x,int y,unsigned char c,Bitu color) {
         return;
 
     unsigned char *bmp = (unsigned char*)int10_font_16 + (c * fontHeight);
-    unsigned char *scan;
-    uint32_t *row;
 
-    assert(sdl.surface->pixels != NULL);
+    if (OpenGL_using()) {
+    }
+    else {
+        unsigned char *scan;
 
-    scan  = (unsigned char*)sdl.surface->pixels;
-    scan += y * sdl.surface->pitch;
-    scan += x * ((sdl.surface->format->BitsPerPixel+7)/8);
+        assert(sdl.surface->pixels != NULL);
 
-    for (unsigned int row=0;row < fontHeight;row++) {
-        unsigned char rb = bmp[row];
+        scan  = (unsigned char*)sdl.surface->pixels;
+        scan += y * sdl.surface->pitch;
+        scan += x * ((sdl.surface->format->BitsPerPixel+7)/8);
 
-        if (sdl.surface->format->BitsPerPixel == 32) {
-            uint32_t *dp = (uint32_t*)scan;
-            for (unsigned int colm=0x80;colm != 0;colm >>= 1) {
-                if (rb & colm) *dp = (uint32_t)color;
-                dp++;
+        for (unsigned int row=0;row < fontHeight;row++) {
+            unsigned char rb = bmp[row];
+
+            if (sdl.surface->format->BitsPerPixel == 32) {
+                uint32_t *dp = (uint32_t*)scan;
+                for (unsigned int colm=0x80;colm != 0;colm >>= 1) {
+                    if (rb & colm) *dp = (uint32_t)color;
+                    dp++;
+                }
             }
-        }
-        else if (sdl.surface->format->BitsPerPixel == 16) {
-            uint16_t *dp = (uint16_t*)scan;
-            for (unsigned int colm=0x80;colm != 0;colm >>= 1) {
-                if (rb & colm) *dp = (uint16_t)color;
-                dp++;
+            else if (sdl.surface->format->BitsPerPixel == 16) {
+                uint16_t *dp = (uint16_t*)scan;
+                for (unsigned int colm=0x80;colm != 0;colm >>= 1) {
+                    if (rb & colm) *dp = (uint16_t)color;
+                    dp++;
+                }
             }
-        }
 
-        scan += sdl.surface->pitch;
+            scan += sdl.surface->pitch;
+        }
     }
 }
 
 void MenuDrawTextChar2x(int x,int y,unsigned char c,Bitu color) {
-	static const unsigned int fontHeight = 16;
+    static const unsigned int fontHeight = 16;
 
-	if (x < 0 || y < 0 || (x+8) > sdl.surface->w || (y+fontHeight) > sdl.surface->h)
-		return;
+    if (x < 0 || y < 0 || (x+8) > sdl.surface->w || (y+fontHeight) > sdl.surface->h)
+        return;
 
-	unsigned char *bmp = (unsigned char*)int10_font_16 + (c * fontHeight);
-	unsigned char *scan;
-	uint32_t *row;
+    unsigned char *bmp = (unsigned char*)int10_font_16 + (c * fontHeight);
 
-	assert(sdl.surface->pixels != NULL);
+    if (OpenGL_using()) {
+    }
+    else { 
+        unsigned char *scan;
 
-	scan = (unsigned char*)sdl.surface->pixels;
-	scan += y * sdl.surface->pitch;
-	scan += x * ((sdl.surface->format->BitsPerPixel+7)/8);
+        assert(sdl.surface->pixels != NULL);
 
-	for (unsigned int row=0;row < (fontHeight*2);row++) {
-		unsigned char rb = bmp[row>>1U];
+        scan  = (unsigned char*)sdl.surface->pixels;
+        scan += y * sdl.surface->pitch;
+        scan += x * ((sdl.surface->format->BitsPerPixel+7)/8);
 
-	if (sdl.surface->format->BitsPerPixel == 32) {
-		uint32_t *dp = (uint32_t*)scan;
-		for (unsigned int colm=0x80;colm != 0;colm >>= 1) {
-				if (rb & colm) {
-					*dp++ = (uint32_t)color;
-					*dp++ = (uint32_t)color;
-				}
-				else {
-					dp += 2;
-				}
-			}
-		}
-		else if (sdl.surface->format->BitsPerPixel == 16) {
-			uint16_t *dp = (uint16_t*)scan;
-			for (unsigned int colm=0x80;colm != 0;colm >>= 1) {
-				if (rb & colm) {
-					*dp++ = (uint16_t)color;
-					*dp++ = (uint16_t)color;
-				}
-				else {
-					dp += 2;
-				}
-			}
-		}
+        for (unsigned int row=0;row < (fontHeight*2);row++) {
+            unsigned char rb = bmp[row>>1U];
 
-		scan += sdl.surface->pitch;
-	}
+            if (sdl.surface->format->BitsPerPixel == 32) {
+                uint32_t *dp = (uint32_t*)scan;
+                for (unsigned int colm=0x80;colm != 0;colm >>= 1) {
+                    if (rb & colm) {
+                        *dp++ = (uint32_t)color;
+                        *dp++ = (uint32_t)color;
+                    }
+                    else {
+                        dp += 2;
+                    }
+                }
+            }
+            else if (sdl.surface->format->BitsPerPixel == 16) {
+                uint16_t *dp = (uint16_t*)scan;
+                for (unsigned int colm=0x80;colm != 0;colm >>= 1) {
+                    if (rb & colm) {
+                        *dp++ = (uint16_t)color;
+                        *dp++ = (uint16_t)color;
+                    }
+                    else {
+                        dp += 2;
+                    }
+                }
+            }
+
+            scan += sdl.surface->pitch;
+        }
+    }
 }
 
 void MenuDrawText(int x,int y,const char *text,Bitu color) {
@@ -1491,25 +1602,31 @@ bool DOSBox_isMenuVisible(void);
 
 void GFX_DrawSDLMenu(DOSBoxMenu &menu,DOSBoxMenu::displaylist &dl) {
     if (menu.needsRedraw() && DOSBox_isMenuVisible() && !sdl.updating && !sdl.desktop.fullscreen) {
-        if (SDL_MUSTLOCK(sdl.surface))
-            SDL_LockSurface(sdl.surface);
+	if (!OpenGL_using()) {
+		if (SDL_MUSTLOCK(sdl.surface))
+			SDL_LockSurface(sdl.surface);
+	}
 
         if (&dl == &menu.display_list) { /* top level menu, draw background */
             MenuDrawRect(menu.menuBox.x, menu.menuBox.y, menu.menuBox.w, menu.menuBox.h - 1, GFX_GetRGB(63, 63, 63));
             MenuDrawRect(menu.menuBox.x, menu.menuBox.y + menu.menuBox.h - 1, menu.menuBox.w, 1, GFX_GetRGB(31, 31, 31));
         }
 
-        if (SDL_MUSTLOCK(sdl.surface))
-            SDL_UnlockSurface(sdl.surface);
+		if (!OpenGL_using()) {
+			if (SDL_MUSTLOCK(sdl.surface))
+			SDL_LockSurface(sdl.surface);
+		}
 
         menu.clearRedraw();
         menu.display_list.DrawDisplayList(menu,/*updateScreen*/false);
 
+		if (!OpenGL_using()) {
 #if defined(C_SDL2)
-        SDL_UpdateWindowSurfaceRects( sdl.window, &menu.menuBox, 1 );
+			SDL_UpdateWindowSurfaceRects( sdl.window, &menu.menuBox, 1 );
 #else
-        SDL_UpdateRects( sdl.surface, 1, &menu.menuBox );
+			SDL_UpdateRects( sdl.surface, 1, &menu.menuBox );
 #endif
+		}
     }
 }
 #endif
@@ -1519,6 +1636,11 @@ bool initedOpenGL = false;
 #endif
 
 Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,GFX_CallBack_t callback) {
+	if (width == 0 || height == 0) {
+		E_Exit("GFX_SetSize with width=%d height=%d zero dimensions not allowed",(int)width,(int)height);
+		return 0;
+	}
+
 	if (sdl.updating)
 		GFX_EndUpdate( 0 );
 
@@ -1867,9 +1989,7 @@ dosurface:
 		}
 		sdl.opengl.pitch=width*4;
 
-		glViewport(sdl.clip.x,sdl.clip.y,sdl.clip.w,sdl.clip.h);
-		glMatrixMode (GL_PROJECTION);
-		glLoadIdentity ();
+		glViewport(0,0,sdl.surface->w,sdl.surface->h);
 		glDeleteTextures(1,&sdl.opengl.texture);
  		glGenTextures(1,&sdl.opengl.texture);
 		glBindTexture(GL_TEXTURE_2D,sdl.opengl.texture);
@@ -1907,8 +2027,13 @@ dosurface:
 		glMatrixMode (GL_MODELVIEW);
 		glLoadIdentity ();
 
-		GLfloat tex_width=((GLfloat)(width)/(GLfloat)texsize);
-		GLfloat tex_height=((GLfloat)(height)/(GLfloat)texsize);
+		glMatrixMode (GL_PROJECTION);
+		glLoadIdentity ();
+		glOrtho(0, sdl.surface->w, sdl.surface->h, 0, -1, 1);
+
+		glMatrixMode (GL_TEXTURE);
+		glLoadIdentity ();
+		glScaled(1.0 / texsize, 1.0 / texsize, 1.0);
 
 		//if (glIsList(sdl.opengl.displaylist)) glDeleteLists(sdl.opengl.displaylist, 1);
 		//sdl.opengl.displaylist = glGenLists(1);
@@ -1917,15 +2042,21 @@ dosurface:
 		glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 		glBegin(GL_QUADS);
 		// lower left
-		glTexCoord2f(0,tex_height); glVertex2f(-1.0f,-1.0f);
+		glTexCoord2i(0, 0 ); glVertex2i(sdl.clip.x, sdl.clip.y );
 		// lower right
-		glTexCoord2f(tex_width,tex_height); glVertex2f(1.0f, -1.0f);
+		glTexCoord2i(width,0 ); glVertex2i(sdl.clip.x+sdl.clip.w,sdl.clip.y );
 		// upper right
-		glTexCoord2f(tex_width,0); glVertex2f(1.0f, 1.0f);
+		glTexCoord2i(width,height); glVertex2i(sdl.clip.x+sdl.clip.w,sdl.clip.y+sdl.clip.h);
 		// upper left
-		glTexCoord2f(0,0); glVertex2f(-1.0f, 1.0f);
+		glTexCoord2i(0, height); glVertex2i(sdl.clip.x, sdl.clip.y+sdl.clip.h);
 		glEnd();
 		glEndList();
+
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+		void GFX_DrawSDLMenu(DOSBoxMenu &menu,DOSBoxMenu::displaylist &dl);
+		mainMenu.setRedraw();
+		GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+#endif
 
         glFinish();
         glFlush();
@@ -2604,7 +2735,7 @@ void change_output(int output) {
 	case 2: /* do nothing */
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
 		LOG_MSG("FIXME: SDL drawn menus not supported in OpenGL mode");
-		DOSBox_NoMenu();
+		//DOSBox_NoMenu();
 #endif
 		break;
 	case 3:
@@ -2785,6 +2916,9 @@ void GFX_PreventFullscreen(bool lockout) {
 }
 
 void GFX_RestoreMode(void) {
+	if (sdl.draw.width == 0 || sdl.draw.height == 0)
+		return;
+
 	GFX_SetSize(sdl.draw.width,sdl.draw.height,sdl.draw.flags,sdl.draw.scalex,sdl.draw.scaley,sdl.draw.callback);
 	GFX_UpdateSDLCaptureState();
     GFX_ResetScreen();
@@ -2833,6 +2967,21 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	return false;
 }
 
+void GFX_OpenGLRedrawScreen(void) {
+#if C_OPENGL
+	if (OpenGL_using()) {
+		if (sdl.opengl.pixel_buffer_object) {
+			glUnmapBufferARB(GL_PIXEL_UNPACK_BUFFER_EXT);
+			glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
+			glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_EXT, 0);
+			glCallList(sdl.opengl.displaylist);
+		} else {
+			glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
+			glCallList(sdl.opengl.displaylist);
+		}
+	}
+#endif
+}
 
 void GFX_EndUpdate( const Bit16u *changedLines ) {
 #if (HAVE_DDRAW_H) && defined(WIN32)
@@ -2911,6 +3060,11 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                     gl_clear_countdown--;
                     glClearColor (0.0, 0.0, 0.0, 1.0);
                     glClear(GL_COLOR_BUFFER_BIT);
+					
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+					mainMenu.setRedraw();
+					GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+#endif
                 }
 
                 if (sdl.opengl.pixel_buffer_object) {
@@ -3611,29 +3765,33 @@ DOSBoxMenu::item_handle_t DOSBoxMenu::displaylist::itemFromPoint(DOSBoxMenu &men
 }
 
 void DOSBoxMenu::item::updateScreenFromItem(DOSBoxMenu &menu) {
-    SDL_Rect uprect = screenBox;
+	if (!OpenGL_using()) {
+		SDL_Rect uprect = screenBox;
 
-    SDL_rect_cliptoscreen(uprect);
+		SDL_rect_cliptoscreen(uprect);
 
 #if defined(C_SDL2)
-    SDL_UpdateWindowSurfaceRects(sdl.window, &uprect, 1);
+		SDL_UpdateWindowSurfaceRects(sdl.window, &uprect, 1);
 #else
-    SDL_UpdateRects( sdl.surface, 1, &uprect );
+		SDL_UpdateRects( sdl.surface, 1, &uprect );
 #endif
+	}
 }
 
 void DOSBoxMenu::item::updateScreenFromPopup(DOSBoxMenu &menu) {
-    SDL_Rect uprect = popupBox;
+	if (!OpenGL_using()) {
+		SDL_Rect uprect = popupBox;
 
-    uprect.w += DOSBoxMenu::dropshadowX;
-    uprect.h += DOSBoxMenu::dropshadowY;
-    SDL_rect_cliptoscreen(uprect);
+		uprect.w += DOSBoxMenu::dropshadowX;
+		uprect.h += DOSBoxMenu::dropshadowY;
+		SDL_rect_cliptoscreen(uprect);
 
 #if defined(C_SDL2)
-    SDL_UpdateWindowSurfaceRects(sdl.window, &uprect, 1);
+		SDL_UpdateWindowSurfaceRects(sdl.window, &uprect, 1);
 #else
-    SDL_UpdateRects( sdl.surface, 1, &uprect );
+		SDL_UpdateRects( sdl.surface, 1, &uprect );
 #endif
+	}
 }
 
 void DOSBoxMenu::item::drawBackground(DOSBoxMenu &menu) {
@@ -3678,6 +3836,9 @@ void GFX_SDLMenuTrackHover(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id) {
             mainMenu.get_item(mainMenu.menuUserHoverAt).drawMenuItem(mainMenu);
             mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
         }
+		
+		if (OpenGL_using())
+			mainMenu.setRedraw();
     }
 }
 
@@ -3696,6 +3857,9 @@ void GFX_SDLMenuTrackHilight(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id)
             mainMenu.get_item(mainMenu.menuUserAttentionAt).drawMenuItem(mainMenu);
             mainMenu.get_item(mainMenu.menuUserAttentionAt).updateScreenFromItem(mainMenu);
         }
+		
+		if (OpenGL_using())
+			mainMenu.setRedraw();	
     }
 }
 #endif
@@ -3707,10 +3871,26 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
     if (!sdl.mouse.locked && !sdl.desktop.fullscreen && mainMenu.isVisible() && motion->y < mainMenu.menuBox.h && Mouse_GetButtonState() == 0) {
         GFX_SDLMenuTrackHover(mainMenu,mainMenu.display_list.itemFromPoint(mainMenu,motion->x,motion->y));
         SDL_ShowCursor(SDL_ENABLE);
+		
+		if (OpenGL_using()) {
+#if C_OPENGL
+			GFX_OpenGLRedrawScreen();
+			GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+			SDL_GL_SwapBuffers();
+		}
+#endif
         return;
     }
     else {
         GFX_SDLMenuTrackHover(mainMenu,DOSBoxMenu::unassigned_item_handle);
+		
+		if (OpenGL_using()) {
+#if C_OPENGL
+			GFX_OpenGLRedrawScreen();
+			GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+			SDL_GL_SwapBuffers();
+#endif
+		}
     }
 #endif
     user_cursor_x = motion->x - sdl.clip.x;
@@ -3749,32 +3929,36 @@ static struct {
 } menuSavedScreen;
 
 void MenuSaveScreen(void) {
-    if (menuSavedScreen.bmp == NULL) {
-        menuSavedScreen.height = sdl.surface->h;
-        menuSavedScreen.stride = sdl.surface->pitch;
-        menuSavedScreen.bmp = new unsigned char[menuSavedScreen.height * menuSavedScreen.stride];
-    }
+	if (!OpenGL_using()) {
+		if (menuSavedScreen.bmp == NULL) {
+			menuSavedScreen.height = sdl.surface->h;
+			menuSavedScreen.stride = sdl.surface->pitch;
+			menuSavedScreen.bmp = new unsigned char[menuSavedScreen.height * menuSavedScreen.stride];
+		}
 
-    if (SDL_MUSTLOCK(sdl.surface))
-        SDL_LockSurface(sdl.surface);
+		if (SDL_MUSTLOCK(sdl.surface))
+			SDL_LockSurface(sdl.surface);
 
-    memcpy(menuSavedScreen.bmp, sdl.surface->pixels, menuSavedScreen.height * menuSavedScreen.stride);
+		memcpy(menuSavedScreen.bmp, sdl.surface->pixels, menuSavedScreen.height * menuSavedScreen.stride);
 
-    if (SDL_MUSTLOCK(sdl.surface))
-        SDL_UnlockSurface(sdl.surface);
+		if (SDL_MUSTLOCK(sdl.surface))
+			SDL_UnlockSurface(sdl.surface);
+	}
 }
 
 void MenuRestoreScreen(void) {
-    if (menuSavedScreen.bmp == NULL)
-        return;
+	if (!OpenGL_using()) {
+		if (menuSavedScreen.bmp == NULL)
+			return;
 
-    if (SDL_MUSTLOCK(sdl.surface))
-        SDL_LockSurface(sdl.surface);
+		if (SDL_MUSTLOCK(sdl.surface))
+			SDL_LockSurface(sdl.surface);
 
-    memcpy(sdl.surface->pixels, menuSavedScreen.bmp, menuSavedScreen.height * menuSavedScreen.stride);
+		memcpy(sdl.surface->pixels, menuSavedScreen.bmp, menuSavedScreen.height * menuSavedScreen.stride);
 
-    if (SDL_MUSTLOCK(sdl.surface))
-        SDL_UnlockSurface(sdl.surface);
+		if (SDL_MUSTLOCK(sdl.surface))
+			SDL_UnlockSurface(sdl.surface);
+	}
 }
 
 void MenuFreeScreen(void) {
@@ -3807,6 +3991,7 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 DOSBoxMenu::item_handle_t psel_item;
                 DOSBoxMenu::item_handle_t sel_item;
                 bool button_holding=true;
+				bool redrawAll=false;
 				bool resized=false;
                 bool runloop=true;
 				SDL_Rect uprect;
@@ -3815,10 +4000,12 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 psel_item = DOSBoxMenu::unassigned_item_handle;
                 choice_item = mainMenu.menuUserHoverAt = mainMenu.menuUserAttentionAt;
 
-                mainMenu.get_item(mainMenu.menuUserAttentionAt).setHilight(mainMenu,false);
-                mainMenu.get_item(mainMenu.menuUserAttentionAt).setHover(mainMenu,false);
-                mainMenu.get_item(mainMenu.menuUserAttentionAt).drawMenuItem(mainMenu);
-                MenuSaveScreen();
+				if (!OpenGL_using()) {
+					mainMenu.get_item(mainMenu.menuUserAttentionAt).setHilight(mainMenu,false);
+					mainMenu.get_item(mainMenu.menuUserAttentionAt).setHover(mainMenu,false);
+					mainMenu.get_item(mainMenu.menuUserAttentionAt).drawMenuItem(mainMenu);
+					MenuSaveScreen();
+				}
 				
 				/* give the menu bar a drop shadow */
 				MenuShadeRect(
@@ -3827,15 +4014,17 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 					mainMenu.menuBox.w,
 					DOSBoxMenu::dropshadowY - 1/*menubar border*/);
 
-				uprect.x = 0;
-				uprect.y = mainMenu.menuBox.y + mainMenu.menuBox.h;
-				uprect.w = mainMenu.menuBox.w;
-				uprect.h = DOSBoxMenu::dropshadowY;
+				if (!OpenGL_using()) {
+					uprect.x = 0;
+					uprect.y = mainMenu.menuBox.y + mainMenu.menuBox.h;
+					uprect.w = mainMenu.menuBox.w;
+					uprect.h = DOSBoxMenu::dropshadowY;
 #if defined(C_SDL2)
-				SDL_UpdateWindowSurfaceRects(sdl.window, &uprect, 1);
+					SDL_UpdateWindowSurfaceRects(sdl.window, &uprect, 1);
 #else
-				SDL_UpdateRects( sdl.surface, 1, &uprect );
+					SDL_UpdateRects( sdl.surface, 1, &uprect );
 #endif
+				}
 
                 /* show the menu */
                 mainMenu.get_item(mainMenu.menuUserAttentionAt).setHilight(mainMenu,true);
@@ -3844,6 +4033,12 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 mainMenu.get_item(mainMenu.menuUserAttentionAt).display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
                 mainMenu.get_item(mainMenu.menuUserAttentionAt).updateScreenFromPopup(mainMenu);
                 popup_stack.push_back(mainMenu.menuUserAttentionAt);
+
+				if (OpenGL_using()) {
+#if C_OPENGL
+					SDL_GL_SwapBuffers();
+#endif
+				}
 
                 /* hack */
                 mainMenu.menuUserAttentionAt = DOSBoxMenu::unassigned_item_handle;
@@ -3880,7 +4075,10 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                                 DOSBoxMenu::item &item = mainMenu.get_item(choice_item);
                                 item.setHilight(mainMenu,true);
                                 item.drawMenuItem(mainMenu);
-                                item.updateScreenFromItem(mainMenu);
+								if (OpenGL_using())
+									redrawAll = true;
+								else
+									item.updateScreenFromItem(mainMenu);
                             }
                             else {
                                 /* clicking on nothing should dismiss */
@@ -3911,7 +4109,7 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                             {
                                 sel_item = DOSBoxMenu::unassigned_item_handle;
 
-                                bool redrawAll = false;
+                                redrawAll = true;
                                 std::vector<DOSBoxMenu::item_handle_t>::iterator search = popup_stack.end();
                                 if (search != popup_stack.begin()) {
                                     do {
@@ -3984,34 +4182,59 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                                             mainMenu.get_item(mainMenu.menuUserHoverAt).setHilight(mainMenu,false);
                                             mainMenu.get_item(mainMenu.menuUserHoverAt).setHover(mainMenu,false);
                                             mainMenu.get_item(mainMenu.menuUserHoverAt).drawMenuItem(mainMenu);
-                                            mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
-                                            mainMenu.menuUserHoverAt = DOSBoxMenu::unassigned_item_handle;
+										
+											if (OpenGL_using())
+												redrawAll = true;
+											else
+												mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
+                                
+											mainMenu.menuUserHoverAt = DOSBoxMenu::unassigned_item_handle;
                                         }
                                     }
-                                }
-
-                                if (redrawAll) {
-                                    MenuRestoreScreen();
-                                    mainMenu.display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
-									
-									/* give the menu bar a drop shadow */
-									MenuShadeRect(
-										mainMenu.menuBox.x + DOSBoxMenu::dropshadowX,
-										mainMenu.menuBox.y + mainMenu.menuBox.h,
-										mainMenu.menuBox.w,
-										DOSBoxMenu::dropshadowY - 1/*menubar border*/);
-
-                                    for (std::vector<DOSBoxMenu::item_handle_t>::iterator i=popup_stack.begin();i!=popup_stack.end();i++) {
-										if (mainMenu.get_item(*i).get_type() == DOSBoxMenu::submenu_type_id) {
-											mainMenu.get_item(*i).drawBackground(mainMenu);
-											mainMenu.get_item(*i).display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
-										}
-                                    }
-                                    MenuFullScreenRedraw();
                                 }
                             }
                             break;
                     }
+					if (redrawAll) {
+						redrawAll = false;
+
+						if (OpenGL_using()) {
+#if C_OPENGL
+							glClearColor (0.0, 0.0, 0.0, 1.0);
+							glClear(GL_COLOR_BUFFER_BIT);
+
+							GFX_OpenGLRedrawScreen();
+
+							mainMenu.setRedraw();
+							GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+#endif
+						}
+						else {
+							MenuRestoreScreen();
+							mainMenu.display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
+						}
+
+						/* give the menu bar a drop shadow */
+						MenuShadeRect(
+							mainMenu.menuBox.x + DOSBoxMenu::dropshadowX,
+							mainMenu.menuBox.y + mainMenu.menuBox.h,
+							mainMenu.menuBox.w,
+							DOSBoxMenu::dropshadowY - 1/*menubar border*/);
+
+						for (std::vector<DOSBoxMenu::item_handle_t>::iterator i=popup_stack.begin();i!=popup_stack.end();i++) {
+							if (mainMenu.get_item(*i).get_type() == DOSBoxMenu::submenu_type_id) {
+								mainMenu.get_item(*i).drawBackground(mainMenu);
+								mainMenu.get_item(*i).display_list.DrawDisplayList(mainMenu,/*updateScreen*/false);
+							}
+						}
+		
+#if C_OPENGL		
+						if (OpenGL_using())
+							SDL_GL_SwapBuffers();
+						else
+#endif
+						MenuFullScreenRedraw();
+					}
                 }
 
                 /* then return */
@@ -4019,7 +4242,8 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 GFX_SDLMenuTrackHover(mainMenu,DOSBoxMenu::unassigned_item_handle);
 				if (!resized) {
 					MenuRestoreScreen();
-					MenuFullScreenRedraw();
+					if (!OpenGL_using())
+						MenuFullScreenRedraw();
 				}
                 MenuFreeScreen();
 
@@ -4038,6 +4262,20 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                     item.setHover(mainMenu,false);
                     popup_stack.pop_back();
                 }
+				
+				if (OpenGL_using()) {
+#if C_OPENGL
+					glClearColor (0.0, 0.0, 0.0, 1.0);
+					glClear(GL_COLOR_BUFFER_BIT);
+
+					GFX_OpenGLRedrawScreen();
+
+					mainMenu.setRedraw();
+					GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+
+					SDL_GL_SwapBuffers();
+#endif
+				}
 
                 /* action! */
                 if (!resized && choice_item != DOSBoxMenu::unassigned_item_handle) {
@@ -7773,7 +8011,11 @@ void GFX_ShutDown(void) {
 }
 
 bool OpenGL_using(void) {
+#if C_OPENGL
 	return (sdl.desktop.want_type==SCREEN_OPENGL?true:false);
+#else
+	return false;
+#endif
 }
 
 bool Get_Custom_SaveDir(std::string& savedir) {
