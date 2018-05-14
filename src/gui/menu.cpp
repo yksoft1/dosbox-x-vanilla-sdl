@@ -763,7 +763,7 @@ static const char *def_menu_video_scaler[] = {
 /* video output menu ("VideoOutputMenu") */
 static const char *def_menu_video_output[] = {
 	"output_surface",
-#if !defined(C_SDL2) && !defined(HX_DOS)
+#if !defined(C_SDL2) //&& !defined(HX_DOS)
 # if (HAVE_D3D9_H) && defined(WIN32)
 	"output_direct3d",
 # endif
