@@ -300,19 +300,32 @@ class DOSBoxMenu {
                 void                    removeHover(DOSBoxMenu &menu);
                 void                    drawMenuItem(DOSBoxMenu &menu);
                 void                    showItem(DOSBoxMenu &menu,bool show=true);
-                void                    setHover(DOSBoxMenu &menu,bool ho=true);
-                void                    setHilight(DOSBoxMenu &menu,bool hi=true);
+                item&                   setHover(DOSBoxMenu &menu,bool ho=true);
+                item&                   setHilight(DOSBoxMenu &menu,bool hi=true);
                 void                    placeItem(DOSBoxMenu &menu,int x,int y,bool isTopLevel=false);
                 void                    placeItemFinal(DOSBoxMenu &menu,int finalwidth,bool isTopLevel=false);
                 void                    layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel=false);
                 void                    updateScreenFromPopup(DOSBoxMenu &menu);
                 void                    updateScreenFromItem(DOSBoxMenu &menu);
                 void                    drawBackground(DOSBoxMenu &menu);
+			public:
+				inline bool isHilight(void) const {
+					return itemHilight;
+				}	
 #endif
             protected:
                 item&                   allocate(const item_handle_t id,const enum item_type_t type,const std::string &name);
                 void                    deallocate(void);
             public:
+				inline bool checkResetRedraw(void) {
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+					bool r = needRedraw;
+					needRedraw = false;
+					return r;
+#else
+					return false;
+#endif
+				}
                 inline const std::string &get_name(void) const {
                     return name;
                 }

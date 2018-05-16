@@ -1138,7 +1138,7 @@ MENU_Block menu;
 unsigned int hdd_defsize=16000;
 char hdd_size[20]="";
 
-#if !(defined(WIN32) && !defined(C_SDL2) && !(C_OPENGL))
+#if !( defined(C_SDL2) || (DOSBOXMENU_TYPE == DOSBOXMENU_HMENU))
 bool OpenGL_using(void);
 
 bool DOSBox_isMenuVisible(void) {
@@ -4014,18 +4014,22 @@ void DOSBoxMenu::item::showItem(DOSBoxMenu &menu,bool show) {
     }
 }
 
-void DOSBoxMenu::item::setHilight(DOSBoxMenu &menu,bool hi) {
+DOSBoxMenu::item &DOSBoxMenu::item::setHilight(DOSBoxMenu &menu,bool hi) {
     if (itemHilight != hi) {
         itemHilight = hi;
         needRedraw = true;
     }
+	
+	return *this;
 }
 
-void DOSBoxMenu::item::setHover(DOSBoxMenu &menu,bool ho) {
+DOSBoxMenu::item &DOSBoxMenu::item::setHover(DOSBoxMenu &menu,bool ho) {
     if (itemHover != ho) {
         itemHover = ho;
         needRedraw = true;
     }
+	
+	return *this;
 }
 
 void DOSBoxMenu::item::removeFocus(DOSBoxMenu &menu) {
