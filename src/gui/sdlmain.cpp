@@ -408,7 +408,7 @@ bool						dos_kernel_disabled = true;
 bool						startup_state_numlock = false; // Global for keyboard initialisation
 bool						startup_state_capslock = false; // Global for keyboard initialisation
 
-#if defined(WIN32) && !defined(C_SDL2)
+#if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
 #if SDL_DOSBOX_X_SPECIAL
 extern "C" void SDL1_hax_SetMenu(HMENU menu);
 #else
@@ -8206,7 +8206,7 @@ fresh_boot:
 
 	LOG::Exit();
 
-#if defined(WIN32) && !defined(C_SDL2)
+#if	DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
 # if !defined(HX_DOS)
 	ShowWindow(GetHWND(), SW_HIDE);
 	SDL1_hax_SetMenu(NULL);/* detach menu from window, or else Windows will destroy the menu out from under the C++ class */
