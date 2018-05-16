@@ -6,7 +6,6 @@
 #define VS_VERSION_INFO                 1
 #define AFX_IDC_LISTBOX                 100
 #define AFX_IDC_CHANGE                  101
-#define IDR_MENU                        101
 #define AFX_IDC_BROWSER                 102
 #define dosbox_ico                      102
 #define ID_OPENFILE                     103
