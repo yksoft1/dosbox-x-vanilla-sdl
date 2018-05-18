@@ -4070,8 +4070,8 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
 			GFX_OpenGLRedrawScreen();
 			GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
 			SDL_GL_SwapBuffers();
-		}
 #endif
+		}
         return;
     }
     else {
@@ -4116,6 +4116,13 @@ void MenuFullScreenRedraw(void) {
     SDL_Flip(sdl.surface);
 #endif
 }
+
+#if defined(C_SDL2) 
+static const SDL_TouchID no_touch_id = (SDL_TouchID)(~0ULL);
+static const SDL_FingerID no_finger_id = (SDL_FingerID)(~0ULL);
+static SDL_FingerID touchscreen_finger_lock = no_finger_id;
+static SDL_TouchID touchscreen_touch_lock = no_touch_id;
+#endif
 
 static struct {
     unsigned char*      bmp;
@@ -4267,6 +4274,88 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 /* fall into another loop to process the menu */
                 while (runloop) {
                     if (!SDL_WaitEvent(&event)) break;
+
+#if defined(C_SDL2)
+					switch (event.type) {
+						case SDL_FINGERDOWN:
+							if (touchscreen_finger_lock == no_finger_id &&
+								touchscreen_touch_lock == no_touch_id) {
+								touchscreen_finger_lock = event.tfinger.fingerId;
+								touchscreen_touch_lock = event.tfinger.touchId;
+								Sint32 x,y;
+
+#if defined(WIN32)
+								/* NTS: Windows versions of SDL2 do normalize the coordinates */
+								x = (Sint32)(event.tfinger.x * sdl.clip.w);
+								y = (Sint32)(event.tfinger.y * sdl.clip.h);
+#else
+								/* NTS: Linux versions of SDL2 don't normalize the coordinates? */
+								x = event.tfinger.x; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
+								y = event.tfinger.y; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
+#endif
+
+								memset(&event.button,0,sizeof(event.button));
+								event.type = SDL_MOUSEBUTTONDOWN;
+								event.button.x = x;
+								event.button.y = y;
+							}
+							else {
+								event.type = -1;
+							}
+							break;
+						case SDL_FINGERUP:
+							if (touchscreen_finger_lock == event.tfinger.fingerId &&
+								touchscreen_touch_lock == event.tfinger.touchId) {
+								touchscreen_finger_lock = no_finger_id;
+								touchscreen_touch_lock = no_touch_id;
+								Sint32 x,y;
+
+#if defined(WIN32)
+								/* NTS: Windows versions of SDL2 do normalize the coordinates */
+								x = (Sint32)(event.tfinger.x * sdl.clip.w);
+								y = (Sint32)(event.tfinger.y * sdl.clip.h);
+#else
+								/* NTS: Linux versions of SDL2 don't normalize the coordinates? */
+								x = event.tfinger.x; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
+								y = event.tfinger.y; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
+#endif
+
+								memset(&event.button,0,sizeof(event.button));
+								event.type = SDL_MOUSEBUTTONUP;
+								event.button.x = x;
+								event.button.y = y;
+							}
+							else {
+								event.type = -1;
+							}
+							break;
+						case SDL_FINGERMOTION:
+							if (touchscreen_finger_lock == event.tfinger.fingerId &&
+								touchscreen_touch_lock == event.tfinger.touchId) {
+								Sint32 x,y;
+
+#if defined(WIN32)
+								/* NTS: Windows versions of SDL2 do normalize the coordinates */
+								x = (Sint32)(event.tfinger.x * sdl.clip.w);
+								y = (Sint32)(event.tfinger.y * sdl.clip.h);
+#else
+								/* NTS: Linux versions of SDL2 don't normalize the coordinates? */
+								x = event.tfinger.x; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
+								y = event.tfinger.y; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
+#endif
+
+								memset(&event.button,0,sizeof(event.button));
+								event.type = SDL_MOUSEMOTION;
+								event.button.x = x;
+								event.button.y = y;
+							}
+							else if (touchscreen_finger_lock != no_finger_id ||
+								touchscreen_touch_lock != no_touch_id) {
+								event.type = -1;
+							}
+							break;
+					}
+#endif
 
                     switch (event.type) {
 						case SDL_QUIT:
@@ -4459,6 +4548,12 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 						MenuFullScreenRedraw();
 					}
                 }
+
+#if defined(C_SDL2)
+				/* force touchscreen mapping to let go */
+				touchscreen_finger_lock = no_finger_id;
+				touchscreen_touch_lock = no_touch_id;
+#endif
 
                 /* then return */
                 GFX_SDLMenuTrackHilight(mainMenu,DOSBoxMenu::unassigned_item_handle);
@@ -5113,13 +5208,11 @@ void* GetSetSDLValue(int isget, std::string target, void* setval) {
 		else sdl.using_windib = setval;
 #endif
 	}
+	
+	return NULL;
 }
 
 #if defined(C_SDL2)
-static const SDL_TouchID no_touch_id = (SDL_TouchID)(~0ULL);
-static const SDL_FingerID no_finger_id = (SDL_FingerID)(~0ULL);
-static SDL_FingerID touchscreen_finger_lock = no_finger_id;
-static SDL_TouchID touchscreen_touch_lock = no_touch_id;
 
 static void FingerToFakeMouseMotion(SDL_TouchFingerEvent * finger) {
     SDL_MouseMotionEvent fake;
@@ -5137,6 +5230,18 @@ static void FingerToFakeMouseMotion(SDL_TouchFingerEvent * finger) {
     fake.xrel = finger->dx;
     fake.yrel = finger->dy;
     HandleMouseMotion(&fake);
+	
+	if (finger->type == SDL_FINGERDOWN || finger->type == SDL_FINGERUP) {
+		SDL_MouseButtonEvent fakeb;
+		
+		memset(&fakeb,0,sizeof(fakeb));
+	
+		fakeb.state = (finger->type == SDL_FINGERDOWN) ? SDL_PRESSED : SDL_RELEASED;
+		fakeb.button = SDL_BUTTON_LEFT;
+		fakeb.x = fake.x;
+		fakeb.y = fake.y;
+		HandleMouseButton(&fakeb);
+	}
 }
 
 static void HandleTouchscreenFinger(SDL_TouchFingerEvent * finger) {
@@ -7912,7 +8017,7 @@ int main(int argc, char* argv[]) {
 		MainMenu = mainMenu.getWinMenu();
         DOSBox_SetMenu();
 #endif
-#if 0 && defined(MACOSX)
+#if 0 && DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU
         void sdl_hax_macosx_setmenu(void *nsMenu);
         sdl_hax_macosx_setmenu(mainMenu.getNsMenu());
 #endif
@@ -8212,7 +8317,7 @@ fresh_boot:
 	SDL1_hax_SetMenu(NULL);/* detach menu from window, or else Windows will destroy the menu out from under the C++ class */
 # endif
 #endif
-#if 0 && defined(MACOSX)
+#if 0 && DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU
 	void sdl_hax_macosx_setmenu(void *nsMenu);
 	sdl_hax_macosx_setmenu(NULL);
 #endif
