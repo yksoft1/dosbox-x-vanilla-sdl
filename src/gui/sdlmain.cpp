@@ -106,6 +106,7 @@ void GFX_OpenGLRedrawScreen(void);
 #include "control.h"
 
 #if defined(WIN32) && !defined(C_SDL2)
+bool isVirtualBox = false; /* OpenGL never works with Windows XP inside VirtualBox */
 HMENU MainMenu = NULL;
 #endif
 
@@ -5936,7 +5937,8 @@ void SDL_SetupConfigSection() {
 # if defined(HX_DOS)
 		Pstring = sdl_sec->Add_string("output", Property::Changeable::Always, "surface"); /* HX DOS should stick to surface */
 # elif !(HAVE_D3D9_H)
-		Pstring = sdl_sec->Add_string("output", Property::Changeable::Always, "opengl"); /* MinGW builds do not yet have Direct3D */
+		/* NTS: OpenGL output never seems to work in VirtualBox under Windows XP */
+		Pstring = sdl_sec->Add_string("output", Property::Changeable::Always, isVirtualBox ? "surface" : "opengl"); /* MinGW builds do not yet have Direct3D */
 # else
 		Pstring = sdl_sec->Add_string("output", Property::Changeable::Always, "direct3d");
 #endif
@@ -7357,6 +7359,26 @@ int main(int argc, char* argv[]) {
 		/*    If --early-debug was given this opens up logging to STDERR until Log::Init() */
 		LOG::EarlyInit();
 
+#if defined(WIN32) && !defined(C_SDL2) && !defined(HX_DOS)
+		{
+			DISPLAY_DEVICE dd;
+			unsigned int i = 0;
+
+			do {
+				memset(&dd, 0, sizeof(dd));
+				dd.cb = sizeof(dd);
+				if (!EnumDisplayDevices(NULL, i, &dd, 0)) break;
+				LOG_MSG("Win32 EnumDisplayDevices #%d: name=%s string=%s", i, dd.DeviceName, dd.DeviceString);
+				i++;
+				
+				if (strstr(dd.DeviceString, "VirtualBox") != NULL)
+					isVirtualBox = true;
+			} while (1);
+		}
+		
+		if (isVirtualBox) LOG_MSG("Win32 VirtualBox graphics adapter detected");
+#endif
+
 		/* -- Init the configuration system and add default values */
 		CheckNumLockState();
 
@@ -7419,6 +7441,21 @@ int main(int argc, char* argv[]) {
 
 		/* -- initialize logging first, so that higher level inits can report problems to the log file */
 		LOG::Init();
+		
+#if defined(WIN32) && !defined(C_SDL2) && !defined(HX_DOS)
+		{
+			DISPLAY_DEVICE dd;
+			unsigned int i = 0;
+
+			do {
+				memset(&dd, 0, sizeof(dd));
+				dd.cb = sizeof(dd);
+				if (!EnumDisplayDevices(NULL, i, &dd, 0)) break;
+				LOG_MSG("Win32 EnumDisplayDevices #%d: name=%s string=%s", i, dd.DeviceName, dd.DeviceString);
+				i++;
+			} while (1);
+		}
+#endif
 
 		/* -- Welcome to DOSBox-X! */
 		LOG_MSG("DOSBox-X version %s",VERSION);
