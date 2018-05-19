@@ -5934,7 +5934,7 @@ void SDL_SetupConfigSection() {
 #endif
 		0 };
 #ifdef __WIN32__
-# if defined(HX_DOS)
+# if defined(HX_DOS) || defined(C_SDL2)
 		Pstring = sdl_sec->Add_string("output", Property::Changeable::Always, "surface"); /* HX DOS should stick to surface */
 # elif !(HAVE_D3D9_H)
 		/* NTS: OpenGL output never seems to work in VirtualBox under Windows XP */
@@ -7150,23 +7150,45 @@ bool doublebuf_menu_callback(DOSBoxMenu * const menu, DOSBoxMenu::item * const m
     return true;
 }
 
+#if defined(LINUX) && !defined(C_SDL2)
+bool x11_on_top = false;
+#endif
+
 bool is_always_on_top(void) {
 #if defined(_WIN32) && !defined(C_SDL2)
 	DWORD dwExStyle = ::GetWindowLong(GetHWND(), GWL_EXSTYLE);
 	return !!(dwExStyle & WS_EX_TOPMOST);
+#elif defined(LINUX) && !defined(C_SDL2)
+	return x11_on_top;
 #else
     return false;
 #endif
 }
 
-#if SDL_DOSBOX_X_SPECIAL && defined(_WIN32) && !defined(C_SDL2)
+#if defined(_WIN32) && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL
 extern "C" void sdl1_hax_set_topmost(unsigned char topmost);
+#else
+static unsigned char wants_topmost = 0;
+void sdl1_hax_set_topmost(unsigned char topmost)
+{
+	wants_topmost = topmost;
+	HWND top = wants_topmost ? HWND_TOPMOST : HWND_NOTOPMOST;
+	
+	SetWindowPos(GetHWND(), top, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE);
+}
+#endif
 #endif
 
 void toggle_always_on_top(void) {
-#if SDL_DOSBOX_X_SPECIAL && defined(_WIN32) && !defined(C_SDL2)
     bool cur = is_always_on_top();
+#if defined(_WIN32) && !defined(C_SDL2)
 	sdl1_hax_set_topmost(!cur);
+#elif defined(LINUX) && !defined(C_SDL2)
+	void LinuxX11_OnTop(bool f);
+	LinuxX11_OnTop(x11_on_top = (!cur));
+#else
+	(void)cur;
 #endif
 }
 
