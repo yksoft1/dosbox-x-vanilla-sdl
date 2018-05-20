@@ -2275,6 +2275,7 @@ dosurface:
 		    }
 		}
 
+#if (C_D3DSHADERS)
 		Section_prop *section=static_cast<Section_prop *>(control->GetSection("sdl"));
 		if(section) {
 		    Prop_multival* prop = section->Get_multival("pixelshader");
@@ -2283,6 +2284,7 @@ dosurface:
 		} else {
 		    LOG_MSG("SDL:D3D:Could not get pixelshader info, shader disabled");
 		}
+#endif
 
 		d3d->aspect=RENDER_GetAspect();
 		d3d->autofit=RENDER_GetAutofit() && sdl.desktop.fullscreen; //scale to 5:4 monitors in fullscreen only
@@ -2758,7 +2760,11 @@ static void d3d_init(void) {
 		if(!d3d) {
 			LOG_MSG("Failed to create d3d object");
 			sdl.desktop.want_type=SCREEN_SURFACE;
+#if SDL_DOSBOX_X_SPECIAL
 		} else if(d3d->InitializeDX(wmi.child_window,sdl.desktop.doublebuf) != S_OK) {
+#else
+		} else if(d3d->InitializeDX(wmi.window,sdl.desktop.doublebuf) != S_OK) {
+#endif
 			LOG_MSG("Unable to initialize DirectX");
 			sdl.desktop.want_type=SCREEN_SURFACE;
 		}
@@ -3475,6 +3481,7 @@ static void OutputString(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u col
 
 #if (HAVE_D3D9_H) && defined(WIN32)
 static void D3D_reconfigure() {
+#if (C_D3DSHADERS)
 	if (d3d) {
 		Section_prop *section=static_cast<Section_prop *>(control->GetSection("sdl"));
 		Prop_multival* prop = section->Get_multival("pixelshader");
@@ -3482,6 +3489,7 @@ static void D3D_reconfigure() {
 			GFX_ResetScreen();
 		}
 	}
+#endif
 }
 #endif
 
@@ -3690,7 +3698,12 @@ static void GUI_StartUp() {
 			if(!d3d) {
 				LOG_MSG("Failed to create d3d object");
 				sdl.desktop.want_type=SCREEN_SURFACE;
+
+#if SDL_DOSBOX_X_SPECIAL			
 			} else if(d3d->InitializeDX(wmi.child_window,sdl.desktop.doublebuf) != S_OK) {
+#else
+			} else if(d3d->InitializeDX(wmi.window,sdl.desktop.doublebuf) != S_OK) {
+#endif			
 				LOG_MSG("Unable to initialize DirectX");
 				sdl.desktop.want_type=SCREEN_SURFACE;
 			}
