@@ -7570,21 +7570,6 @@ int main(int argc, char* argv[]) {
 		if (control->opt_nogui || menu.compatible)
 			menu.gui=false;
 
-#if !defined(C_SDL2)
-		{
-			Section_prop *section = static_cast<Section_prop *>(control->GetSection("SDL"));
-			assert(section != NULL);
-
-			bool cfg_want_menu = section->Get_bool("showmenu");
-
-			/* -- -- decide whether to set menu */
-			if (menu_gui && !control->opt_nomenu && cfg_want_menu)
-				DOSBox_SetMenu();
-			else
-				DOSBox_NoMenu();
-		}
-#endif
-
 		/* -- -- helpful advice */
 		LOG(LOG_GUI,LOG_NORMAL)("Press Ctrl-F10 to capture/release mouse, Alt-F10 for configuration.");
 
@@ -8078,7 +8063,6 @@ int main(int argc, char* argv[]) {
 #if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
 		/* -- menu */
 		MainMenu = mainMenu.getWinMenu();
-        DOSBox_SetMenu();
 #endif
 #if 0 && DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU
         void sdl_hax_macosx_setmenu(void *nsMenu);
@@ -8087,9 +8071,20 @@ int main(int argc, char* argv[]) {
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
         mainMenu.screenWidth = sdl.surface->w;
         mainMenu.updateRect();
-        DOSBox_SetMenu();
-        mainMenu.get_item("mapper_togmenu").check(!menu.toggle).refresh_item(mainMenu);
 #endif
+
+	{
+		Section_prop *section = static_cast<Section_prop *>(control->GetSection("SDL"));
+		assert(section != NULL);
+
+		bool cfg_want_menu = section->Get_bool("showmenu");
+		
+		/* -- -- decide whether to set menu */
+		if (menu_gui && !control->opt_nomenu && cfg_want_menu)
+			DOSBox_SetMenu();
+		else
+			DOSBox_NoMenu();
+	}
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
 		int Reflect_Menu(void);
