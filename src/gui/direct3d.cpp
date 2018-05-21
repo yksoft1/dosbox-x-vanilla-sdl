@@ -920,7 +920,7 @@ HRESULT CDirect3D::LoadPixelShader(void)
     return S_OK;
 }
 
-HRESULT CDirect3D::Resize3DEnvironment(Bitu window_width, Bitu window_height, Bitu width, Bitu height, Bitu rwidth, Bitu rheight, bool fullscreen)
+HRESULT CDirect3D::Resize3DEnvironment(Bitu window_width, Bitu window_height, Bitu x, Bitu y, Bitu width, Bitu height, Bitu rwidth, Bitu rheight, bool fullscreen)
 {
 #if LOG_D3D
     LOG_MSG("D3D:Resizing D3D screen...");
@@ -937,6 +937,9 @@ HRESULT CDirect3D::Resize3DEnvironment(Bitu window_width, Bitu window_height, Bi
     dwScaledWidth = width;
     dwScaledHeight = height;
 
+	dwX = x;
+	dwY = y;
+	
     dwWidth = rwidth;
     dwHeight = rheight;
 
@@ -1254,20 +1257,24 @@ HRESULT CDirect3D::CreateVertex(void)
     vertexBuffer->Lock(0, 0, (void**)&vertices, 0);
 
     //Setup vertices
-    vertices[0].position = D3DXVECTOR3(-0.5f, -0.5f, 0.0f);
+	vertices[0].position = D3DXVECTOR3( dwX,  dwY, 0.0f);
     vertices[0].diffuse  = 0xFFFFFFFF;
-    vertices[0].texcoord = D3DXVECTOR2( 0.0f,  sizey);
-    vertices[1].position = D3DXVECTOR3(-0.5f,  0.5f, 0.0f);
+	vertices[0].texcoord = D3DXVECTOR2( 0.0f,  0.0f);
+	
+    vertices[1].position = D3DXVECTOR3( dwX,  dwY + dwScaledHeight, 0.0f);
     vertices[1].diffuse  = 0xFFFFFFFF;
-    vertices[1].texcoord = D3DXVECTOR2( 0.0f,  0.0f);
-    vertices[2].position = D3DXVECTOR3( 0.5f, -0.5f, 0.0f);
+    vertices[1].texcoord = D3DXVECTOR2( 0.0f,  sizey);
+	
+    vertices[2].position = D3DXVECTOR3( dwX + dwScaledWidth, dwY, 0.0f);
     vertices[2].diffuse  = 0xFFFFFFFF;
-    vertices[2].texcoord = D3DXVECTOR2( sizex, sizey);
-    vertices[3].position = D3DXVECTOR3( 0.5f,  0.5f, 0.0f);
+    vertices[2].texcoord = D3DXVECTOR2( sizex, 0.0f);
+	
+    vertices[3].position = D3DXVECTOR3( dwX + dwScaledWidth, dwY + dwScaledHeight, 0.0f);
     vertices[3].diffuse  = 0xFFFFFFFF;
-    vertices[3].texcoord = D3DXVECTOR2( sizex, 0.0f);
+    vertices[3].texcoord = D3DXVECTOR2( sizex, sizey);
 
     // Additional vertices required for some PS effects
+	// FIXME: Recent changes may have BROKEN pixel shader support here!!!!!
     if(preProcess) {
 	vertices[4].position = D3DXVECTOR3( 0.0f, 0.0f, 0.0f);
 	vertices[4].diffuse  = 0xFFFFFF00;
@@ -1291,7 +1298,6 @@ HRESULT CDirect3D::CreateVertex(void)
 
 void CDirect3D::SetupSceneScaled(void)
 {
-    double sizex,sizey,ratio;
 
 	// TODO: It would probably be nicer to offer an option here whether the user wants
 	//		 point sampling (D3DTEXF_POINT) or linear interpolation (D3DTEXF_LINEAR) when scaling up/down.
@@ -1310,52 +1316,22 @@ void CDirect3D::SetupSceneScaled(void)
 
     // Projection is screenspace coords
     D3DXMatrixOrthoOffCenterLH(&m_matProj, 0.0f, (float)Viewport.Width, 0.0f, (float)Viewport.Height, 0.0f, 1.0f);
+	{
+		D3DXMATRIX x;
+		D3DXMatrixScaling(&x, 1.0f, -1.0f, 1.0f);
+		m_matProj *= x;
+	}
 
-    // View matrix does offset
-    // A -0.5f modifier is applied to vertex coordinates to match texture
-    // and screen coords. Some drivers may compensate for this
-    // automatically, but on others texture alignment errors are introduced
-    // More information on this can be found in the Direct3D 9 documentation
-    D3DXMatrixTranslation(&m_matView, (float)Viewport.Width/2-0.5f, (float)Viewport.Height/2+0.5f, 0.0f);
+	// View matrix with -0.5f offset to avoid a fuzzy picture
+	D3DXMatrixTranslation(&m_matView, -0.5f, -0.5f, 0.0f);
 
-    // World View does scaling
-    sizex = dwScaledWidth;
-    sizey = dwScaledHeight;
-
-    // aspect = 2 in certain conditions to disable aspect code, but typically aspect = render.aspect
-    if((aspect == 1) && (dwWidth > 0) && (dwHeight > 0)) {
-		// render.aspect IMPLEMENTED
-
-		// We'll try to make the image as close as possible to 4:3
-		// (square pixels assumed (as in lcd not crt))
-
-		//when autofit=true, scale instead to 5:4 if the monitor is a 5:4 monitor (1280x1024)
-		if (autofit && ((sizex / sizey) == (5.0 / 4.0))) {
-			ratio = 5.0 / 4.0;
-#if LOG_D3D
-			LOG_MSG("D3D:Scaling image to 5:4");
-#endif
-		}
-		else
-		{
-			ratio = 4.0 / 3.0;
-#if LOG_D3D
-			LOG_MSG("D3D:Scaling image to 4:3");
-#endif
-		}
-
-		if (sizex > sizey * ratio)
-			sizex = sizey * ratio;
-		else if (sizex < sizey * ratio)
-			sizey = sizex / ratio;
-
-    }
+    // TODO: Re-implement 5:4 monitor autofit
 
 #if LOG_D3D
     LOG_MSG("D3D:Scaled resolution: %.1fx%.1f, factor: %dx%d", sizex, sizey, x, y);
 #endif
 
-    D3DXMatrixScaling(&m_matWorld, sizex, sizey, 1.0f);
+    D3DXMatrixScaling(&m_matWorld, 1.0, 1.0, 1.0f);
 }
 
 #if !(C_D3DSHADERS)
