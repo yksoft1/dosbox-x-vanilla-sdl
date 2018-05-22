@@ -2369,6 +2369,14 @@ dosurface:
 		LOG_MSG("SDL:D3D:Display mode set to: %dx%d with %fx%f scale",
 				    sdl.clip.w, sdl.clip.h,sdl.draw.scalex, sdl.draw.scaley);
 #endif
+
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+		mainMenu.screenWidth = sdl.surface->w;
+		mainMenu.updateRect();
+		mainMenu.setRedraw();
+		GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+#endif
+
 		break;
 	    }
 #endif
@@ -3083,6 +3091,40 @@ void GFX_RestoreMode(void) {
 	GFX_UpdateSDLCaptureState();
     GFX_ResetScreen();
 }
+
+#if !defined(C_SDL2)
+static bool GFX_GetSurfacePtrLock = false;
+
+unsigned char *GFX_GetSurfacePtr(size_t *pitch, unsigned int x, unsigned int y) {
+	if (sdl.surface->pixels == NULL) {
+		if (!GFX_GetSurfacePtrLock) {
+			if (SDL_MUSTLOCK(sdl.surface) && SDL_LockSurface(sdl.surface))
+				return NULL;
+
+			GFX_GetSurfacePtrLock = true;
+		}
+	}
+
+	*pitch = sdl.surface->pitch;
+	if (sdl.surface->pixels != NULL) {
+		unsigned char *p = (unsigned char*)(sdl.surface->pixels);
+		p += y * sdl.surface->pitch;
+		p += x * (sdl.surface->format->BitsPerPixel >> 3U);
+		return p;
+	}
+
+	return NULL;
+}
+
+void GFX_ReleaseSurfacePtr(void) {
+	if (GFX_GetSurfacePtrLock) {
+		if (SDL_MUSTLOCK(sdl.surface))
+			SDL_UnlockSurface(sdl.surface);
+
+		GFX_GetSurfacePtrLock = false;
+	}
+}
+#endif
 
 bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	if (!sdl.active || sdl.updating)
@@ -4226,6 +4268,12 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                 choice_item = mainMenu.menuUserHoverAt = mainMenu.menuUserAttentionAt;
 				
 				popup_stack.push_back(mainMenu.menuUserAttentionAt);
+
+#if (HAVE_D3D9_H) && defined(WIN32)
+				if (sdl.desktop.want_type == SCREEN_DIRECT3D) {
+					if (d3d) d3d->UpdateRectToSDLSurface(0, 0, sdl.surface->w, sdl.surface->h);
+				}
+#endif
 
 				if (OpenGL_using()) {
 #if C_OPENGL

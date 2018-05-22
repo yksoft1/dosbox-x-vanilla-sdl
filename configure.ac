@@ -258,6 +258,9 @@ fi
 dnl Stop reporting "type punning" warnings, I'm sick of hearing about it.
 AC_CHECK_CXXFLAGS([ -Wno-strict-aliasing ])
 
+dnl Omit frame pointer to get rid of dynamic core compile error.
+AC_CHECK_CXXFLAGS([ -fomit-frame-pointer ])
+
 dnl Some stuff for the icon.
 case "$host" in
     *-*-cygwin* | *-*-mingw32*)
