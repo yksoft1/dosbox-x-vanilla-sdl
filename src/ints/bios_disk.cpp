@@ -1003,7 +1003,7 @@ Bit8u imageDiskVFD::Read_Sector(Bit32u head,Bit32u cylinder,Bit32u sector,void *
 		
 //    LOG_MSG("VFD read sector: CHS %u/%u/%u",cylinder,head,sector);
 
-    ent = findSector(head,cylinder,sector);
+    ent = findSector(head,cylinder,sector,req_sector_size);
     if (ent == NULL) return 0x05;
     if (ent->getSectorSize() != req_sector_size) return 0x05;
 
@@ -1033,15 +1033,33 @@ Bit8u imageDiskVFD::Read_AbsoluteSector(Bit32u sectnum, void * data) {
     return Read_Sector(h,c,s,data);
 }
 
-imageDiskVFD::vfdentry *imageDiskVFD::findSector(Bit8u head,Bit8u track,Bit8u sector/*TODO: physical head?*/) {
+imageDiskVFD::vfdentry *imageDiskVFD::findSector(Bit8u head,Bit8u track,Bit8u sector/*TODO: physical head?*/,unsigned int req_sector_size) {
     std::vector<imageDiskVFD::vfdentry>::iterator i = dents.begin();
+	unsigned char szb=0xFF;
 
+	if (req_sector_size == 0)
+		req_sector_size = sector_size;
+
+	if (req_sector_size != ~0U) {
+		unsigned int c = req_sector_size;
+		while (c >= 128U) {
+			c >>= 1U;
+			szb++;
+		}
+
+	// LOG_MSG("req=%u c=%u szb=%u",req_sector_size,c,szb);
+
+		if (szb > 8 || c != 64U)
+			return NULL;
+	}
+	
     while (i != dents.end()) {
         imageDiskVFD::vfdentry &ent = *i;
 
         if (ent.head == head &&
             ent.track == track &&
-            ent.sector == sector)
+			ent.sector == sector &&
+			(ent.sizebyte == szb || req_sector_size == ~0U))
             return &(*i);
 
         i++;
@@ -1060,7 +1078,7 @@ Bit8u imageDiskVFD::Write_Sector(Bit32u head,Bit32u cylinder,Bit32u sector,void 
 	if (req_sector_size == 0)
 		req_sector_size = sector_size;
 
-    ent = findSector(head,cylinder,sector);
+    ent = findSector(head,cylinder,sector,req_sector_size);
     if (ent == NULL) return 0x05;
     if (ent->getSectorSize() != req_sector_size) return 0x05;
 
@@ -1256,7 +1274,7 @@ imageDiskVFD::imageDiskVFD(FILE *imgFile, Bit8u *imgName, Bit32u imgSizeK, bool 
              * First, determine sector size according to the boot sector. */
             vfdentry *ent;
 
-            ent = findSector(/*head*/0,/*track*/0,/*sector*/1);
+            ent = findSector(/*head*/0,/*track*/0,/*sector*/1,~0U);
             if (ent != NULL) {
                 if (ent->sizebyte <= 3) /* x <= 1024 */
                     sector_size = ent->getSectorSize();
@@ -1267,7 +1285,7 @@ imageDiskVFD::imageDiskVFD(FILE *imgFile, Bit8u *imgName, Bit32u imgSizeK, bool 
              * in the boot sector and the rest is 256 bytes/sector elsewhere. I have no idea why
              * but quite a few FDD images have this arrangement. */
             if (sector_size != 0 && sector_size < 512) {
-                ent = findSector(/*head*/0,/*track*/1,/*sector*/1);
+                ent = findSector(/*head*/0,/*track*/1,/*sector*/1,~0U);
                 if (ent != NULL) {
                     if (ent->sizebyte <= 3) { /* x <= 1024 */
                         unsigned int nsz = ent->getSectorSize();

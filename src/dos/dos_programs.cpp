@@ -861,15 +861,31 @@ public:
             return;
         }
 
+		bool has_read = false;
+		bool pc98_sect128 = false;
         unsigned int bootsize = imageDiskList[drive-65]->getSectSize();
+
+		if (!has_read && IS_PC98_ARCH) {
+			/* this may be one of those odd FDD images where track 0, head 0 is all 128-byte sectors
+			 * and the rest of the disk is 256-byte sectors. */
+			if (imageDiskList[drive - 65]->Read_Sector(0, 0, 1, (Bit8u *)&bootarea, 128) == 0 &&
+				imageDiskList[drive - 65]->Read_Sector(0, 0, 2, (Bit8u *)&bootarea + 128, 128) == 0) {
+				LOG_MSG("First sector is 128 byte/sector. Booting from first two sectors.");
+				has_read = true;
+				bootsize = 256; // 128 x 2
+				pc98_sect128 = true;
+			}
+		}
 
         /* NTS: Load address is 128KB - sector size */
         load_seg=IS_PC98_ARCH ? (0x2000 - (bootsize/16U)) : 0x07C0;
 
-		if (imageDiskList[drive - 65]->Read_Sector(0, 0, 1, (Bit8u *)&bootarea) != 0) {
-			WriteOut("Error reading drive");
-			return;
-		};
+		if (!has_read) {
+			if (imageDiskList[drive - 65]->Read_Sector(0, 0, 1, (Bit8u *)&bootarea) != 0) {
+				WriteOut("Error reading drive");
+				return;
+			}
+		}
 
 		Bitu pcjr_hdr_length = 0;
 		Bit8u pcjr_hdr_type = 0; // not a PCjr cartridge
@@ -1171,7 +1187,7 @@ public:
                     }
                 }
 
-                if (ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) {
+                 if ((ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) || pc98_sect128) {
                     mem_writeb(0x584,0x90/*type*/ + (drive - 65)/*drive*/); /* 1.2MB 3-mode */
                     mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
                     mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */

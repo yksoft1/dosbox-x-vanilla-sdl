@@ -3051,7 +3051,7 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 
             PC98_BIOS_FDC_CALL_GEO_UNPACK(/*&*/fdc_cyl[drive],/*&*/fdc_head[drive],/*&*/fdc_sect[drive],/*&*/fdc_sz[drive]);
             unitsize = PC98_FDC_SZ_TO_BYTES(fdc_sz[drive]);
-            if (unitsize != img_ssz || img_heads == 0 || img_cyl == 0 || img_sect == 0) {
+            if (0 /*unitsize != img_ssz || img_heads == 0 || img_cyl == 0 || img_sect == 0*/) {
                 CALLBACK_SCF(true);
                 reg_ah = 0x00;
                 /* TODO? Error code? */
@@ -3142,7 +3142,7 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 
             PC98_BIOS_FDC_CALL_GEO_UNPACK(/*&*/fdc_cyl[drive],/*&*/fdc_head[drive],/*&*/fdc_sect[drive],/*&*/fdc_sz[drive]);
             unitsize = PC98_FDC_SZ_TO_BYTES(fdc_sz[drive]);
-            if (unitsize != img_ssz || img_heads == 0 || img_cyl == 0 || img_sect == 0) {
+            if (0 /*unitsize != img_ssz || img_heads == 0 || img_cyl == 0 || img_sect == 0*/) {
                 CALLBACK_SCF(true);
                 reg_ah = 0x00;
                 /* TODO? Error code? */
@@ -6496,6 +6496,19 @@ private:
 	}
 	CALLBACK_HandlerObject cb_bios_boot;
 	CALLBACK_HandlerObject cb_bios_bootfail;
+	CALLBACK_HandlerObject cb_pc98_rombasic;
+	static Bitu cb_pc98_entry__func(void) {
+		/* the purpose of this function is to say "N88 ROM BASIC NOT FOUND" */
+		int x,y;
+	
+		x = y = 0;
+
+		/* PC-98 MS-DOS boot sector may RETF back to the BIOS, and this is where execution ends up */
+		BIOS_Int10RightJustifiedPrint(x,y,"N88 ROM BASIC NOT IMPLEMENTED");
+
+		return CBRET_NONE;
+	}	
+	
 	static Bitu cb_bios_bootfail__func(void) {
         int x,y;
 
@@ -6732,7 +6745,8 @@ public:
 		cb_bios_startup_screen.Install(&cb_bios_startup_screen__func,CB_RETF,"BIOS Startup screen");
 		cb_bios_boot.Install(&cb_bios_boot__func,CB_RETF,"BIOS BOOT");
 		cb_bios_bootfail.Install(&cb_bios_bootfail__func,CB_RETF,"BIOS BOOT FAIL");
-
+		cb_pc98_rombasic.Install(&cb_pc98_entry__func,CB_RETF,"N88 ROM BASIC");
+		
 		// Compatible POST routine location: jump to the callback
 		{
 			Bitu wo_fence;
@@ -6792,6 +6806,18 @@ public:
 			phys_writeb(wo++,0xFE);
 
 			if (wo > wo_fence) E_Exit("BIOS boot callback overrun");
+
+			if (IS_PC98_ARCH) {
+				/* Boot disks that run N88 basic, stopgap */
+				PhysPt bo = 0xE8002; // E800:0002
+	
+				phys_writeb(bo+0x00,(Bit8u)0xFE); //GRP 4
+				phys_writeb(bo+0x01,(Bit8u)0x38); //Extra Callback instruction
+				phys_writew(bo+0x02,(Bit16u)cb_pc98_rombasic.Get_callback()); //The immediate word
+
+				phys_writeb(bo+0x04,0xEB); // JMP $-2
+				phys_writeb(bo+0x05,0xFE);
+			}
 		}
 	}
 	~BIOS(){
