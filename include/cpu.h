@@ -358,7 +358,7 @@ public:
 	void Load(PhysPt address);
 	void Save(PhysPt address);
 
-	PhysPt GetBase (void) { 
+	PhysPt GetBase (void) const { 
 		return (saved.seg.base_24_31<<24) | (saved.seg.base_16_23<<16) | saved.seg.base_0_15; 
 	}
 	bool GetExpandDown (void) {
@@ -387,27 +387,27 @@ public:
 		/* it's data. return the 'E' bit */
 		return (saved.seg.type & 4) != 0;
 	}
-	Bitu GetLimit (void) {
+	Bitu GetLimit (void) const {
 		Bitu limit = (saved.seg.limit_16_19<<16) | saved.seg.limit_0_15;
 		if (saved.seg.g)	return (limit<<12) | 0xFFF;
 		return limit;
 	}
-	Bitu GetOffset(void) {
+	Bitu GetOffset(void) const {
 		return (saved.gate.offset_16_31 << 16) | saved.gate.offset_0_15;
 	}
-	Bitu GetSelector(void) {
+	Bitu GetSelector(void) const {
 		return saved.gate.selector;
 	}
-	Bitu Type(void) {
+	Bitu Type(void) const {
 		return saved.seg.type;
 	}
-	Bitu Conforming(void) {
+	Bitu Conforming(void) const {
 		return saved.seg.type & 8;
 	}
-	Bitu DPL(void) {
+	Bitu DPL(void) const  {
 		return saved.seg.dpl;
 	}
-	Bitu Big(void) {
+	Bitu Big(void) const {
 		return saved.seg.big;
 	}
 public:
@@ -420,8 +420,8 @@ public:
 
 class DescriptorTable {
 public:
-	PhysPt	GetBase			(void)			{ return table_base;	}
-	Bitu	GetLimit		(void)			{ return table_limit;	}
+	PhysPt	GetBase			(void)	const	{ return table_base;	}
+	Bitu	GetLimit		(void)	const	{ return table_limit;	}
 	void	SetBase			(PhysPt _base)	{ table_base = _base;	}
 	void	SetLimit		(Bitu _limit)	{ table_limit= _limit;	}
 
@@ -463,10 +463,10 @@ public:
 			return true;
 		}
 	} 
-	Bitu SLDT(void)	{
+	Bitu SLDT(void)	const {
 		return ldt_value;
 	}
-	bool LLDT(Bitu value)	{
+	bool LLDT(Bitu value) {
 		if ((value&0xfffc)==0) {
 			ldt_value=0;
 			ldt_base=0;
@@ -491,13 +491,13 @@ private:
 
 class TSS_Descriptor : public Descriptor {
 public:
-	Bitu IsBusy(void) {
+	Bitu IsBusy(void) const {
 		return saved.seg.type & 2;
 	}
-	Bitu Is386(void) {
+	Bitu Is386(void) const {
 		return saved.seg.type & 8;
 	}
-	void SetBusy(bool busy) {
+	void SetBusy(const bool busy) {
 		if (busy) saved.seg.type|=2;
 		else saved.seg.type&=~2;
 	}
@@ -538,12 +538,12 @@ struct CPUBlock {
 
 extern CPUBlock cpu;
 
-static INLINE void CPU_SetFlagsd(Bitu word) {
+static INLINE void CPU_SetFlagsd(const Bitu word) {
 	Bitu mask=cpu.cpl ? FMASK_NORMAL : FMASK_ALL;
 	CPU_SetFlags(word,mask);
 }
 
-static INLINE void CPU_SetFlagsw(Bitu word) {
+static INLINE void CPU_SetFlagsw(const Bitu word) {
 	Bitu mask=(cpu.cpl ? FMASK_NORMAL : FMASK_ALL) & 0xffff;
 	CPU_SetFlags(word,mask);
 }

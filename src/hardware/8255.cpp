@@ -65,7 +65,7 @@ uint8_t Intel8255::readControl(void) {
     return mode; /* illegal, but probably reads mode byte */
 }
 
-void Intel8255::writePortA(uint8_t data,uint8_t mask) {
+void Intel8255::writePortA(const uint8_t data,uint8_t mask) {
     mask &= portAWriteMask;
     latchOutPortA = (latchOutPortA & (~mask)) + (data & mask);
     if (mask) {
@@ -76,7 +76,7 @@ void Intel8255::writePortA(uint8_t data,uint8_t mask) {
     }
 }
 
-void Intel8255::writePortB(uint8_t data,uint8_t mask) {
+void Intel8255::writePortB(const uint8_t data,uint8_t mask) {
     mask &= portBWriteMask;
     latchOutPortB = (latchOutPortB & (~mask)) + (data & mask);
     if (mask) {
@@ -87,13 +87,13 @@ void Intel8255::writePortB(uint8_t data,uint8_t mask) {
     }
 }
 
-void Intel8255::writePortC(uint8_t data,uint8_t mask) {
+void Intel8255::writePortC(const uint8_t data,uint8_t mask) {
     mask &= portCWriteMask;
     latchOutPortC = (latchOutPortC & (~mask)) + (data & mask);
     if (mask) outPortC(mask);
 }
 
-void Intel8255::writeControl(uint8_t data) {
+void Intel8255::writeControl(const uint8_t data) {
     if (data & 0x80) {
         /* bit[7:7] = 1             mode set flag
          * bit[6:5] = mode select   00=mode 0  01=mode 1  1x=mode 2
@@ -308,7 +308,7 @@ void Intel8255::ackPortB(void) {
     checkINTR_B();
 }
 
-uint8_t Intel8255::readByPort(uint8_t p03) {
+uint8_t Intel8255::readByPort(const uint8_t p03) {
     switch (p03) {
         case 0: return readPortA();
         case 1: return readPortB();
@@ -319,7 +319,7 @@ uint8_t Intel8255::readByPort(uint8_t p03) {
     return 0;
 }
 
-void Intel8255::writeByPort(uint8_t p03,uint8_t data) {
+void Intel8255::writeByPort(const uint8_t p03,const uint8_t data) {
     switch (p03) {
         case 0: writePortA(data);   break;
         case 1: writePortB(data);   break;
