@@ -57,6 +57,41 @@ bool Mouse_Vertical = false;
 Bitu DEBUG_EnableDebugger(void);
 #endif
 
+//copied from https://git.enlightenment.org/legacy/evil.git/tree/src/lib/evil_string.c
+char *mystrcasestr(const char *haystack, const char *needle)
+{
+   size_t length_needle;
+   size_t length_haystack;
+   size_t i;
+
+   if (!haystack || !needle)
+     return NULL;
+
+   length_needle = strlen(needle);
+   length_haystack = strlen(haystack) - length_needle + 1;
+
+   for (i = 0; i < length_haystack; i++)
+     {
+        size_t j;
+
+        for (j = 0; j < length_needle; j++)
+          {
+            unsigned char c1;
+            unsigned char c2;
+
+            c1 = haystack[i+j];
+            c2 = needle[j];
+            if (toupper(c1) != toupper(c2))
+              goto next;
+          }
+        return (char *) haystack + i;
+     next:
+        ;
+     }
+
+   return NULL;
+}
+
 class MOUSE : public Program {
 public:
 	void Run(void);
@@ -671,7 +706,8 @@ public:
    
 	void Run(void) {
         bool swaponedrive = false;
-
+		bool force = false;
+		
         boot_debug_break = false;
         if (cmd->FindExist("-debug",true))
             boot_debug_break = true;
@@ -680,7 +716,7 @@ public:
             swaponedrive = true;
 
         if (cmd->FindExist("-force",true))
-            { /* no-op */ }
+            force = true;
 
 		//Hack To allow long commandlines
 		ChangeToLongCmd();
@@ -774,7 +810,10 @@ public:
                     fseeko64(usefile, 0L, SEEK_SET);
                     fread(tmp,256,1,usefile); // look for magic signatures
 
-                    if (!memcmp(tmp,"VFD1.",5)) { /* FDD files */
+					if (mystrcasestr(temp_line.c_str(), ".d88") != NULL) {
+						newDiskSwap[i] = new imageDiskD88(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
+					}
+                    else if (!memcmp(tmp,"VFD1.",5)) { /* FDD files */
                         newDiskSwap[i] = new imageDiskVFD(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
                     }
                     else {
@@ -858,6 +897,13 @@ public:
 			return;
 		}
 
+		if (!force && imageDiskList[drive-65]->class_id == imageDisk::ID_D88) {
+			if (reinterpret_cast<imageDiskD88*>(imageDiskList[drive-65])->fd_type_major == imageDiskD88::DISKTYPE_2D) {
+				WriteOut("The D88 image appears to target PC-88 and cannot be booted.");
+				return;
+			}
+		}
+		
 		bootSector bootarea;
 
         if (imageDiskList[drive-65]->getSectSize() > sizeof(bootarea)) {
@@ -881,6 +927,19 @@ public:
 			}
 		}
 
+		if (!has_read && IS_PC98_ARCH) {
+			/* another nonstandard one with track 0 having 256 bytes/sector while the rest have 1024 bytes/sector */
+			if (imageDiskList[drive - 65]->Read_Sector(0, 0, 1, (Bit8u *)&bootarea, 256) == 0 &&
+				imageDiskList[drive - 65]->Read_Sector(0, 0, 2, (Bit8u *)&bootarea + 256, 256) == 0 &&
+				imageDiskList[drive - 65]->Read_Sector(0, 0, 3, (Bit8u *)&bootarea + 512, 256) == 0 &&
+				imageDiskList[drive - 65]->Read_Sector(0, 0, 4, (Bit8u *)&bootarea + 768, 256) == 0) {
+				LOG_MSG("First sector is 256 byte/sector. Booting from first two sectors.");
+				has_read = true;
+				bootsize = 1024; // 256 x 4
+				pc98_sect128 = true;
+			}
+		}
+		
         /* NTS: Load address is 128KB - sector size */
         load_seg=IS_PC98_ARCH ? (0x2000 - (bootsize/16U)) : 0x07C0;
 
@@ -1143,6 +1202,15 @@ public:
                 reg_eax = 0x30;
                 reg_edx = 0x1;
 
+				/* Guess: If the boot sector is smaller than 512 bytes/sector, the PC-98 BIOS
+				 * probably sets the graphics layer to 640x200. Some games (Ys) do not
+				 * set but assume instead that is the mode of the graphics layer */
+				if (pc98_sect128) {
+					reg_eax = 0x4200; // setup 640x200 graphics
+					reg_ecx = 0x8000; // lower
+					CALLBACK_RunRealInt(0x18);
+				}
+				
                 /* PC-98 MS-DOS boot sector behavior suggests that the BIOS does a CALL FAR
                  * to the boot sector, and the boot sector can RETF back to the BIOS on failure. */
                 CPU_Push16(BIOS_bootfail_code_offset >> 4); /* segment */
@@ -3618,7 +3686,14 @@ private:
 			fseeko64(newDisk, 0L, SEEK_SET);
 			fread(tmp, 256, 1, newDisk); // look for magic signatures
 
-			if (!memcmp(tmp, "VFD1.", 5)) { /* FDD files */
+			if (mystrcasestr(fileName, ".d88") != NULL) {
+				fseeko64(newDisk, 0L, SEEK_END);
+				sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
+				imagesize = (Bit32u)(sectors / 2); /* orig. code wants it in KBs */
+				setbuf(newDisk, NULL);
+				newImage = new imageDiskD88(newDisk, (Bit8u *)fileName, imagesize, (imagesize > 2880));
+			}
+			else if (!memcmp(tmp, "VFD1.", 5)) { /* FDD files */
 				fseeko64(newDisk, 0L, SEEK_END);
 				sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
 				imagesize = (Bit32u)(sectors / 2); /* orig. code wants it in KBs */
