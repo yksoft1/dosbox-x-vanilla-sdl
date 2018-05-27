@@ -260,12 +260,17 @@ void PC98_FM_OnEnterPC98(Section *sec) {
         int irq;
 
         board = section->Get_string("pc-98 fm board");
-        if (board == "off" || board == "false") return;
-
+        if (board == "off" || board == "false") {
+			/* Don't enable Sound BIOS if sound board itself is disabled. */
+			pc98_soundbios_enabled = false;
+			pc98_set_msw4_soundbios();
+			return;
+		}
+		
         irq = section->Get_int("pc-98 fm board irq");
         baseio = section->Get_hex("pc-98 fm board io port");
 		
-		pc98_soundbios_enabled = section->Get_bool("pc-98 fm board bios");
+		pc98_soundbios_enabled = section->Get_bool("pc-98 sound bios");
 		pc98_set_msw4_soundbios();
 		/* TODO: Load SOUND.ROM to CC000h - CFFFFh when Sound BIOS is enabled*/
 		
