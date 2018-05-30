@@ -8160,10 +8160,6 @@ int main(int argc, char* argv[]) {
 		/* -- menu */
 		MainMenu = mainMenu.getWinMenu();
 #endif
-#if 0 && DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU
-        void sdl_hax_macosx_setmenu(void *nsMenu);
-        sdl_hax_macosx_setmenu(mainMenu.getNsMenu());
-#endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
         mainMenu.screenWidth = sdl.surface->w;
         mainMenu.updateRect();
