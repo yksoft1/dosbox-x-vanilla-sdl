@@ -75,6 +75,7 @@ void GFX_OpenGLRedrawScreen(void);
 #include "menu.h"
 #include "SDL_video.h"
 #include "ide.h"
+#include "bitop.h"
 #include "mapper.h"
 
 #include "../src/libs/gui_tk/gui_tk.h"
@@ -7393,6 +7394,8 @@ int main(int argc, char* argv[]) {
     CommandLine com_line(argc,argv);
     Config myconf(&com_line);
 
+	bitop::self_test();
+	
     memset(&sdl,0,sizeof(sdl)); // struct sdl isn't initialized anywhere that I can tell
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW	

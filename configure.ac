@@ -123,7 +123,7 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([
 dnl AC_CHECK_CXXFLAGS will prepend gnu++11 to CXXFLAGS if supported, for us.
 dnl our code adds -std=gnu++0x if not supported where the function would not do anything.
 AC_MSG_CHECKING([checking for C++11 support])
-AC_CHECK_CXXFLAGS([ -std=gnu++11 ], [  ], [  ])
+AC_CHECK_CXXFLAGS([ -std=gnu++98 ], [  ], [  ])
 
 dnl Yksoft1 wants a MinGW build for Windows that doesn't use the Windows menu system.
 AH_TEMPLATE(C_FORCE_MENU_SDLDRAW,[Define to 1 to force SDL-drawn menus])
