@@ -126,6 +126,42 @@ void self_test(void) {
 	assert(bitcount2maskmsb<uint8_t>(2u,0u) == (3u << 6u));
 	assert(bitcount2maskmsb<uint8_t>(2u,1u) == (3u << 5u));
 	assert(bitcount2maskmsb<unsigned int>(type_bits<unsigned int>()) == allones<unsigned int>());	
+	
+	static_assert(ispowerof2<unsigned int>(1u) == true, "whoops");
+	static_assert(ispowerof2<unsigned int>(2u) == true, "whoops");
+	static_assert(ispowerof2<unsigned int>(3u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(4u) == true, "whoops");
+	static_assert(ispowerof2<unsigned int>(5u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(6u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(7u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(8u) == true, "whoops");
+	static_assert(ispowerof2<unsigned int>(9u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(10u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(11u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(255u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(256u) == true, "whoops");
+	static_assert(ispowerof2<unsigned int>(257u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(32767u) == false, "whoops");
+	static_assert(ispowerof2<unsigned int>(32768u) == true, "whoops");
+	static_assert(ispowerof2<unsigned int>(32769u) == false, "whoops");
+
+	assert(ispowerof2<unsigned int>(1u) == true);
+	assert(ispowerof2<unsigned int>(2u) == true);
+	assert(ispowerof2<unsigned int>(3u) == false);
+	assert(ispowerof2<unsigned int>(4u) == true);
+	assert(ispowerof2<unsigned int>(5u) == false);
+	assert(ispowerof2<unsigned int>(6u) == false);
+	assert(ispowerof2<unsigned int>(7u) == false);
+	assert(ispowerof2<unsigned int>(8u) == true);
+	assert(ispowerof2<unsigned int>(9u) == false);
+	assert(ispowerof2<unsigned int>(10u) == false);
+	assert(ispowerof2<unsigned int>(11u) == false);
+	assert(ispowerof2<unsigned int>(255u) == false);
+	assert(ispowerof2<unsigned int>(256u) == true);
+	assert(ispowerof2<unsigned int>(257u) == false);
+	assert(ispowerof2<unsigned int>(32767u) == false);
+	assert(ispowerof2<unsigned int>(32768u) == true);
+	assert(ispowerof2<unsigned int>(32769u) == false);
 }
 
 }
