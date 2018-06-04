@@ -2,8 +2,10 @@
 #include <stdint.h>
 
 #if __cplusplus < 201103L
+#if !defined(constexpr)
 #define constexpr
 #define static_assert(a,...) assert(a)
+#endif
 #endif
 
 namespace bitop {

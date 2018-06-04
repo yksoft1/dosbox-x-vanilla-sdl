@@ -76,6 +76,7 @@ void GFX_OpenGLRedrawScreen(void);
 #include "SDL_video.h"
 #include "ide.h"
 #include "bitop.h"
+#include "ptrop.h"
 #include "mapper.h"
 
 #include "../src/libs/gui_tk/gui_tk.h"
@@ -7395,6 +7396,7 @@ int main(int argc, char* argv[]) {
     Config myconf(&com_line);
 
 	bitop::self_test();
+	ptrop::self_test();
 	
     memset(&sdl,0,sizeof(sdl)); // struct sdl isn't initialized anywhere that I can tell
 
