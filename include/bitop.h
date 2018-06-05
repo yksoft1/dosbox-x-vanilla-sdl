@@ -1,4 +1,5 @@
 
+#include <limits.h>
 #include <stdint.h>
 
 #if __cplusplus < 201103L
@@ -15,7 +16,7 @@ namespace bitop {
  * @return Number of bits in data type T
  */
 template <typename T> static inline constexpr unsigned int type_bits(void) {
-    return (unsigned int)sizeof(T) * 8u;
+    return (unsigned int)sizeof(T) * (unsigned int)CHAR_BIT;
 }
 
 /* Return data type T with all bits 0
@@ -183,6 +184,57 @@ template <typename T> static inline constexpr T bitcount2maskmsb(const unsigned 
 template <typename T> static inline constexpr T ispowerof2(const unsigned int a) {
 	return (a & (a-(T)1u)) == 0;
 }
+
+
+/* Return log2(v), or the bit position of the highest '1' bit of value 'v'
+ *
+ * A value of '0' will return allones<unsigned int>() to indicate an invalid value.
+ *
+ * The constexpr templated version will trigger a static_assert if v == 0.
+ *
+ * log2(2^31) == 31
+ * log2(2^30) == 30
+ * log2(2^16) == 16 2^16 == 65536
+ * log2(2^4) == 4 2^4 == 16
+ * log2(2^1) == 1 2^1 == 2
+ * log2(2^0) == 0 2^0 == 1
+ * log2(0) == ~0u (UINT_MAX or allones())
+ *
+ * @return Bitmask
+ */
+
+/* private recursion function */
+template <typename T> static inline constexpr unsigned int _log2_recursion(const T v,const unsigned int bits) {
+	/* NTS: The additional check against v == allzero() is needed to avoid an infinite recursion loop */
+	return (v != allzero<T>()) ?
+			(((v & type_msb_mask<T>()) == allzero<T>()) ? _log2_recursion(v << (T)1u,bits - 1u) : bits) :
+			(~0u);
+}
+
+template <typename T,const T v> static inline constexpr unsigned int log2(void) {
+	return _log2_recursion<T>(v,type_bits<T>() - 1u);
+}
+
+template <const unsigned int v> static inline constexpr unsigned int log2(void) {
+	return log2<unsigned int,v>();
+}
+
+/* non-constant version for runtime use */
+template <typename T> static inline unsigned int log2(T v) {
+	if (v != allzero<T>()) {
+		unsigned int c = type_bits<T>() - 1u;
+
+		while (!(v & type_msb_mask<T>())) {
+			v <<= (T)1UL;
+			c--;
+		}
+
+		return c;
+	}
+
+	return ~0u;
+}
+
 
 void self_test();
 
