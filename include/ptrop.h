@@ -10,8 +10,10 @@
 
 namespace ptrop {
 
+/* return the misalignment in bytes of 'p' in the context of a data type of size 'A',
+ * 'A' must be a power of 2, or else this code will not work. */
 static inline constexpr uintptr_t misalignment(const uintptr_t p,const uintptr_t A) {
-    return p % A;
+    return p & (A - (uintptr_t)1u);
 }
 
 template <const uintptr_t A> static inline constexpr uintptr_t misalignment(const uintptr_t p) { // DEFER
