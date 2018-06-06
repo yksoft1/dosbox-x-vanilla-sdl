@@ -1192,7 +1192,7 @@ bx_ne2k_c::mcast_index(const void *dst)
 	crc = ((crc ^ POLYNOMIAL) | carry);
     }
   }
-  return (crc >> 26);
+  return (uint32_t)((crc & 0xfffffffful) >> 26ul); /* WARNING: Caller directly uses our 6-bit return as index. If not truncated, will cause a segfault */
 #undef POLYNOMIAL
 }
 
@@ -1524,6 +1524,8 @@ public:
 			base=0x300;
 		}
 
+		LOG_MSG("NE2000: Base=0x%x irq=%u",(unsigned int)base,(unsigned int)irq);
+		
 		// mac address
 		const char* macstring=section->Get_string("macaddr");
 		unsigned int macint[6];
@@ -1636,10 +1638,11 @@ public:
 		// create the bochs NIC class
 		theNE2kDevice = new bx_ne2k_c ();
 		memcpy(theNE2kDevice->s.physaddr, mac, 6);
-		theNE2kDevice->init();
-
+		
 		theNE2kDevice->s.base_address=base;
 		theNE2kDevice->s.base_irq=irq;
+		
+		theNE2kDevice->init();
 
 		// install I/O-handlers and timer
 		for(Bitu i = 0; i < 0x20; i++) {
