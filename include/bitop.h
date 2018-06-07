@@ -2,6 +2,8 @@
 #include <limits.h>
 #include <stdint.h>
 
+#include <utility>
+
 #if __cplusplus < 201103L
 #if !defined(constexpr)
 #define constexpr
@@ -33,6 +35,17 @@ template <typename T> static inline constexpr T allzero(void) {
  */
 template <typename T> static inline constexpr T allones(void) {
     return (T)( ~((T)0) );
+}
+
+
+/* Return data type T with value negated
+ *
+ * This is to avoid typecast messes when masking by the inverse of a constant
+ *
+ * @return Type T with value negated
+ */
+template <typename T> static inline constexpr T negate(const T v) {
+	return (T)( ~v );
 }
 
 /* private */
@@ -235,6 +248,52 @@ template <typename T> static inline unsigned int log2(T v) {
 	return ~0u;
 }
 
+/* return type, pair */
+class bitseqlengthandpos_ret_t {
+	public:
+		bitseqlengthandpos_ret_t(const unsigned int _start,const unsigned int _length) : start(_start), length(_length) { }
+	public:
+		bool operator==(const bitseqlengthandpos_ret_t &n) const {
+			return (n.start == start) &&
+			(n.length == length);
+		}
+		bool empty(void) const {
+			return (start == 0u && length == 0u);
+		}
+	public:
+		unsigned int start, length;
+};
+
+/* return a pair struct representing start and length of a series of 1 bits */
+template <typename T> static inline bitseqlengthandpos_ret_t bitseqlengthandpos(T v) {
+	if (v != bitop::allzero<T>()) {
+		unsigned int start=0,length=0;
+
+		/* count zeros */
+		while ((v & (T)0xFFUL) == (T)0x00UL) {
+			start += (T)8;
+			v >>= (T)8UL;
+		}
+		while (!(v & (T)1u)) {
+			start++;
+			v >>= (T)1UL;
+		}
+
+		/* count ones */
+		while ((v & (T)0xFFUL) == (T)0xFFUL) {
+			length += (T)8;
+			v >>= (T)8UL;
+		}
+		while (v & (T)1u) {
+			length++;
+			v >>= (T)1UL;
+		}
+
+		return bitseqlengthandpos_ret_t(start,length);
+	}
+
+	return bitseqlengthandpos_ret_t(0u,0u);
+}
 
 void self_test();
 
