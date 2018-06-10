@@ -68,7 +68,7 @@ static INLINE Bit16s MIXER_CLIP(Bits SAMP) {
 	}
 }
 
-struct improperFraction {
+struct mixedFraction {
 	unsigned int		w;
 	unsigned int		fn,fd;
 };
@@ -82,9 +82,9 @@ static struct {
 	MixerChannel*		channels;
 	Bit32u			freq;
 	Bit32u			blocksize;
-	struct improperFraction	samples_per_ms;
-	struct improperFraction	samples_this_ms;
-	struct improperFraction	samples_rendered_ms;
+	struct mixedFraction	samples_per_ms;
+	struct mixedFraction	samples_this_ms;
+	struct mixedFraction	samples_rendered_ms;
 	bool			nosound;
 	bool			swapstereo;
 	bool			sampleaccurate;
