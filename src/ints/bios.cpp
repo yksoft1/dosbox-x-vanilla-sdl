@@ -7373,3 +7373,21 @@ void ROMBIOS_Init() {
     }
 }
 
+void BIOS_SynchronizeNumLock()
+{
+#if defined(WIN32)
+	Bit8u flag = mem_readb(BIOS_KEYBOARD_FLAGS1);
+	Bit8u leds = mem_readb(BIOS_KEYBOARD_LEDS);
+	SHORT stat = GetKeyState(VK_NUMLOCK);
+	if (stat & 1) {
+		flag |= 0x20;
+		leds |= 0x02;
+	}
+	else {
+		flag &= ~0x20;
+		leds &= ~0x02;
+	}
+	mem_writeb(BIOS_KEYBOARD_FLAGS1, flag);
+	mem_writeb(BIOS_KEYBOARD_LEDS, leds);
+#endif
+}
