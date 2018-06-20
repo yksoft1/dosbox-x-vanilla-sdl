@@ -875,8 +875,7 @@ device_CON::device_CON() {
 	lastwrite=0;
 	ansi.enabled=false;
 	ansi.attr=0x7;
-	ansi.ncols=real_readw(BIOSMEM_SEG,BIOSMEM_NB_COLS); //should be updated once set/reset mode is implemented
-	ansi.nrows=real_readb(BIOSMEM_SEG,BIOSMEM_NB_ROWS) + 1;
+
 	if (IS_PC98_ARCH) {
 		// NTS: On real hardware, the BIOS does NOT manage the console at all.
 		// TTY handling is entirely handled by MS-DOS.
