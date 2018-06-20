@@ -433,19 +433,20 @@ void INT10_SetCursorPos(Bit8u row,Bit8u col,Bit8u page) {
 	if (IS_PC98_ARCH) {
 		real_writeb(0x60,0x11C,col);
 		real_writeb(0x60,0x110,row);
+		page = 0;
 	}
 	else {
 		real_writeb(BIOSMEM_SEG,BIOSMEM_CURSOR_POS+page*2u,col);
 		real_writeb(BIOSMEM_SEG,BIOSMEM_CURSOR_POS+page*2u+1u,row);
 	}
 	// Set the hardware cursor
-	Bit8u current=real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
+	Bit8u current=IS_PC98_ARCH ? 0 : real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
 	if(page==current) {
 		// Get the dimensions
 		BIOS_NCOLS;
 		// Calculate the address knowing nbcols nbrows and page num
 		// NOTE: BIOSMEM_CURRENT_START counts in colour/flag pairs
-		address=(ncols*row)+col+real_readw(BIOSMEM_SEG,BIOSMEM_CURRENT_START)/2;
+		address=(ncols*row)+col+(IS_PC98_ARCH ? 0 : (real_readw(BIOSMEM_SEG,BIOSMEM_CURRENT_START)/2));
         if (IS_PC98_ARCH) {
             vga_pc98_direct_cursor_pos(address);
         }
@@ -536,7 +537,7 @@ void WriteChar(Bit16u col,Bit16u row,Bit8u page,Bit16u chr,Bit8u attr,bool useat
 	/* Externally used by the mouse routine */
 	RealPt fontdata;
 	Bitu x,y;
-	Bit8u back, cheight = real_readb(BIOSMEM_SEG,BIOSMEM_CHAR_HEIGHT);
+	Bit8u back, cheight = IS_PC98_ARCH ? 16 : real_readb(BIOSMEM_SEG,BIOSMEM_CHAR_HEIGHT);
 
     if (CurMode->type != M_PC98)
         chr &= 0xFF;
