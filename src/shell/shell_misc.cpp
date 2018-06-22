@@ -32,6 +32,9 @@
 #include "../dos/cdrom.h"
 #endif 
 
+# define MIN(a,b) ((a) < (b) ? (a) : (b))
+# define MAX(a,b) ((a) > (b) ? (a) : (b))
+
 void DOS_Shell::ShowPrompt(void) {
 	char dir[DOS_PATHLENGTH];
 	dir[0] = 0; //DOS_GetCurrentDir doesn't always return something. (if drive is messed up)
@@ -202,6 +205,53 @@ void DOS_Shell::InputCommand(char * line) {
                     str_index --;
                 }
                 break;
+				
+			case 0x7400: /*CTRL + RIGHT : cmd.exe-like next word*/
+				{
+					char* pos = line + str_index;
+					char spc = *pos == ' ';
+					const char* end = line + str_len;
+
+					while (pos < end) {
+						if (spc && *pos != ' ')
+							break;
+						if (*pos == ' ')
+							spc = true;
+						pos++;
+					}
+
+					const Bitu lgt = MIN(pos, end) - (line + str_index);
+
+					for (Bitu i = 0; i < lgt; i++)
+						outc(static_cast<Bit8u>(line[str_index++]));
+				}
+				break;
+				
+			case 0x7300: /*CTRL + LEFT : cmd.exe-like previous word*/
+			{
+				char* pos = line + str_index - 1;
+				const char* beg = line;
+				const char spc = *pos == ' ';
+
+				if (spc) {
+					while(*pos == ' ') pos--;
+					while(*pos != ' ') pos--;
+					pos++;
+				}
+				else {
+					while(*pos != ' ') pos--;
+					while(*pos == ' ') pos--;
+					pos++;
+				}
+
+				const Bitu lgt = abs(MAX(pos, beg) - (line + str_index));
+
+				for (Bitu i = 0; i < lgt; i++) {
+						outc(8);
+						str_index--;
+					}
+				}
+			break;
 
             case 0x4D00:	/* RIGHT */
                 if (str_index < str_len) {
