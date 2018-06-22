@@ -125,7 +125,6 @@ extern bool			VIDEO_BIOS_always_carry_14_high_font;
 extern bool			VIDEO_BIOS_always_carry_16_high_font;
 extern bool			VIDEO_BIOS_enable_CGA_8x8_second_half;
 extern bool			allow_more_than_640kb;
-extern bool			adapter_rom_is_ram;
 
 bool				dos_con_use_int16_to_detect_input = true;
 
@@ -164,8 +163,6 @@ Bit32u				ticksScheduled;
 bool				ticksLocked;
 bool				mono_cga=false;
 bool				ignore_opcode_63 = true;
-bool				mainline_compatible_mapping = true;
-bool				mainline_compatible_bios_mapping = true;
 int				dynamic_core_cache_block_size = 32;
 Bitu				VGA_BIOS_Size_override = 0;
 Bitu				VGA_BIOS_SEG = 0xC000;
@@ -635,8 +632,8 @@ void Init_VGABIOS() {
 	VIDEO_BIOS_always_carry_16_high_font = section->Get_bool("video bios always offer 16-pixel high rom font");
 	VIDEO_BIOS_enable_CGA_8x8_second_half = section->Get_bool("video bios enable cga second half rom font");
 	/* NTS: mainline compatible mapping demands the 8x8 CGA font */
-	rom_bios_8x8_cga_font = mainline_compatible_bios_mapping || section->Get_bool("rom bios 8x8 CGA font");
-	rom_bios_vptable_enable = mainline_compatible_bios_mapping || section->Get_bool("rom bios video parameter table");
+	rom_bios_8x8_cga_font = section->Get_bool("rom bios 8x8 CGA font");
+	rom_bios_vptable_enable = section->Get_bool("rom bios video parameter table");
 
 	/* sanity check */
 	if (VGA_BIOS_dont_duplicate_CGA_first_half && !rom_bios_8x8_cga_font) /* can't point at the BIOS copy if it's not there */
@@ -645,19 +642,15 @@ void Init_VGABIOS() {
 	if (VGA_BIOS_Size_override >= 512 && VGA_BIOS_Size_override <= 65536)
 		VGA_BIOS_Size = (VGA_BIOS_Size_override + 0x7FF) & (~0xFFF);
 	else if (IS_VGA_ARCH)
-		VGA_BIOS_Size = mainline_compatible_mapping ? 0x8000 : 0x3000; /* <- Experimentation shows the S3 emulation can fit in 12KB, doesn't need all 32KB */
+		VGA_BIOS_Size = 0x3000; /* <- Experimentation shows the S3 emulation can fit in 12KB, doesn't need all 32KB */
 	else if (machine == MCH_EGA) {
-		if (mainline_compatible_mapping)
-			VGA_BIOS_Size = 0x8000;
-		else if (VIDEO_BIOS_always_carry_16_high_font)
+		if (VIDEO_BIOS_always_carry_16_high_font)
 			VGA_BIOS_Size = 0x3000;
 		else
 			VGA_BIOS_Size = 0x2000;
 	}
 	else {
-		if (mainline_compatible_mapping)
-			VGA_BIOS_Size = 0x8000;
-		else if (VIDEO_BIOS_always_carry_16_high_font && VIDEO_BIOS_always_carry_14_high_font)
+		if (VIDEO_BIOS_always_carry_16_high_font && VIDEO_BIOS_always_carry_14_high_font)
 			VGA_BIOS_Size = 0x3000;
 		else if (VIDEO_BIOS_always_carry_16_high_font || VIDEO_BIOS_always_carry_14_high_font)
 			VGA_BIOS_Size = 0x2000;
@@ -699,9 +692,6 @@ void DOSBOX_RealInit() {
 	// TODO: these should be parsed by DOS kernel at startup
 	dosbox_shell_env_size = section->Get_int("shell environment size");
 
-	/* these ARE general DOSBox configuration options */
-	mainline_compatible_mapping = section->Get_bool("mainline compatible mapping");
-	adapter_rom_is_ram = section->Get_bool("adapter rom is ram");
 
 	// TODO: a bit of a challenge: if we put it in the ROM area as mainline DOSBox does then the init
 	//       needs to read this from the BIOS where it can map the memory appropriately. if the allocation
@@ -713,7 +703,6 @@ void DOSBOX_RealInit() {
 	DOS_PRIVATE_SEGMENT_Size = (section->Get_int("private area size") + 8) / 16;
 
 	// TODO: these should be parsed by BIOS startup
-	mainline_compatible_bios_mapping = section->Get_bool("mainline compatible bios mapping");
 	allow_more_than_640kb = section->Get_bool("allow more than 640kb base memory");
 
 	// TODO: should be parsed by motherboard emulation
@@ -972,19 +961,6 @@ void DOSBOX_SetupConfigSections(void) {
 			"avi-zmbv                    Use DOSBox-style AVI + ZMBV codec with PCM audio\n"
 			"mpegts-h264                 Use MPEG transport stream + H.264 + AAC audio. Resolution & refresh rate changes can be contained\n"
 			"                            within one file with this choice, however not all software can support mid-stream format changes.");
-
-	Pbool = secprop->Add_bool("mainline compatible mapping",Property::Changeable::OnlyAtStart,false);
-	Pbool->Set_help("If set, arrange private areas, UMBs, and DOS kernel structures by default in the same way the mainline branch would do it.\n"
-			"If cleared, these areas are allocated dynamically which may improve available memory and emulation accuracy.\n"
-			"If your DOS game breaks under DOSBox-X but works with mainline DOSBox setting this option may help.");
-
-	Pbool = secprop->Add_bool("mainline compatible bios mapping",Property::Changeable::OnlyAtStart,false);
-	Pbool->Set_help("If set, arrange the BIOS area in the same way that the mainline branch would do it.\n"
-			"If cleared, these areas are allocated dynamically which may improve available memory and emulation accuracy.\n"
-			"If your DOS game breaks under DOSBox-X but works with mainline DOSBox setting this option may help.");
-
-	Pbool = secprop->Add_bool("adapter rom is ram",Property::Changeable::OnlyAtStart,false);
-	Pbool->Set_help("Map adapter ROM as RAM (mainline DOSBox 0.74 behavior). When clear, unused adapter ROM is mapped out");
 
 	Pint = secprop->Add_int("shell environment size",Property::Changeable::OnlyAtStart,0);
 	Pint->SetMinMax(0,65280);

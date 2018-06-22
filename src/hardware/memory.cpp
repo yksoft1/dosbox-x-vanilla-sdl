@@ -1551,8 +1551,6 @@ bool MEM_map_ROM_alias_physmem(Bitu start,Bitu end) {
 
 HostPt GetMemBase(void) { return MemBase; }
 
-extern bool mainline_compatible_mapping;
-
 class REDOS : public Program {
 public:
 	void Run(void) {
@@ -1788,13 +1786,12 @@ void Init_RAM() {
 	for (;i < memory.handler_pages;i++)
 		memory.phandlers[i] = NULL;//&illegal_page_handler;
 
-	if (!adapter_rom_is_ram) {
-		/* FIXME: VGA emulation will selectively respond to 0xA0000-0xBFFFF according to the video mode,
-		 *        what we want however is for the VGA emulation to assign illegal_page_handler for
-		 *        address ranges it is not responding to when mapping changes. */
-		for (i=0xa0;i<0x100;i++) /* we want to make sure adapter ROM is unmapped entirely! */
-			memory.phandlers[i] = NULL;//&unmapped_page_handler;
-	}
+	
+	/* FIXME: VGA emulation will selectively respond to 0xA0000-0xBFFFF according to the video mode,
+	 *        what we want however is for the VGA emulation to assign illegal_page_handler for
+	 *        address ranges it is not responding to when mapping changes. */
+	for (i=0xa0;i<0x100;i++) /* we want to make sure adapter ROM is unmapped entirely! */
+		memory.phandlers[i] = NULL;//&unmapped_page_handler;
 }
 
 static IO_ReadHandleObject PS2_Port_92h_ReadHandler;

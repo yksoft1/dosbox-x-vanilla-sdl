@@ -562,10 +562,8 @@ void INT10_SetupBasicVideoParameterTable(void) {
 			/* TODO: Free previous block */
 
 			BIOS_VIDEO_TABLE_SIZE = copy_sz;
-			if (mainline_compatible_bios_mapping)
-				BIOS_VIDEO_TABLE_LOCATION = RealMake(0xf000,0xf0a4);
-			else
-				BIOS_VIDEO_TABLE_LOCATION = PhysToReal416(ROMBIOS_GetMemory(copy_sz,"BIOS video table (INT 1Dh)")); /* TODO: make option */
+
+			BIOS_VIDEO_TABLE_LOCATION = PhysToReal416(ROMBIOS_GetMemory(copy_sz,"BIOS video table (INT 1Dh)")); /* TODO: make option */
 
 			/* NTS: Failure to allocate means BIOS_VIDEO_TABLE_LOCATION == 0 */
 		}
