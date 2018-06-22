@@ -154,19 +154,6 @@ ClockDomain			clockdom_ISA_OSC(NTSC_COLOR_SUBCARRIER_NUM*4,NTSC_COLOR_SUBCARRIER
  * PCI bus systems: PCI bus clock 33MHz / 4 = 8.333MHz (especially Intel chipsets according to PIIX datasheets) */
 ClockDomain			clockdom_ISA_BCLK(25000000,3);		/* MASTER 25000000Hz / 3 = 8.333333MHz */
 
-/* 8254 PIT. slave to a clock determined by motherboard.
- * PC/XT: slave to ISA busclock (4.77MHz / 4) = 1.193181MHz
- * AT/later: ISA oscillator clock (14.31818MHz / 12) */
-/* 14.1818MHz / 12 == (NTSC * 4) / 12 == (NTSC * 4) / (4*3) == NTSC / 3 */
-ClockDomain			clockdom_8254_PIT(NTSC_COLOR_SUBCARRIER_NUM,NTSC_COLOR_SUBCARRIER_DEN*3);
-
-/* 8250 UART.
- * PC/XT: ??? What did IBM use on the motherboard to drive the UART? Is it some divisor of the ISA OSC clock?? Closest I can calculate: 14.31818MHz / 8 = 1.78MHz.
- * Other hardware (guess): Independent clock crystal: 115200 * 16 = 1843200Hz = 1.843200MHz based on datasheet (http://www.ti.com/lit/ds/symlink/pc16550d.pdf)
- *
- * Feel free to correct me if I'm wrong. */
-ClockDomain			clockdom_8250_UART(115200 * 16);
-
 Config*				control;
 MachineType			machine;
 bool				PS1AudioCard;		// Perhaps have PS1 as a machine type...?
@@ -290,12 +277,6 @@ unsigned long long update_clockdom_from_now(ClockDomain &dst) {
 /* for ISA components that rely on dividing down from OSC */
 unsigned long long update_ISA_OSC_clock() {
 	return update_clockdom_from_now(clockdom_ISA_OSC);
-}
-
-/* for PIT emulation. The PIT ticks at exactly 1/12 the ISA OSC clock. */
-unsigned long long update_8254_PIT_clock() {
-	clockdom_8254_PIT.counter = update_ISA_OSC_clock() / 12ULL;
-	return clockdom_8254_PIT.counter;
 }
 
 /* for ISA components */
@@ -813,8 +794,6 @@ void DOSBOX_RealInit() {
 		parse_busclk_setting_str(&clockdom_PCI_BCLK,pcibclk.c_str());
 
 	clockdom_ISA_OSC.set_name("ISA OSC");
-	clockdom_8254_PIT.set_name("8254 PIT");
-	clockdom_8250_UART.set_name("8250 UART");
 	clockdom_ISA_BCLK.set_name("ISA BCLK");
 	clockdom_PCI_BCLK.set_name("PCI BCLK");
 }
