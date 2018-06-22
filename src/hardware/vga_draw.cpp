@@ -1789,8 +1789,11 @@ static void VGA_VerticalTimer(Bitu /*val*/) {
 
 	switch (vga.mode) {
 	case M_EGA:
-		if (!(vga.crtc.mode_control&0x1)) vga.draw.linear_mask &= ~0x10000;
-		else vga.draw.linear_mask |= 0x10000;
+		if (vga.vmemwrap >= 0x20000) {
+			if (!(vga.crtc.mode_control&0x1)) vga.draw.linear_mask &= ~0x10000;
+			else vga.draw.linear_mask |= 0x10000;
+		}
+		/* fall through */
 	case M_LIN4:
 		vga.draw.byte_panning_shift = 4;
 		vga.draw.address += vga.draw.bytes_skip;
