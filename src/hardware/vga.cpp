@@ -707,6 +707,13 @@ void VGA_Reset(Section*) {
 	vga.vmemwrap = 256*1024;	// default to 256KB VGA mem wrap
 	if (vga.vmemwrap > vga.vmemsize)
 		vga.vmemwrap = vga.vmemsize;
+		
+	/* I'm sorry, emulating 640x350 4-color chained EGA graphics is
+	 * harder than I thought and would require revision of quite a
+	 * bit of VGA planar emulation to update only bitplane 0 and 2
+	 * in such a manner. --J.C. */
+	if (IS_EGA_ARCH && vga.vmemsize < _KB_bytes(128))
+		LOG_MSG("WARNING: EGA 64KB emulation is very experimental and not well supported");
     
 	if (!IS_PC98_ARCH)
         SVGA_Setup_Driver();		// svga video memory size is set here, possibly over-riding the user's selection
