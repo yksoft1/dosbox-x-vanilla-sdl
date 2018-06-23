@@ -711,6 +711,9 @@ void VGA_Reset(Section*) {
 	if (!IS_PC98_ARCH)
         SVGA_Setup_Driver();		// svga video memory size is set here, possibly over-riding the user's selection
 
+	vga.mem.memmask = vga.vmemsize - 1u;
+	vga.vmemwrap = vga.mem.memmask + 1u;//bkwd compat
+
 	LOG(LOG_VGA,LOG_NORMAL)("Video RAM: %uKB",vga.vmemsize>>10);
 
 	VGA_SetupMemory();		// memory is allocated here

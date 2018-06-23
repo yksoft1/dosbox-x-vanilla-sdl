@@ -390,6 +390,7 @@ typedef union {
 typedef struct {
 	Bit8u* linear;
 	Bit8u* linear_orgptr;
+	uint32_t memmask;
 } VGA_Memory;
 
 typedef struct {
