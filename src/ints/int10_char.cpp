@@ -791,9 +791,17 @@ void INT10_WriteString(Bit8u row,Bit8u col,Bit8u flag,Bit8u attr,PhysPt string,B
 	}
 }
 
+bool pc98_doskey_insertmode = false;
+
 bool INT10_GetInsertState()
 {
-	const Bit8u flags = mem_readb(BIOS_KEYBOARD_FLAGS1);
-	const bool state =static_cast<bool>(flags & BIOS_KEYBOARD_FLAGS1_INSERT_ACTIVE);
-	return state;
+	if (IS_PC98_ARCH) {
+		/* state is internal to DOSKEY */
+		return pc98_doskey_insertmode;
+	} 
+	else {
+		const Bit8u flags = mem_readb(BIOS_KEYBOARD_FLAGS1);
+		const bool state =static_cast<bool>(flags & BIOS_KEYBOARD_FLAGS1_INSERT_ACTIVE);
+		return state;
+	}
 }
