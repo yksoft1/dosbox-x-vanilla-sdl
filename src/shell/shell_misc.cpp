@@ -143,6 +143,14 @@ void DOS_Shell::InputCommand(char * line) {
         else if (IS_PC98_ARCH) {
             extern Bit16u last_int16_code;
 
+			/* shift state is needed for some key combinations not directly supported by CON driver.
+			 * bit 4 = CTRL
+			 * bit 3 = GRPH/ALT
+			 * bit 2 = kana
+			 * bit 1 = caps
+			 * bit 0 = SHIFT */
+			uint8_t shiftstate = mem_readb(0x52A + 0x0E);
+
             /* NTS: Since left arrow and backspace map to the same byte value, PC-98 treats it the same at the DOS prompt.
              *      However the PC-98 version of DOSKEY seems to be able to differentiate the two anyway and let the left
              *      arrow move the cursor back (perhaps it's calling INT 18h directly then?) */
@@ -150,14 +158,23 @@ void DOS_Shell::InputCommand(char * line) {
                 cr = 0x4800;    /* IBM extended code up arrow */
             else if (c == 0x0A)
                 cr = 0x5000;    /* IBM extended code down arrow */
-            else if (c == 0x0C)
-                cr = 0x4D00;    /* IBM extended code right arrow */
+			else if (c == 0x0C) {
+				if (shiftstate & 0x10/*CTRL*/)
+					cr = 0x7400; /* IBM extended code CTRL + right arrow */
+				else
+					cr = 0x4D00; /* IBM extended code right arrow */
+			}
             else if (c == 0x08) {
                 /* IBM extended code left arrow OR backspace. use last scancode to tell which as DOSKEY apparently can. */
-                if (last_int16_code == 0x3B00)
-                    cr = 0x4B00; /* left arrow */
-                else
-                    cr = 0x08; /* backspace */
+                if (last_int16_code == 0x3B00) {
+					if (shiftstate & 0x10/*CTRL*/)
+						cr = 0x7300; /* CTRL + left arrow */
+					else
+						cr = 0x4B00; /* left arrow */
+				}
+				else {
+						cr = 0x08; /* backspace */
+				}
             }
             else if (c == 0x1B) { /* escape */
 				DOS_ReadFile(input_handle,&c,&n);
