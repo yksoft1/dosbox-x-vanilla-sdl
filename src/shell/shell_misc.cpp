@@ -177,34 +177,41 @@ void DOS_Shell::InputCommand(char * line) {
 				}
             }
             else if (c == 0x1B) { /* escape */
-				DOS_ReadFile(input_handle,&c,&n);
-                     if (c == 0x44)  // DEL
-                    cr = 0x5300;
-                else if (c == 0x53)  // F1
-                    cr = 0x3B00;
-                else if (c == 0x54)  // F2
-                    cr = 0x3C00;
-                else if (c == 0x55)  // F3
-                    cr = 0x3D00;
-                else if (c == 0x56)  // F4
-                    cr = 0x3E00;
-                else if (c == 0x57)  // F5
-                    cr = 0x3F00;
-                else if (c == 0x45)  // F6
-                    cr = 0x4000;
-                else if (c == 0x4A)  // F7
-                    cr = 0x4100;
-                else if (c == 0x50)  // F8
-                    cr = 0x4200;
-                else if (c == 0x51)  // F9
-                    cr = 0x4300;
-                else if (c == 0x5A)  // F10
-                    cr = 0x4400;
-                else
-                    cr = 0;
+				/* Either it really IS the ESC key, or an ANSI code */
+				if (last_int16_code != 0x001B) {
+					DOS_ReadFile(input_handle,&c,&n);
+					if (c == 0x44) // DEL
+						cr = 0x5300;
+					else if (c == 0x53) // F1
+						cr = 0x3B00;
+					else if (c == 0x54) // F2
+						cr = 0x3C00;
+					else if (c == 0x55) // F3
+						cr = 0x3D00;
+					else if (c == 0x56) // F4
+						cr = 0x3E00;
+					else if (c == 0x57) // F5
+						cr = 0x3F00;
+					else if (c == 0x45) // F6
+						cr = 0x4000;
+					else if (c == 0x4A) // F7
+						cr = 0x4100;
+					else if (c == 0x50) // F8
+						cr = 0x4200;
+					else if (c == 0x51) // F9
+						cr = 0x4300;
+					else if (c == 0x5A) // F10
+						cr = 0x4400;
+					else
+						cr = 0;
+				}
+				else {
+					cr = (Bit16u)c;
+				}
             }
-            else
+            else {
                 cr = (Bit16u)c;
+			}
         }
         else {
             if (c == 0) {
@@ -521,19 +528,37 @@ void DOS_Shell::InputCommand(char * line) {
                 }
                 break;
             case 0x1b:   /* ESC */
-                if (IS_PC98_ARCH) {
-                    //TODO: Either different behavior or none at all
-                }
-                else {
-                    //write a backslash and return to the next line
-                    outc('\\');
-                    outc('\n');
-                    *line = 0;      // reset the line.
-                    if (l_completion.size()) l_completion.clear(); //reset the completion list.
-                    this->InputCommand(line);	//Get the NEW line.
-                    size = 0;       // stop the next loop
-                    str_len = 0;    // prevent multiple adds of the same line
-                }
+				// NTS: According to real PC-98 DOS:
+				// If DOSKEY is loaded, ESC clears the prompt
+				// If DOSKEY is NOT loaded, ESC does nothing. In fact, after ESC,
+				// the next character input is thrown away before resuming normal keyboard input.
+				//
+				// DOSBox / DOSBox-X have always acted as if DOSKEY is loaded in a fashion, so
+				// we'll emulate the PC-98 DOSKEY behavior here.
+				//
+				// DOSKEY on PC-98 is able to clear the whole prompt and even bring the cursor
+				// back up to the first line if the input crosses multiple lines.
+				
+				// NTS: According to real IBM/Microsoft PC/AT DOS:
+				// If DOSKEY is loaded, ESC clears the prompt
+				// If DOSKEY is NOT loaded, ESC prints a backslash and goes to the next line.
+				// The Windows 95 version of DOSKEY puts the cursor at a horizontal position
+				// that matches the DOS prompt (not emulated here).
+				//
+				// DOSBox / DOSBox-X have always acted as if DOSKEY is loaded in a fashion, so
+				// we'll emulate DOSKEY behavior here.
+				while (str_len > 0) {
+					outc(8);
+					outc(' ');
+					outc(8);
+					MoveCaretBackwards();
+					str_len--;
+				}
+				
+				*line = 0; // reset the line.
+				if (l_completion.size()) l_completion.clear(); //reset the completion list.
+				str_index = 0;
+				str_len = 0;
                 break;
             default:
                 if (cr >= 0x100) break;
