@@ -537,6 +537,7 @@ struct SDL_Block {
 	struct {
 		bool autolock;
 		bool autoenable;
+		bool synced;
 		bool requestlock;
 		bool locked;
 		Bitu sensitivity;
@@ -3677,6 +3678,7 @@ static void GUI_StartUp() {
 		sdl.desktop.full.height=width;
 	}
 	sdl.mouse.autoenable=section->Get_bool("autolock");
+	sdl.mouse.synced=section->Get_bool("synced");
 	if (!sdl.mouse.autoenable) SDL_ShowCursor(SDL_DISABLE);
 	sdl.mouse.autolock=false;
 	sdl.mouse.sensitivity=section->Get_int("sensitivity");
@@ -4005,6 +4007,7 @@ static void HandleVideoResize(void * event) {
 extern unsigned int mouse_notify_mode;
 
 bool user_cursor_locked = false;
+bool user_cursor_synced = false;
 int user_cursor_x = 0,user_cursor_y = 0;
 int user_cursor_sw = 640,user_cursor_sh = 480;
 
@@ -4158,6 +4161,7 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
     user_cursor_x = motion->x - sdl.clip.x;
     user_cursor_y = motion->y - sdl.clip.y;
     user_cursor_locked = sdl.mouse.locked;
+	user_cursor_synced = sdl.mouse.synced;
     user_cursor_sw = sdl.clip.w;
     user_cursor_sh = sdl.clip.h;
 
@@ -4180,6 +4184,7 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
     else {
 		SDL_ShowCursor(SDL_ENABLE);
     }
+	SDL_ShowCursor(SDL_ENABLE); // TODO remove
 }
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW /* SDL drawn menus */
@@ -6055,6 +6060,9 @@ void SDL_SetupConfigSection() {
 
 	Pbool = sdl_sec->Add_bool("autolock",Property::Changeable::Always,true);
 	Pbool->Set_help("Mouse will automatically lock, if you click on the screen. (Press CTRL-F10 to unlock)");
+
+	Pbool = sdl_sec->Add_bool("synced",Property::Changeable::Always,true);
+	Pbool->Set_help("Mouse position reported will be exactly where user hand has moved to.");
 
 	Pint = sdl_sec->Add_int("sensitivity",Property::Changeable::Always,100);
 	Pint->SetMinMax(1,1000);
