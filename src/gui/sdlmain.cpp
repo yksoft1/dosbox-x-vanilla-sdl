@@ -147,7 +147,6 @@ const char *scaler_menu_opts[][2] = {
 	{ "2xsai", "2xSai" },
 	{ "super2xsai", "Super2xSai" },
 	{ "supereagle", "SuperEagle" },
-	{ "xbrz", "xBRZ" }, /* <- FIXME: Not implemented? No ref in the code! */
 
 	{ NULL, NULL }
 };
