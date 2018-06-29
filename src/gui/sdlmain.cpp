@@ -551,6 +551,8 @@ struct SDL_Block {
 		bool requestlock;
 		bool locked;
 		Bitu sensitivity;
+		bool synced;
+		MOUSE_EMULATION emulation;
 	} mouse;
 	SDL_Rect updateRects[1024];
 	Bitu overscan_color;
@@ -3744,6 +3746,7 @@ static void GUI_StartUp() {
 		sdl.desktop.full.height=width;
 	}
 	sdl.mouse.autoenable=section->Get_bool("autolock");
+	sdl.mouse.synced=section->Get_bool("synced");
 	if (!sdl.mouse.autoenable) SDL_ShowCursor(SDL_DISABLE);
 	sdl.mouse.autolock=false;
 	
@@ -3758,6 +3761,17 @@ static void GUI_StartUp() {
 
 	sdl.mouse.sensitivity=section->Get_int("sensitivity");
 	std::string output=section->Get_string("output");
+	
+	const std::string emulation = section->Get_string("mouse_emulation");
+	if (emulation == "always")
+		sdl.mouse.emulation = MOUSE_EMULATION_ALWAYS;
+	else if (emulation == "locked")
+		sdl.mouse.emulation = MOUSE_EMULATION_LOCKED;
+	else if (emulation == "integration")
+		sdl.mouse.emulation = MOUSE_EMULATION_INTEGRATION;
+	else if (emulation == "never")
+		sdl.mouse.emulation = MOUSE_EMULATION_NEVER;
+
 
 	/* Setup Mouse correctly if fullscreen */
 	if(sdl.desktop.fullscreen) GFX_CaptureMouse();
@@ -4083,6 +4097,7 @@ extern unsigned int mouse_notify_mode;
 
 bool user_cursor_locked = false;
 bool user_cursor_synced = false;
+MOUSE_EMULATION user_cursor_emulation = MOUSE_EMULATION_NEVER;
 int user_cursor_x = 0,user_cursor_y = 0;
 int user_cursor_sw = 640,user_cursor_sh = 480;
 
@@ -4236,8 +4251,8 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
     user_cursor_x = motion->x - sdl.clip.x;
     user_cursor_y = motion->y - sdl.clip.y;
     user_cursor_locked = sdl.mouse.locked;
-	
-	user_cursor_synced = !user_cursor_locked;
+	user_cursor_synced = sdl.mouse.synced;
+	user_cursor_emulation = sdl.mouse.emulation;
 	user_cursor_sw = sdl.clip.w;
 	user_cursor_sh = sdl.clip.h;
 	
@@ -4256,16 +4271,22 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
 		const bool inside =
 			motion->x >= sdl.clip.x && motion->x < sdl.clip.x + sdl.clip.w &&
 			motion->y >= sdl.clip.y && motion->y < sdl.clip.y + sdl.clip.h;
-		SDL_ShowCursor(isdown || inside ? SDL_DISABLE : SDL_ENABLE);
+		if ((user_cursor_emulation != MOUSE_EMULATION_LOCKED) && (user_cursor_emulation != MOUSE_EMULATION_NEVER))
+			SDL_ShowCursor(isdown || inside ? SDL_DISABLE : SDL_ENABLE);
 		/* TODO: If guest has not read mouse cursor position within 250ms show cursor again */
 	}
 	bool MOUSE_IsHidden();
 	if (!user_cursor_locked)
 	{
 		/* Show only when DOS app is not using mouse */
-		SDL_ShowCursor(MOUSE_IsHidden() ? SDL_ENABLE : SDL_DISABLE);
+		if(user_cursor_synced)
+			SDL_ShowCursor(MOUSE_IsHidden() ? SDL_ENABLE : SDL_DISABLE);
+		else
+			SDL_ShowCursor(SDL_ENABLE);
 	}
-	Mouse_CursorMoved(xrel, yrel, x, y, emu);
+	if ( user_cursor_synced || 
+	(!user_cursor_synced && user_cursor_locked))
+		Mouse_CursorMoved(xrel, yrel, x, y, emu);
 }
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW /* SDL drawn menus */
@@ -5587,6 +5608,9 @@ void GFX_Events() {
 		}
     }
 #endif
+
+	GFX_EventsMouse();
+	
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
         case SDL_WINDOWEVENT:
@@ -5608,6 +5632,7 @@ void GFX_Events() {
                 break;
             case SDL_WINDOWEVENT_FOCUS_LOST:
                 if (sdl.mouse.locked) {
+					CaptureMouseNotify();
                     GFX_CaptureMouse();
                 }
                 SetPriority(sdl.priority.nofocus);
@@ -6256,6 +6281,22 @@ void SDL_SetupConfigSection() {
 	Pint = sdl_sec->Add_int("sensitivity",Property::Changeable::Always,100);
 	Pint->SetMinMax(1,1000);
 	Pint->Set_help("Mouse sensitivity.");
+	
+	Pbool = sdl_sec->Add_bool("synced",Property::Changeable::Always,true);
+	Pbool->Set_help("Mouse position reported will be exactly where user hand has moved to, even if mouse is not locked.");
+
+	const char * emulation[] = {"integration", "locked", "always", "never", NULL};
+	Pstring  = sdl_sec->Add_string("mouse_emulation", Property::Changeable::Always, emulation[1]);
+	Pstring->Set_help(
+		"When is mouse emulated ?\n"
+		"integration: when not locked\n"
+		"locked: when locked\n"
+		"always: every time\n"
+		"never: at no time\n"
+		"If disabled, the mouse position in DOSBox-X is exactly where the host OS reports it.\n"
+		"When using a high DPI mouse, the emulation of mouse movement can noticeably reduce the\n"
+		"sensitiveness of your device, i.e. the mouse is slower but more precise.");
+	Pstring->Set_values(emulation);
 
 	Pbool = sdl_sec->Add_bool("waitonerror",Property::Changeable::Always, true);
 	Pbool->Set_help("Wait before closing the console if dosbox has an error.");
