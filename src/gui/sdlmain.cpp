@@ -6269,7 +6269,7 @@ void SDL_SetupConfigSection() {
 	Pstring->Set_help("What video system to use for output.");
 	Pstring->Set_values(outputs);
 
-	Pbool = sdl_sec->Add_bool("autolock",Property::Changeable::Always, false);
+	Pbool = sdl_sec->Add_bool("autolock",Property::Changeable::Always, true);
 	Pbool->Set_help("Mouse will automatically lock, if you click on the screen. (Press CTRL-F10 to unlock)");
 
 	const char* feeds[] = { "none", "beep", "flash", NULL};
@@ -6281,7 +6281,7 @@ void SDL_SetupConfigSection() {
 	Pint->SetMinMax(1,1000);
 	Pint->Set_help("Mouse sensitivity.");
 	
-	Pbool = sdl_sec->Add_bool("synced",Property::Changeable::Always,true);
+	Pbool = sdl_sec->Add_bool("synced",Property::Changeable::Always,false);
 	Pbool->Set_help("Mouse position reported will be exactly where user hand has moved to, even if mouse is not locked.");
 
 	const char * emulation[] = {"integration", "locked", "always", "never", NULL};
