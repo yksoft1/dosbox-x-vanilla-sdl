@@ -152,6 +152,7 @@ static struct {
 	Bit16u hidden;
 	float add_x,add_y;
 	Bit16s min_x,max_x,min_y,max_y;
+	Bit16s max_screen_x,max_screen_y;
 	float mickey_x,mickey_y;
 	float x,y;
 	float ps2x,ps2y;
@@ -631,10 +632,19 @@ void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
 	}
 	if (!emu)
 	{
-		const double x1 = 1.0 / static_cast<double>(user_cursor_sw) * user_cursor_x;
-		const double y1 = 1.0 / static_cast<double>(user_cursor_sh) * user_cursor_y;
-		mouse.x = x1 * mouse.max_x;
-		mouse.y = y1 * mouse.max_y;
+		const double x1 = (double)user_cursor_x / static_cast<double>(user_cursor_sw - 1);
+		const double y1 = (double)user_cursor_y / static_cast<double>(user_cursor_sh - 1);
+		mouse.x = x1 * mouse.max_screen_x;
+		mouse.y = y1 * mouse.max_screen_y;
+		
+		if (mouse.x < mouse.min_x)
+			mouse.x = mouse.min_x;
+		if (mouse.y < mouse.min_y)
+			mouse.y = mouse.min_y;
+		if (mouse.x > mouse.max_x)
+			mouse.x = mouse.max_x;
+		if (mouse.y > mouse.max_y)
+			mouse.y = mouse.max_y;
 	}
 
 
@@ -877,6 +887,9 @@ void Mouse_NewVideoMode(void) {
 	mouse.cursorType = 0;
 	mouse.enabled=true;
 	mouse.oldhidden=1;
+	
+	mouse.max_screen_x = mouse.max_x;
+	mouse.max_screen_y = !mouse.max_y;
 }
 
 //Much too empty, Mouse_NewVideoMode contains stuff that should be in here
