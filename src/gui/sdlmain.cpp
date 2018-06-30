@@ -2752,7 +2752,7 @@ void CaptureMouseNotifyWin32()
 			break;
 		case AUTOLOCK_FEEDBACK_FLASH:
 		{
-#if !defined(C_SDL2)
+#if !defined(C_SDL2) && !defined(HX_DOS)
 			const UINT cnt = lck ? 4 : 2;
 			const DWORD tim = lck ? 80 : 40;
 			const HWND wnd = GetHWND();
@@ -4279,7 +4279,7 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
 	{
 		/* Show only when DOS app is not using mouse */
 		if(user_cursor_synced)
-			SDL_ShowCursor(MOUSE_IsHidden() ? SDL_ENABLE : SDL_DISABLE);
+			SDL_ShowCursor(MOUSE_IsHidden() && !mouse_notify_mode ? SDL_ENABLE : SDL_DISABLE);
 		else
 			SDL_ShowCursor(SDL_ENABLE);
 	}
