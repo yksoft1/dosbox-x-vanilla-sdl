@@ -7345,21 +7345,53 @@ void ROMBIOS_Init() {
     }
 }
 
+//! \brief Updates the state of a lockable key.
+void UpdateKeyWithLed(int nVirtKey, int flagAct, int flagLed);
+
 void BIOS_SynchronizeNumLock()
 {
+#if defined(WIN32)	
+	UpdateKeyWithLed(VK_NUMLOCK, BIOS_KEYBOARD_FLAGS1_NUMLOCK_ACTIVE, BIOS_KEYBOARD_LEDS_NUM_LOCK);
+#endif
+}
+
+void BIOS_SynchronizeCapsLock()
+{
 #if defined(WIN32)
-	Bit8u flag = mem_readb(BIOS_KEYBOARD_FLAGS1);
-	Bit8u leds = mem_readb(BIOS_KEYBOARD_LEDS);
-	SHORT stat = GetKeyState(VK_NUMLOCK);
-	if (stat & 1) {
-		flag |= 0x20;
-		leds |= 0x02;
+	UpdateKeyWithLed(VK_CAPITAL, BIOS_KEYBOARD_FLAGS1_CAPS_LOCK_ACTIVE, BIOS_KEYBOARD_LEDS_CAPS_LOCK);
+#endif
+}
+
+void BIOS_SynchronizeScrollLock()
+{
+#if defined(WIN32)
+	UpdateKeyWithLed(VK_SCROLL, BIOS_KEYBOARD_FLAGS1_SCROLL_LOCK_ACTIVE, BIOS_KEYBOARD_LEDS_SCROLL_LOCK);
+#endif
+}
+
+void UpdateKeyWithLed(int nVirtKey, int flagAct, int flagLed)
+{
+#if defined(WIN32)
+	const SHORT state = GetKeyState(nVirtKey);
+
+	const PhysPt flags1 = BIOS_KEYBOARD_FLAGS1;
+	const PhysPt flags2 = BIOS_KEYBOARD_LEDS;
+
+	Bit8u flag1 = mem_readb(flags1);
+	Bit8u flag2 = mem_readb(flags2);
+
+	if (state & 1)
+	{
+		flag1 |= flagAct;
+		flag2 |= flagLed;
 	}
-	else {
-		flag &= ~0x20;
-		leds &= ~0x02;
+	else
+	{
+		flag1 &= ~flagAct;
+		flag2 &= ~flagLed;
 	}
-	mem_writeb(BIOS_KEYBOARD_FLAGS1, flag);
-	mem_writeb(BIOS_KEYBOARD_LEDS, leds);
+	
+	mem_writeb(flags1, flag1);
+	mem_writeb(flags2, flag2);
 #endif
 }

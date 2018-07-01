@@ -412,6 +412,7 @@ bool						fullscreen_switch = true;
 bool						dos_kernel_disabled = true;
 bool						startup_state_numlock = false; // Global for keyboard initialisation
 bool						startup_state_capslock = false; // Global for keyboard initialisation
+bool                        startup_state_scrlock = false; // Global for keyboard initialisation
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
 #if SDL_DOSBOX_X_SPECIAL
@@ -5836,6 +5837,8 @@ void GFX_Events() {
 					SetPriority(sdl.priority.focus);
 					CPU_Disable_SkipAutoAdjust();
 					BIOS_SynchronizeNumLock();
+					BIOS_SynchronizeCapsLock();
+					BIOS_SynchronizeScrollLock();
 				} else {
 					if (sdl.mouse.locked) 
 					{
@@ -6640,6 +6643,8 @@ void SetNumLock(void) {
 
 #ifdef WIN32
 bool numlock_stat=false;
+bool capslock_stat=false;
+bool scrlock_stat=false;
 #endif
 
 void CheckNumLockState(void) {
@@ -6650,6 +6655,30 @@ void CheckNumLockState(void) {
 	if (keyState[VK_NUMLOCK] & 1) {
 		numlock_stat = true;
 		startup_state_numlock = true;
+	}
+#endif
+}
+
+void CheckCapsLockState(void) {
+#ifdef WIN32
+	BYTE keyState[256];
+
+	GetKeyboardState((LPBYTE)(&keyState));
+	if (keyState[VK_CAPITAL] & 1) {
+		capslock_stat = true;
+		startup_state_capslock = true;
+	}
+#endif
+}
+
+void CheckScrollLockState(void) {
+#ifdef WIN32
+	BYTE keyState[256];
+
+	GetKeyboardState((LPBYTE)(&keyState));
+	if (keyState[VK_SCROLL] & 1) {
+		scrlock_stat = true;
+		startup_state_scrlock = true;
 	}
 #endif
 }
@@ -7769,6 +7798,8 @@ int main(int argc, char* argv[]) {
 
 		/* -- Init the configuration system and add default values */
 		CheckNumLockState();
+		CheckCapsLockState();
+		CheckScrollLockState();
 
 		/* -- setup the config sections for config parsing */
 		LOG::SetupConfigSection();
