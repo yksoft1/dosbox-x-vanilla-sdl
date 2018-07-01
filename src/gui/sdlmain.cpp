@@ -1882,6 +1882,8 @@ dosurface:
 				goto dosurface;
 			}
 		} else {
+			int menuheight = 0;
+
 			sdl.clip.x=0;
             sdl.clip.y=0;
 
@@ -1900,40 +1902,45 @@ dosurface:
 				LOG_MSG("menuScale=%lu",(unsigned long)scale);
 				mainMenu.setScale(scale);
 			}
+			
+			if (mainMenu.isVisible()) menuheight = mainMenu.menuBox.h;
 #endif		
+			
+			/* menu size and consideration of width and height */
+			Bitu consider_height = menu.maxwindow ? currentWindowHeight : (height + (unsigned int)menuheight + (sdl.overscan_width * 2));
+			Bitu consider_width = menu.maxwindow ? currentWindowWidth : (width + (sdl.overscan_width * 2));
+
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+			if (mainMenu.isVisible())
+			{
+				/* enforce a minimum 640x400 surface size.
+				 * the menus are useless below 640x400 */
+				if (consider_width < (640 + (sdl.overscan_width * 2)))
+					consider_width = (640 + (sdl.overscan_width * 2));
+				if (consider_height < (400 + (sdl.overscan_width * 2) + (unsigned int)menuheight))
+					consider_height = (400 + (sdl.overscan_width * 2) + (unsigned int)menuheight);
+			}
+#endif
+
+			/* decide where the rectangle on the screen goes */
+			int final_width,final_height,ax,ay;
 			
 			/* center the screen in the window */
 			{
-                int menuheight = 0;
-#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-                if (mainMenu.isVisible()) menuheight = mainMenu.menuBox.h;
-#endif
-				Bitu consider_height = menu.maxwindow ? currentWindowHeight : (height + menuheight + (sdl.overscan_width * 2));
-				Bitu consider_width = menu.maxwindow ? currentWindowWidth : (width + (sdl.overscan_width * 2));
+				final_height = max(max(consider_height,userResizeWindowHeight),(Bitu)(sdl.clip.y+sdl.clip.h)) - menuheight - (sdl.overscan_width * 2);
+				final_width = max(max(consider_width,userResizeWindowWidth),(Bitu)(sdl.clip.x+sdl.clip.w)) - (sdl.overscan_width * 2);
 
-#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-				if (mainMenu.isVisible()) {
-				/* enforce a minimum 640x400 surface size.
-				 * the menus are useless below 640x400 */
-				if (consider_width < (640+(sdl.overscan_width * 2)))
-					consider_width = (640+(sdl.overscan_width * 2));
-				if (consider_height < (400+(sdl.overscan_width * 2)+menuheight))
-					consider_height = (400+(sdl.overscan_width * 2)+menuheight);
-				}
-#endif
-
-				int final_height = max(max(consider_height,userResizeWindowHeight),(Bitu)(sdl.clip.y+sdl.clip.h)) - menuheight - (sdl.overscan_width * 2);
-				int final_width = max(max(consider_width,userResizeWindowWidth),(Bitu)(sdl.clip.x+sdl.clip.w)) - (sdl.overscan_width * 2);
-
-				int ax = (final_width - (sdl.clip.x + sdl.clip.w)) / 2;
-				int ay = (final_height - (sdl.clip.y + sdl.clip.h)) / 2;
+				ax = (final_width - (sdl.clip.x + sdl.clip.w)) / 2;
+				ay = (final_height - (sdl.clip.y + sdl.clip.h)) / 2;
 				if (ax < 0) ax = 0;
 				if (ay < 0) ay = 0;
 				sdl.clip.x += ax + sdl.overscan_width;
 				sdl.clip.y += ay + sdl.overscan_width;
 //				sdl.clip.w = currentWindowWidth - sdl.clip.x;
 //				sdl.clip.h = currentWindowHeight - sdl.clip.y;
-
+			}
+			
+			{
 				final_width += sdl.overscan_width*2;
 				final_height += menuheight + sdl.overscan_width*2;
                 sdl.clip.y += menuheight;
