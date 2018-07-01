@@ -42,6 +42,7 @@
 #include "qcow2_disk.h"
 #include "setup.h"
 #include "control.h"
+#include "video.h"
 #include <time.h>
 #include "menu.h"
 bool Mouse_Drv=true;
@@ -3993,6 +3994,28 @@ static void NMITEST_ProgramStart(Program * * make) {
 	*make=new NMITEST;
 }
 
+class CAPMOUSE : public Program
+{
+public:
+	void Run() //override
+	{
+		void CaptureMouseNotify();
+		bool Mouse_IsLocked();
+		
+		CaptureMouseNotify();
+		GFX_CaptureMouse();
+		std::string msg;
+		msg.append("Mouse ");
+		msg.append(Mouse_IsLocked() ? "captured" : "released");
+		WriteOut(msg.c_str());
+	}
+};
+
+void CAPMOUSE_ProgramStart(Program** make)
+{
+	*make = new CAPMOUSE;
+}
+
 void DOS_SetupPrograms(void) {
 	/*Add Messages */
 
@@ -4455,4 +4478,6 @@ void DOS_SetupPrograms(void) {
 
     if (IS_PC98_ARCH)
         PROGRAMS_MakeFile("PC98UTIL.COM",PC98UTIL_ProgramStart);
+	
+	PROGRAMS_MakeFile("CAPMOUSE.COM", CAPMOUSE_ProgramStart);
 }

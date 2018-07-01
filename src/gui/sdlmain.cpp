@@ -3932,6 +3932,11 @@ void Mouse_AutoLock(bool enable) {
 	}
 }
 
+bool Mouse_IsLocked()
+{
+	return sdl.mouse.locked;
+}
+
 static void RedrawScreen(Bit32u nWidth, Bit32u nHeight) {
 	int width;
 	int height;
