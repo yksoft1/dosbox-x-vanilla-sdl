@@ -2592,9 +2592,9 @@ void UpdateKeyboardLEDState(Bitu led_state/* in the same bitfield arrangement as
 void UpdateKeyboardLEDState(Bitu led_state/* in the same bitfield arrangement as using command 0xED on PS/2 keyboards */) {
 #if defined(WIN32) && !defined(C_SDL2) && !defined(HX_DOS) /* Microsoft Windows */
 	if (exthook_enabled) { // ONLY if ext hook is enabled, else we risk infinite loops with keyboard events
-		WinSetKeyToggleState(VK_NUMLOCK, !!(led_state & 2));
-		WinSetKeyToggleState(VK_SCROLL, !!(led_state & 1));
-		WinSetKeyToggleState(VK_CAPITAL, !!(led_state & 4));
+		//WinSetKeyToggleState(VK_NUMLOCK, !!(led_state & 2));
+		//WinSetKeyToggleState(VK_SCROLL, !!(led_state & 1));
+		//WinSetKeyToggleState(VK_CAPITAL, !!(led_state & 4));
 	}
 #endif
 }
@@ -2643,9 +2643,9 @@ void DoExtendedKeyboardHook(bool enable) {
 		if (exthook_winhook) {
 			if (enable_hook_lock_toggle_keys) {
 				// restore state
-				WinSetKeyToggleState(VK_NUMLOCK, on_capture_num_lock_was_on);
-				WinSetKeyToggleState(VK_SCROLL, on_capture_scroll_lock_was_on);
-				WinSetKeyToggleState(VK_CAPITAL, on_capture_caps_lock_was_on);
+			//	WinSetKeyToggleState(VK_NUMLOCK, on_capture_num_lock_was_on);
+			//	WinSetKeyToggleState(VK_SCROLL, on_capture_scroll_lock_was_on);
+			//	WinSetKeyToggleState(VK_CAPITAL, on_capture_caps_lock_was_on);
 			}
 
 			{
@@ -3909,6 +3909,8 @@ static void GUI_StartUp() {
 	MAPPER_AddHandler(&GUI_ResetResize, MK_nothing, 0, "resetsize", "ResetSize", &item);
 	item->set_text("Reset window size");
 #endif
+
+#if !defined(WIN32) //We don't have ways to detect lock keys in other systems now
 	/* Get Keyboard state of numlock and capslock */
 #if defined(C_SDL2)
     SDL_Keymod keystate = SDL_GetModState();
@@ -3917,6 +3919,7 @@ static void GUI_StartUp() {
 #endif
 	if(keystate&KMOD_NUM) startup_state_numlock = true;
 	if(keystate&KMOD_CAPS) startup_state_capslock = true;
+#endif
 
 	UpdateWindowDimensions();
 }
@@ -6641,19 +6644,12 @@ void SetNumLock(void) {
 #endif
 }
 
-#ifdef WIN32
-bool numlock_stat=false;
-bool capslock_stat=false;
-bool scrlock_stat=false;
-#endif
-
 void CheckNumLockState(void) {
 #ifdef WIN32
 	BYTE keyState[256];
 
 	GetKeyboardState((LPBYTE)(&keyState));
 	if (keyState[VK_NUMLOCK] & 1) {
-		numlock_stat = true;
 		startup_state_numlock = true;
 	}
 #endif
@@ -6665,7 +6661,6 @@ void CheckCapsLockState(void) {
 
 	GetKeyboardState((LPBYTE)(&keyState));
 	if (keyState[VK_CAPITAL] & 1) {
-		capslock_stat = true;
 		startup_state_capslock = true;
 	}
 #endif
@@ -6677,7 +6672,6 @@ void CheckScrollLockState(void) {
 
 	GetKeyboardState((LPBYTE)(&keyState));
 	if (keyState[VK_SCROLL] & 1) {
-		scrlock_stat = true;
 		startup_state_scrlock = true;
 	}
 #endif
