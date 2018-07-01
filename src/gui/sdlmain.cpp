@@ -4287,22 +4287,29 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
 	if (mouse_notify_mode != 0)
 	{
 		/* for mouse integration driver */
-		xrel = yrel = x = y = 0.0f;
+		if (!sdl.mouse.locked)
+			xrel = yrel = x = y = 0.0f;
+			
 		emu = sdl.mouse.locked;
 		const bool isdown = Mouse_GetButtonState() != 0;
 
-		if ((user_cursor_emulation != MOUSE_EMULATION_LOCKED) && (user_cursor_emulation != MOUSE_EMULATION_NEVER))
-			SDL_ShowCursor((isdown || inside) ? SDL_DISABLE : SDL_ENABLE);
+		if (!sdl.mouse.locked && !sdl.desktop.fullscreen)
+			if ((user_cursor_emulation != MOUSE_EMULATION_LOCKED) && (user_cursor_emulation != MOUSE_EMULATION_NEVER))
+				SDL_ShowCursor((isdown || inside) ? SDL_DISABLE : SDL_ENABLE);
 		/* TODO: If guest has not read mouse cursor position within 250ms show cursor again */
 	}
 	else if (!user_cursor_locked)
 	{
 		bool MOUSE_IsHidden();
 		/* Show only when DOS app is not using mouse */
-		if(user_cursor_synced)
-			SDL_ShowCursor((!inside || (MOUSE_IsHidden() && !mouse_notify_mode)) ? SDL_ENABLE : SDL_DISABLE);
-		else
-			SDL_ShowCursor(SDL_ENABLE);
+		
+		if (!sdl.mouse.locked && !sdl.desktop.fullscreen)
+		{
+			if(user_cursor_synced)
+				SDL_ShowCursor((!inside || (MOUSE_IsHidden() && !mouse_notify_mode)) ? SDL_ENABLE : SDL_DISABLE);
+			else
+				SDL_ShowCursor(SDL_ENABLE);
+		}
 	}
 	if ( user_cursor_synced || 
 	(!user_cursor_synced && user_cursor_locked))
