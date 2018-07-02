@@ -87,7 +87,11 @@ void MAPPER_UpdateJoysticks(void);
 #endif
 
 /* Mouse related */
+//defined in sdlmain.cpp
 void GFX_CaptureMouse(void);
+void GFX_CaptureMouse(bool capture);
+void CaptureMouseNotify();
+void CaptureMouseNotify(bool capture);
 extern bool mouselocked; //true if mouse is confined to window
 
 #endif

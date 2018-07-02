@@ -3999,14 +3999,41 @@ class CAPMOUSE : public Program
 public:
 	void Run() //override
 	{
-		void CaptureMouseNotify();
 		bool Mouse_IsLocked();
-		
-		CaptureMouseNotify();
-		GFX_CaptureMouse();
+		int val = 0;
+		std::string tmp = std::string("");
+
+		if(cmd->GetCount() == 0 || cmd->FindExist("/?", true))
+			val = 0;
+		else if(cmd->FindExist("/C", false))
+			val = 1;
+		else if(cmd->FindExist("/R", false))
+			val = 2;
+
+		bool cap = false;
+		switch(val)
+		{
+			case 2:
+				break;
+			case 1:
+				cap = true;
+				break;
+			case 0:
+			default:
+				WriteOut("Mouse capture/release.\n\n");
+				WriteOut("CAPMOUSE /[?|C|R]\n");
+				WriteOut(" /? help\n");
+				WriteOut(" /C capture mouse\n");
+				WriteOut(" /R release mouse\n");
+				return;
+			}
+
+		CaptureMouseNotify(!cap);
+		GFX_CaptureMouse(cap);
 		std::string msg;
 		msg.append("Mouse ");
 		msg.append(Mouse_IsLocked() ? "captured" : "released");
+		msg.append("\n");
 		WriteOut(msg.c_str());
 	}
 };
