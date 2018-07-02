@@ -169,9 +169,6 @@ Bit8u VESA_GetSVGAModeInformation(Bit16u mode,Bit16u seg,Bit16u off) {
 
 	mode&=0x3fff;	// vbe2 compatible, ignore lfb and keep screen content bits
 	if (mode<0x100) return 0x01;
-	if (svga.accepts_mode) {
-		if (!svga.accepts_mode(mode)) return 0x01;
-	}
 	while (ModeList_VGA[i].mode!=0xffff) {
 		/* Hack for VBE 1.2 modes and 24/32bpp ambiguity */
 		if (ModeList_VGA[i].mode >= 0x100 && ModeList_VGA[i].mode <= 0x11F &&
@@ -195,6 +192,12 @@ Bit8u VESA_GetSVGAModeInformation(Bit16u mode,Bit16u seg,Bit16u off) {
 foundit:
 	if ((int10.vesa_oldvbe) && (ModeList_VGA[i].mode>=0x120)) return 0x01;
 	VideoModeBlock * mblock=&ModeList_VGA[i];
+
+	/* Don't allow querying modes the SVGA card does not accept,
+	 * unless the user modified the mode. */
+	if (svga.accepts_mode && !(mblock->special & _USER_MODIFIED)) {
+		if (!svga.accepts_mode(mode)) return 0x01;
+	}
 
 	/* do not return information on deleted modes */
 	if (mblock->type == M_ERROR) return 0x01;
@@ -309,7 +312,7 @@ foundit:
 		pageSize &= ~0xFFFF;
 	}
 	Bitu pages = 0;
-	if (pageSize > vga.vmemsize) {
+	if ((pageSize > vga.vmemsize) || (mblock->special & _USER_DISABLED)) {
 		// mode not supported by current hardware configuration
 		modeAttributes &= ~0x1;
 	} else if (pageSize) {
@@ -631,8 +634,20 @@ Bitu INT10_WriteVESAModeList(Bitu max_modes) {
 			(ModeList_VGA[i].type == M_LIN24 && vesa12_modes_32bpp))) {
 			/* ignore */
 		}
+		/* ignore deleted modes */
+		else if (ModeList_VGA[i].type == M_ERROR) {
+			/* ignore */
+		}
 		else {
+			/* If there is no "accepts mode" then accept.
+			 *
+			 * If the user modified the mode, then accept.
+			 * If the mode exceeds video memory, then the mode will be reported as not supported by VESA BIOS functions.
+			 *
+			 * If the SVGA card would accept the mode (generally it's a memsize check), then accept. */
 			if (!svga.accepts_mode)
+				canuse_mode=true;
+			else if (ModeList_VGA[i].special & _USER_MODIFIED)
 				canuse_mode=true;
 			else if (svga.accepts_mode(ModeList_VGA[i].mode))
 				canuse_mode=true;
@@ -680,6 +695,12 @@ Bitu INT10_WriteVESAModeList(Bitu max_modes) {
 		i++;
 	}
 
+	assert(modecount <= int10.rom.vesa_alloc_modes); /* do not overrun the buffer */
+
+	/* after the buffer, is 0xFFFF */
+	phys_writew(PhysMake(0xc000,mode_wptr),0xFFFF);
+	mode_wptr+=2;
+
 	return modecount;
 }
 
@@ -692,8 +713,10 @@ void INT10_SetupVESA(void) {
 	if (svgaCard == SVGA_None) return;
 
 	/* Put the mode list somewhere in memory */
+	int10.rom.vesa_alloc_modes = ~0;
 	int10.rom.vesa_modes = RealMake(0xc000,int10.rom.used);
 	modecount = INT10_WriteVESAModeList(0xFFFF/*max mode count*/);
+	int10.rom.vesa_alloc_modes = (Bit16u)modecount;
 	int10.rom.used += modecount * 2u;
 	phys_writew(PhysMake(0xc000,int10.rom.used),0xffff);
 	int10.rom.used+=2;
