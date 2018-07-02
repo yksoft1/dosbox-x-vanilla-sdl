@@ -143,6 +143,11 @@ VideoModeBlock ModeList_VGA[]={
 // if you select VGA 320x200 with S3 acceleration.
 { 0x153  ,M_LIN8   ,320 ,200 ,40 ,25 ,8 ,8  ,1 ,0xA0000 ,0x10000,100 ,449 ,80 ,400 , _S3_PIXEL_DOUBLE | _REPEAT1 },
 
+{ 0x15C ,M_LIN8, 512 ,384 ,64 ,48 ,8, 8 ,1 ,0xA0000 ,0x10000,168 ,806 ,128,768 , _S3_PIXEL_DOUBLE | _DOUBLESCAN },
+{ 0x159 ,M_LIN8, 400 ,300 ,50 ,37 ,8 ,8 ,1 ,0xA0000 ,0x10000,132 ,628 ,100,600 , _S3_PIXEL_DOUBLE | _DOUBLESCAN },
+{ 0x15D ,M_LIN16, 512 ,384 ,64 ,48 ,8, 16 ,1 ,0xA0000 ,0x10000,168 ,806 ,128,768 , _S3_PIXEL_DOUBLE | _DOUBLESCAN },
+{ 0x15A ,M_LIN16, 400 ,300 ,50 ,37 ,8 ,16 ,1 ,0xA0000 ,0x10000,132 ,628 ,100,600 , _S3_PIXEL_DOUBLE | _DOUBLESCAN },
+
 { 0x160  ,M_LIN15  ,320 ,240 ,40 ,30 ,8 ,8  ,1 ,0xA0000 ,0x10000,100 ,525 , 80 ,480 , _REPEAT1 },
 { 0x161  ,M_LIN15  ,320 ,400 ,40 ,50 ,8 ,8  ,1 ,0xA0000 ,0x10000,100 ,449 , 80 ,400 ,0 },
 { 0x162  ,M_LIN15  ,320 ,480 ,40 ,60 ,8 ,8  ,1 ,0xA0000 ,0x10000,100 ,525 , 80 ,480 ,0 },
@@ -1930,6 +1935,8 @@ public:
                     match = false;
                 else if (ModeList_VGA[array_i].type == M_ERROR)
                     match = false;
+				else if (ModeList_VGA[array_i].mode <= 0x13)
+					match = false;
 
                 if (!match)
                     array_i++;
@@ -1950,6 +1957,10 @@ public:
             WriteOut("Mode not found\n");
             return;
         }
+		else if (ModeList_VGA[array_i].mode <= 0x13) {
+			WriteOut("Editing base VGA modes is not allowed\n");
+			return;
+		}
         else if (modefind) {
             WriteOut("Found mode 0x%x\n",(unsigned int)ModeList_VGA[array_i].mode);
         }
@@ -1972,9 +1983,20 @@ public:
             if (fmt >= 0) {
                 ModeList_VGA[array_i].type = (VGAModes)fmt;
                 /* will require reprogramming width in some cases! */
-                w = ModeList_VGA[array_i].swidth;
+                if (w < 0) w = ModeList_VGA[array_i].swidth;
             }
             if (w > 0) {
+				/* enforce alignment to avoid problems with modesetting code */
+				{
+					unsigned int aln = 8;
+
+					if (ModeList_VGA[array_i].type == M_LIN4)
+					aln = 16;
+
+					w += aln / 2;
+					w -= w % aln;
+				}
+
                 ModeList_VGA[array_i].swidth = (Bitu)w;
                 if (ModeList_VGA[array_i].type == M_LIN15 || ModeList_VGA[array_i].type == M_LIN16) {
                     ModeList_VGA[array_i].hdispend = (Bitu)w / 4;
@@ -2003,7 +2025,7 @@ public:
             if (ch == 8 || ch == 14 || ch == 16)
                 ModeList_VGA[array_i].cheight = (Bitu)ch;
 
-            ModeList_VGA[array_i].twidth = ModeList_VGA[array_i].swidth / 8u;
+            ModeList_VGA[array_i].twidth = ModeList_VGA[array_i].swidth / ModeList_VGA[array_i].cwidth;
             ModeList_VGA[array_i].theight = ModeList_VGA[array_i].sheight / ModeList_VGA[array_i].cheight;
         }
 
