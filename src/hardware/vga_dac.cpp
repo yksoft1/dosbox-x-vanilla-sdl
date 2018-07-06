@@ -81,10 +81,7 @@ static void VGA_DAC_SendColor( Bitu index, Bitu src ) {
 void VGA_DAC_UpdateColor( Bitu index ) {
 	Bitu maskIndex;
 
-    if (IS_EGA_ARCH) {
-        VGA_DAC_SendColor( index, index );
-    }
-    else {
+    if (IS_VGA_ARCH) {
         switch (vga.mode) {
             case M_VGA:
             case M_LIN8:
@@ -100,6 +97,9 @@ void VGA_DAC_UpdateColor( Bitu index ) {
                 break;
         }
     }
+	else {
+		VGA_DAC_SendColor( index, index );
+	}
 }
 
 void VGA_DAC_UpdateColorPalette() {
@@ -108,7 +108,7 @@ void VGA_DAC_UpdateColorPalette() {
 }
 
 void write_p3c6(Bitu port,Bitu val,Bitu iolen) {
-	if((IS_VGA_ARCH) && (svgaCard==SVGA_None) && (vga.dac.hidac_counter>3)) {
+	if((IS_VGA_ARCH) && (vga.dac.hidac_counter>3)) {
 		vga.dac.reg02=val;
 		vga.dac.hidac_counter=0;
 		VGA_StartResize();
