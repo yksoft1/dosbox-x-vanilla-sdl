@@ -14,7 +14,7 @@
 void UpdateWindowDimensions(Bitu width, Bitu height);
 void UpdateWindowMaximized(bool flag);
 
-#if 0 && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && !defined(C_SDL2)
 extern "C" void SDL1_hax_X11_jpfix(int ro_scan,int yen_scan);
 #endif
 
@@ -77,7 +77,7 @@ char *LinuxX11_KeySymName(Uint32 x) {
 }
 
 void Linux_JPXKBFix(void) {
-#if 0 && !defined(C_SDL2)
+#if SDL_DOSBOX_X_SPECIAL && !defined(C_SDL2)
     SDL_SysWMinfo wminfo;
     memset(&wminfo,0,sizeof(wminfo));
     SDL_VERSION(&wminfo.version);
