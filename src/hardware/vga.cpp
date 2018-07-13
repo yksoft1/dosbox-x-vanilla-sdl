@@ -135,6 +135,7 @@
 #include "pc98_gdc_const.h"
 #include "mixer.h"
 #include "menu.h"
+#include "mem.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -159,6 +160,8 @@ extern egc_quad                     pc98_gdc_tiles;
 extern uint8_t                      pc98_egc_srcmask[2]; /* host given (Neko: egc.srcmask) */
 extern uint8_t                      pc98_egc_maskef[2]; /* effective (Neko: egc.mask2) */
 extern uint8_t                      pc98_egc_mask[2]; /* host given (Neko: egc.mask) */
+
+uint32_t S3_LFB_BASE = S3_LFB_BASE_DEFAULT;
 
 VGA_Type vga;
 SVGA_Driver svga;
@@ -511,6 +514,8 @@ VGA_Vsync VGA_Vsync_Decode(const char *vsyncmodestr) {
 	return VS_Off;
 }
 
+bool has_pcibus_enable(void);
+
 void VGA_Reset(Section*) {
 	Section_prop * section=static_cast<Section_prop *>(control->GetSection("dosbox"));
 	string str;
@@ -519,6 +524,31 @@ void VGA_Reset(Section*) {
 	LOG(LOG_MISC,LOG_DEBUG)("VGA_Reset() reinitializing VGA emulation");
 
     GDC_display_plane_wait_for_vsync = section->Get_bool("pc-98 buffer page flip");
+	
+	S3_LFB_BASE = section->Get_hex("svga lfb base");
+	if (S3_LFB_BASE == 0) S3_LFB_BASE = S3_LFB_BASE_DEFAULT;
+
+	/* no farther than 32MB below the top */
+	if (S3_LFB_BASE > 0xFE000000UL)
+		S3_LFB_BASE = 0xFE000000UL;
+
+	if (has_pcibus_enable()) {
+		/* must be 32MB aligned (PCI) */
+		S3_LFB_BASE += 0x0FFFFFFUL;
+		S3_LFB_BASE &= ~0x1FFFFFFUL;
+	}
+	else {
+		/* must be 64KB aligned (ISA) */
+		S3_LFB_BASE += 0x7FFFUL;
+		S3_LFB_BASE &= ~0xFFFFUL;
+	}
+	
+	/* must not overlap system RAM */
+	if (S3_LFB_BASE < (MEM_TotalPages()*4096))
+		S3_LFB_BASE = (MEM_TotalPages()*4096);
+
+	LOG(LOG_VGA,LOG_DEBUG)("S3 linear framebuffer at 0x%lx",(unsigned long)S3_LFB_BASE);
+
     pc98_allow_scanline_effect = section->Get_bool("pc-98 allow scanline effect");
 	mainMenu.get_item("pc98_allow_200scanline").check(pc98_allow_scanline_effect).refresh_item(mainMenu);
 	
