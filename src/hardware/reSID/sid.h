@@ -121,7 +121,7 @@ protected:
   // For a resolution of 16 bits this yields L >= 285 and L >= 51473,
   // respectively.
   static const int FIR_N = 125;
-#ifdef __APPLE__
+#if defined (__APPLE__) || defined (__MINGW32__) 
 #define FIR_RES_INTERPOLATE 285
 #define FIR_RES_FAST 51473
 #else

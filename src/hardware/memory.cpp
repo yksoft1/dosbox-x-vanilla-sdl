@@ -1695,18 +1695,26 @@ void MEM_LoadState(Section *sec) {
 	(void)sec;//UNUSED
 	off_t memsize = memory.pages*4096;
 	if (MemBase != NULL) {
-		ZIPFileEntry *ent = savestate_zip.get_entry("memory.txt");
-		LOG_MSG("Size of memory.txt: %d", ent->file_length);
-		 ent = savestate_zip.get_entry("memory.bin");
+		ZIPFileEntry *ent = savestate_zip.get_entry("memory.bin");
 		if (ent != NULL) {
-			LOG_MSG("Size before rewind: %d", ent->file_length);
+			LOG_MSG("memory.bin file_length: %d", ent->file_length);
 			ent->rewind();
-			LOG_MSG("Size after rewind: %d", ent->file_length);
+			/*
+				ent->file_length seemed to always return incorrect value in 
+				memory.cpp here.
+				Is that a bug in MinGW? even joncampbell123's master has exact
+				same problem in my environment. ----yksoft1
+			*/
+#if 0
 			if (memsize == ent->file_length)
 				ent->read(MemBase, memsize);
 			else
 				LOG_MSG("Memory load state failure: Memory size mismatch, should be %d, %d in savestate", memsize, ent->file_length);
-		}
+#else
+			//HACK
+			ent->read(MemBase, memsize);	
+#endif
+			}
 	}
 
 	{

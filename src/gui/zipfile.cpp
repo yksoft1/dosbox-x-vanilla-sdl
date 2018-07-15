@@ -59,7 +59,6 @@ int ZIPFileEntry::read(void *buffer,size_t count) {
     if (file == NULL || file_offset == (off_t)0) return -1;
     if (position >= file_length) return 0;
 
-	LOG_MSG("ZIP entry size %d",  file_length);
     size_t mread = file_length - position;
     if (mread > count) mread = count;
 
@@ -86,7 +85,6 @@ int ZIPFileEntry::write(const void *buffer,size_t count) {
             file_length = position;
         }
     }
-	LOG_MSG("Wrote %d bytes", file_length);
     return count;
 }
 
@@ -122,7 +120,6 @@ ZIPFileEntry *ZIPFile::get_entry(const char *name) {
     std::map<std::string,ZIPFileEntry>::iterator i = entries.find(name);
     if (i == entries.end()) return NULL;
 	
-	LOG_MSG("Size: %d", (&(i->second))->file_length);
     return &(i->second);
 }
 
@@ -298,7 +295,6 @@ int ZIPFile::open(const char *path,int mode) {
                 ent->position = 0;
                 ent->name = (char*)tmp;
                 ent->file = this;
-				LOG_MSG("Found file %s, size %d", tmp, ent->file_length);
             }
         }
     }

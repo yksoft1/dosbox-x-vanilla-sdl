@@ -3388,8 +3388,6 @@ void CPU_LoadState(Section *sec) {
 		if (ent != NULL) {
 			zip_nv_pair_map nv(*ent);
 			
-			LOG_MSG("loaded cpureg.txt, length %d", ent->file_length);
-			
 			reg_eax =       nv.get_ulong("eax");
 			reg_ebx =       nv.get_ulong("ebx");
 			reg_ecx =       nv.get_ulong("ecx");
