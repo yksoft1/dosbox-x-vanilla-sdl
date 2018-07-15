@@ -53,6 +53,7 @@ void GFX_OpenGLRedrawScreen(void);
 #include <stdarg.h>
 #include <sys/types.h>
 #include <algorithm> // std::transform
+#include <fcntl.h>
 #ifdef WIN32
 # include <signal.h>
 # include <sys/stat.h>
@@ -106,6 +107,7 @@ void GFX_OpenGLRedrawScreen(void);
 #include "cross.h"
 #include "keymap.h"
 #include "control.h"
+#include "zipfile.h"
 
 # define MIN(a,b) ((a) < (b) ? (a) : (b))
 # define MAX(a,b) ((a) > (b) ? (a) : (b))
@@ -3641,6 +3643,39 @@ void ResetSystem(bool pressed) {
     throw int(3);
 }
 
+ZIPFile savestate_zip;
+
+void GUI_EXP_LoadState(bool pressed) {
+	if (!pressed) return;
+
+	LOG_MSG("Loading state... (experimental)");
+
+	if (savestate_zip.open("exsavest.zip",O_RDONLY) < 0) {
+		LOG_MSG("Unable to open save state");
+		return;
+	}
+
+	DispatchVMEvent(VM_EVENT_LOAD_STATE);
+
+	savestate_zip.close();
+}
+
+void GUI_EXP_SaveState(bool pressed) {
+	if (!pressed) return;
+
+	LOG_MSG("Saving state... (experimental)");
+
+	if (savestate_zip.open("exsavest.zip",O_RDWR|O_CREAT|O_TRUNC) < 0) {
+		LOG_MSG("Unable to open save state for writing");
+		return;
+	}
+
+	DispatchVMEvent(VM_EVENT_SAVE_STATE);
+
+	savestate_zip.writeZIPFooter();
+	savestate_zip.close();
+}
+ 
 bool has_GUI_StartUp = false;
 
 static void GUI_StartUp() {
@@ -3921,6 +3956,14 @@ static void GUI_StartUp() {
 	MAPPER_AddHandler(&GUI_ResetResize, MK_nothing, 0, "resetsize", "ResetSize", &item);
 	item->set_text("Reset window size");
 #endif
+
+	/* EXPERIMENTAL!!!! */
+	MAPPER_AddHandler(&GUI_EXP_SaveState, MK_f1, MMODHOST, "exp_savestate", "EX:SvState", &item);
+	item->set_text("Save State (EXPERIMENTAL)");
+
+	/* EXPERIMENTAL!!!! */
+	MAPPER_AddHandler(&GUI_EXP_LoadState, MK_f2, MMODHOST, "exp_loadstate", "EX:LdState", &item);
+	item->set_text("Load State (EXPERIMENTAL)");
 
 #if !defined(WIN32) //We don't have ways to detect lock keys in other systems now
 	/* Get Keyboard state of numlock and capslock */

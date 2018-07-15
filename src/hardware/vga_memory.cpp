@@ -31,6 +31,9 @@
 #include "cpu.h"
 #include "pc98_cg.h"
 #include "pc98_gdc.h"
+#include "zipfile.h"
+
+extern ZIPFile savestate_zip;
 
 extern bool non_cga_ignore_oddeven;
 extern bool non_cga_ignore_oddeven_engage;
@@ -2065,6 +2068,33 @@ static void VGA_Memory_ShutDown(Section * /*sec*/) {
 	}
 }
 
+void VGAMEM_LoadState(Section *sec) {
+	(void)sec;//UNUSED
+
+	if (MemBase != NULL) {
+		ZIPFileEntry *ent = savestate_zip.get_entry("vga.memory.bin");
+		if (ent != NULL) {
+			ent->rewind();
+			if (vga.vmemsize == ent->file_length)
+				ent->read(vga.mem.linear, vga.vmemsize);
+			else
+				LOG_MSG("VGA Memory load state failure: VGA Memory size mismatch");
+		}
+	}
+}
+
+void VGAMEM_SaveState(Section *sec) {
+	(void)sec;//UNUSED
+
+	if (vga.mem.linear != NULL) {
+		ZIPFileEntry *ent = savestate_zip.new_entry("vga.memory.bin");
+		if (ent != NULL) {
+			LOG_MSG("Writing vga.memory.bin vmemsize %d", vga.vmemsize);
+			ent->write(vga.mem.linear, vga.vmemsize);
+		}
+	}
+}
+
 void VGA_SetupMemory() {
 	vga.svga.bank_read = vga.svga.bank_write = 0;
 	vga.svga.bank_read_full = vga.svga.bank_write_full = 0;
@@ -2095,6 +2125,8 @@ void VGA_SetupMemory() {
 
 	if (!VGA_Memory_ShutDown_init) {
 		AddExitFunction(AddExitFunctionFuncPair(VGA_Memory_ShutDown));
+		AddVMEventFunction(VM_EVENT_LOAD_STATE,AddVMEventFunctionFuncPair(VGAMEM_LoadState));
+		AddVMEventFunction(VM_EVENT_SAVE_STATE,AddVMEventFunctionFuncPair(VGAMEM_SaveState));
 		VGA_Memory_ShutDown_init = true;
 	}
 
