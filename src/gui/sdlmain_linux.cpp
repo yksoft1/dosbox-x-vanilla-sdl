@@ -8,8 +8,10 @@
 #include "SDL_version.h"
 #include "SDL_syswm.h"
 
+#if !defined(C_SDL2)
 #include <X11/XKBlib.h>
 #include <X11/extensions/XKBrules.h>
+#endif
 
 void UpdateWindowDimensions(Bitu width, Bitu height);
 void UpdateWindowMaximized(bool flag);
