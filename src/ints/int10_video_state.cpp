@@ -118,8 +118,10 @@ bool INT10_VideoState_Save(Bitu state,RealPt buffer) {
 			IO_WriteB(0x3c0,ct);
 			real_writeb(base_seg,base_dest+0x23+ct,IO_ReadB(0x3c1));
 		}
+		IO_ReadB(crt_reg+6);
 		IO_WriteB(0x3c0,0x20);
-
+		IO_ReadB(crt_reg+6);
+		
 		base_dest+=0x46;
 	}
 
