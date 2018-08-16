@@ -465,8 +465,8 @@ void PIC_runIRQs(void) {
 
 	for (i = 0,s = 1;i < max;i++, s<<=1){
 		if (p&s) {
-			if (PIC_IRQ_hax[i] == PIC_irq_hack_cs_equ_ds)
-				if (PIC_IRQ_hax[i] & PIC_irq_hack_cs_equ_ds)
+			if (PIC_IRQ_hax[i] & PIC_irq_hack_cs_equ_ds)
+				if (!IRQ_hack_check_cs_equ_ds(i))
 					continue; // skip IRQ
 
 			if ((int)i == master_cascade_irq) { //second pic, or will not match if master_cascade_irq == -1
