@@ -34,9 +34,9 @@
 
 #include <algorithm>
 
-#define XMS_HANDLES_MIN 4u
-#define XMS_HANDLES_MAX	256u	/* 256 XMS Memory Blocks */
-#define XMS_HANDLES_DEFAULT 50u /* DOSBox SVN default */
+#define XMS_HANDLES_MIN 4
+#define XMS_HANDLES_MAX	256	/* 256 XMS Memory Blocks */
+#define XMS_HANDLES_DEFAULT 50 /* DOSBox SVN default */
 
 unsigned int XMS_HANDLES = XMS_HANDLES_DEFAULT;
 
