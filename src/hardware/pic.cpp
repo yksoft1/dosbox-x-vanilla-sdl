@@ -364,20 +364,35 @@ void PIC_DeActivateIRQ(Bitu irq) {
 	pic->lower_irq(t);
 }
 
-enum PIC_irq_hacks PIC_IRQ_hax[16] = { PIC_irq_hack_none };
+unsigned int PIC_IRQ_hax[16] = { PIC_irq_hack_none };
 
-void PIC_Set_IRQ_hack(int IRQ,enum PIC_irq_hacks hack) {
+void PIC_Set_IRQ_hack(int IRQ,unsigned int hack) {
 	if (IRQ < 0 || IRQ >= 16) return;
 	PIC_IRQ_hax[IRQ] = hack;
 }
 
-enum PIC_irq_hacks PIC_parse_IRQ_hack_string(const char *str) {
-	if (!strcmp(str,"none"))
-		return PIC_irq_hack_none;
-	else if (!strcmp(str,"cs_equ_ds"))
-		return PIC_irq_hack_cs_equ_ds;
+unsigned int PIC_parse_IRQ_hack_string(const char *str) {
+	unsigned int res = PIC_irq_hack_none;
+	std::string what;
 
-	return PIC_irq_hack_none;
+	while (*str != 0) {
+		while (*str == ' ') str++;
+		if (*str == 0) break;
+
+		what.clear();
+		while (*str != 0 && *str != ' ')
+			what += *str++;
+
+		while (*str == ' ') str++;
+
+		LOG_MSG("IRQ HACK: '%s'",what.c_str());
+
+		if (what == "none")
+			res = PIC_irq_hack_none;
+		else if (what == "cs_equ_ds")
+			res |= PIC_irq_hack_cs_equ_ds;
+	}
+	return res;
 }
 
 static bool IRQ_hack_check_cs_equ_ds(const int IRQ) {
@@ -388,7 +403,9 @@ static bool IRQ_hack_check_cs_equ_ds(const int IRQ) {
 		return true; // don't complain about the BIOS ISR
 
 	if (s_cs != s_ds) {
+#if 0
 		LOG(LOG_PIC,LOG_DEBUG)("Not dispatching IRQ %d according to IRQ hack. CS != DS",IRQ);
+#endif
 		return false;
 	}
 
@@ -397,25 +414,32 @@ static bool IRQ_hack_check_cs_equ_ds(const int IRQ) {
 
 static void slave_startIRQ(){
 	Bit8u pic1_irq = 8;
+	bool skipped_irq = false;
 	const Bit8u p = (slave.irr & slave.imrr)&slave.isrr;
 	const Bit8u max = slave.special?8:slave.active_irq;
 	for(Bit8u i = 0,s = 1;i < max;i++, s<<=1) {
 		if (p&s) {
-			if (PIC_IRQ_hax[i+8] == PIC_irq_hack_cs_equ_ds)
-				if (!IRQ_hack_check_cs_equ_ds(i+8))
+			if (PIC_IRQ_hax[i+8] & PIC_irq_hack_cs_equ_ds) {
+				if (!IRQ_hack_check_cs_equ_ds(i+8)) {
+					skipped_irq = true;
 					continue; // skip IRQ
-
+				}
+			}
+			
 			pic1_irq = i;
 			break;
 		}
 	}
 
 	if (GCC_UNLIKELY(pic1_irq == 8)) {
-		/* we have an IRQ routing problem. this code is supposed to emulate the fact that
-		 * what was once IRQ 2 on PC/XT is routed to IRQ 9 on AT systems, because IRQ 8-15
-		 * cascade to IRQ 2 on such systems. but it's nothing to E_Exit() over. */
-		LOG(LOG_PIC,LOG_ERROR)("ISA PIC problem: IRQ %d (cascade) is active on master PIC without active IRQ 8-15 on slave PIC.",master_cascade_irq);
-		slave.lower_irq(master_cascade_irq); /* clear it */
+		if (!skipped_irq) {
+			/* we have an IRQ routing problem. this code is supposed to emulate the fact that
+			 * what was once IRQ 2 on PC/XT is routed to IRQ 9 on AT systems, because IRQ 8-15
+			 * cascade to IRQ 2 on such systems. but it's nothing to E_Exit() over. */
+			LOG(LOG_PIC,LOG_ERROR)("ISA PIC problem: IRQ %d (cascade) is active on master PIC without active IRQ 8-15 on slave PIC.",master_cascade_irq);
+			slave.lower_irq(master_cascade_irq); /* clear it */
+		}
+
 		return;
 	}
 
@@ -442,7 +466,7 @@ void PIC_runIRQs(void) {
 	for (i = 0,s = 1;i < max;i++, s<<=1){
 		if (p&s) {
 			if (PIC_IRQ_hax[i] == PIC_irq_hack_cs_equ_ds)
-				if (!IRQ_hack_check_cs_equ_ds(i))
+				if (PIC_IRQ_hax[i] & PIC_irq_hack_cs_equ_ds)
 					continue; // skip IRQ
 
 			if ((int)i == master_cascade_irq) { //second pic, or will not match if master_cascade_irq == -1
