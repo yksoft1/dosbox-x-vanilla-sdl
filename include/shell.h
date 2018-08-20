@@ -122,6 +122,8 @@ public:
 	void CMD_LABEL(char * args);
 	void CMD_MORE(char * args);
 	void CMD_CTTY(char * args);
+	void CMD_DXCAPTURE(char * args);
+	
 	void CMD_FOR(char * args);
 #if C_DEBUG
 	void CMD_DEBUGBOX(char * args);

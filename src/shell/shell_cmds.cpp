@@ -82,6 +82,7 @@ static SHELL_Cmd cmd_list[]={
 {	"FOR",	1,			&DOS_Shell::CMD_FOR,		"SHELL_CMD_FOR_HELP"},
 {	"INT2FDBG",	1,			&DOS_Shell::CMD_INT2FDBG,	"Hook INT 2Fh for debugging purposes"},
 {	"CTTY",		1,			&DOS_Shell::CMD_CTTY,		"Change TTY device"},
+{   "DX-CAPTURE",0,         &DOS_Shell::CMD_DXCAPTURE,  "Run program with video/audio capture"},
 #if C_DEBUG
 {	"DEBUGBOX",	0,			&DOS_Shell::CMD_DEBUGBOX,	"Run program, break into debugger at entry point"},
 #endif
@@ -1990,6 +1991,96 @@ void DOS_Shell::CMD_DEBUGBOX(char * args) {
 #endif
 
 void DOS_Shell::CMD_FOR(char *args){
+}
+
+void CAPTURE_StartCapture(void);
+void CAPTURE_StopCapture(void);
+
+void CAPTURE_StartWave(void);
+void CAPTURE_StopWave(void);
+
+void CAPTURE_StartMTWave(void);
+void CAPTURE_StopMTWave(void);
+
+// Explanation: Start capture, run program, stop capture when program exits.
+//              Great for gameplay footage or demoscene capture.
+//
+//              The command name is chosen not to conform to the 8.3 pattern
+//              on purpose to avoid conflicts with any existing DOS applications.
+void DOS_Shell::CMD_DXCAPTURE(char * args) {
+	bool cap_video = false;
+	bool cap_audio = false;
+	bool cap_mtaudio = false;
+	unsigned long post_exit_delay_ms = 3000; /* 3 sec */
+
+	while (*args == ' ') args++;
+
+	if (ScanCMDBool(args,"V"))
+		cap_video = true;
+	if (ScanCMDBool(args,"-V"))
+		cap_video = false;
+
+	if (ScanCMDBool(args,"A"))
+		cap_audio = true;
+	if (ScanCMDBool(args,"-A"))
+		cap_audio = false;
+
+	if (ScanCMDBool(args,"M"))
+		cap_mtaudio = true;
+	if (ScanCMDBool(args,"-M"))
+		cap_mtaudio = false;
+
+	if (!cap_video && !cap_audio && !cap_mtaudio)
+		cap_video = true;
+
+	if (cap_video)
+		CAPTURE_StartCapture();
+	if (cap_audio)
+		CAPTURE_StartWave();
+	if (cap_mtaudio)
+		CAPTURE_StartMTWave();
+
+	DoCommand(args);
+
+	if (post_exit_delay_ms > 0) {
+		LOG_MSG("Pausing for post exit delay (%.3f seconds)",(double)post_exit_delay_ms / 1000);
+
+		Bit32u lasttick=GetTicks();
+		while ((GetTicks()-lasttick)<post_exit_delay_ms) {
+			CALLBACK_Idle();
+
+			if (machine == MCH_PC98) {
+				reg_eax = 0x0100;   // sense key
+				CALLBACK_RunRealInt(0x18);
+				SETFLAGBIT(ZF,reg_bh == 0);
+			}
+			else {
+				reg_eax = 0x0100;
+				CALLBACK_RunRealInt(0x16);
+			}
+
+			if (!GETFLAG(ZF)) {
+				if (machine == MCH_PC98) {
+					reg_eax = 0x0000;   // read key
+					CALLBACK_RunRealInt(0x18);
+				}
+				else {
+					reg_eax = 0x0000;
+					CALLBACK_RunRealInt(0x16);
+				}
+
+				if (reg_al == 32/*space*/ || reg_al == 27/*escape*/)
+					break;
+			}
+		}
+	}
+
+	if (cap_video)
+		CAPTURE_StopCapture();
+	if (cap_audio)
+		CAPTURE_StopWave();
+	if (cap_mtaudio)
+		CAPTURE_StopMTWave();
 }
 
 void DOS_Shell::CMD_CTTY(char * args) {

@@ -909,11 +909,22 @@ static const char *def_menu_capture[] = {
     "mapper_scrshot",
     "--",
 #endif
+	"CaptureFormatMenu",
+	"--",
     "mapper_video",
     "mapper_recwave",
     "mapper_recmtwave",
     "mapper_caprawopl",
     "mapper_caprawmidi",
+    NULL
+};
+
+/* capture format menu ("CaptureFormatMenu") */
+static const char *def_menu_capture_format[] = {
+    "capture_fmt_avi_zmbv",
+#if (C_AVCODEC)
+    "capture_fmt_mpegts_h264",
+#endif
     NULL
 };
 
@@ -1056,6 +1067,9 @@ void ConstructMenu(void) {
 	
     /* capture menu */
     ConstructSubMenu(mainMenu.get_item("CaptureMenu").get_master_id(), def_menu_capture);
+	
+	/* capture format menu */
+	ConstructSubMenu(mainMenu.get_item("CaptureFormatMenu").get_master_id(), def_menu_capture_format);
 }
 
 bool MENU_SetBool(std::string secname, std::string value) {
