@@ -20,6 +20,11 @@
 #define X86_DYNFPU_DH_ENABLED
 #define X86_INLINED_MEMACCESS
 
+#define X86_DYNREC_MMX_ENABLED
+
+#ifdef X86_DYNREC_MMX_ENABLED
+void dyn_mmx_restore();
+#endif
 
 enum REP_Type {
 	REP_NONE=0,REP_NZ,REP_Z
@@ -60,7 +65,7 @@ static bool MakeCodePage(Bitu lin_addr,CodePageHandler * &cph) {
 		cph=( CodePageHandler *)handler;
 		return false;
 	}
-	if (handler->flags & PFLAG_NOCODE) {
+	if (handler->getFlags() & PFLAG_HASCODE) {
 	/*	if (PAGING_ForcePageInit(lin_addr)) {
 			handler=get_tlb_readhandler(lin_addr);
 			if (handler->flags & PFLAG_HASCODE) {
@@ -2558,6 +2563,11 @@ static void dyn_add_iocheck_var(Bit8u accessed_port,Bitu access_size) {
 #endif
 #include "dyn_fpu.h"
 
+#ifdef X86_DYNREC_MMX_ENABLED
+#include "mmx_gen.h"
+#define dyn_mmx_check() if ((dyn_dh_fpu.dh_fpu_enabled) && (!fpu_used)) {dh_fpu_startup();}
+#endif
+
 static CacheBlock * CreateCacheBlock(CodePageHandler * codepage,PhysPt start,Bitu max_opcodes) {
 	Bits i;
 /* Init a load of variables */
@@ -2672,6 +2682,37 @@ restart_prefix:
 			/* MOVSX Gv,Eb/Ew */
 			case 0xbe:dyn_mov_ev_gb(true);break;
 			case 0xbf:dyn_mov_ev_gw(true);break;
+
+#if defined(X86_DYNREC_MMX_ENABLED) && defined(X86_DYNFPU_DH_ENABLED)
+			
+			/* OP mm, mm/m64 */
+			/* pack/unpacks, compares */
+			case 0x60:case 0x61:case 0x62:case 0x63:case 0x64:case 0x65:
+			case 0x66:case 0x67:case 0x68:case 0x69:case 0x6a:case 0x6b:
+			case 0x74:case 0x75:case 0x76:
+			/* mm-directed shifts, add/sub, bitwise, multiplies */
+			case 0xd1:case 0xd2:case 0xd3:case 0xd4:case 0xd5:case 0xd8:
+			case 0xd9:case 0xdb:case 0xdc:case 0xdd:case 0xdf:case 0xe1:
+			case 0xe2:case 0xe5:case 0xe8:case 0xe9:case 0xeb:case 0xec:
+			case 0xed:case 0xef:case 0xf1:case 0xf2:case 0xf3:case 0xf5:
+			case 0xf8:case 0xf9:case 0xfa:case 0xfc:case 0xfd:case 0xfe:
+				dyn_mmx_check(); dyn_mmx_op(dual_code); break;
+
+			/* SHIFT mm, imm8*/
+			case 0x71:case 0x72:case 0x73:
+				dyn_mmx_check(); dyn_mmx_shift_imm8(dual_code); break;
+
+			/* MOVD mm, r/m32 */
+			case 0x6e:dyn_mmx_check(); dyn_mmx_movd_pqed(); break;
+			/* MOVQ mm, mm/m64 */
+			case 0x6f:dyn_mmx_check(); dyn_mmx_movq_pqqq(); break;
+			/* MOVD r/m32, mm */
+			case 0x7e:dyn_mmx_check(); dyn_mmx_movd_edpq(); break;
+			/* MOVQ mm/m64, mm */
+			case 0x7f:dyn_mmx_check(); dyn_mmx_movq_qqpq(); break;
+			/* EMMS */
+			case 0x77:dyn_mmx_check(); dyn_mmx_emms(); break;
+#endif
 
 			default:
 #if DYN_LOG
