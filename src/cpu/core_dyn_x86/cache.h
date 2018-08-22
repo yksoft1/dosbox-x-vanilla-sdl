@@ -168,7 +168,7 @@ public:
 		InvalidateRange(addr,addr+3);
 	}
 	bool writeb_checked(PhysPt addr,Bitu val) {
-		if (GCC_UNLIKELY(old_pagehandler->getFlags() & PFLAG_HASROM)) return;
+		if (GCC_UNLIKELY(old_pagehandler->getFlags() & PFLAG_HASROM)) return false;
 		if (GCC_UNLIKELY((old_pagehandler->getFlags() & PFLAG_READABLE)!=PFLAG_READABLE)) {
 			E_Exit("cb:non-readable code page found that is no ROM page");
 		}
@@ -194,7 +194,7 @@ public:
 		return false;
 	}
 	bool writew_checked(PhysPt addr,Bitu val) {
-		if (GCC_UNLIKELY(old_pagehandler->getFlags() & PFLAG_HASROM)) return;
+		if (GCC_UNLIKELY(old_pagehandler->getFlags() & PFLAG_HASROM)) return false;
 		if (GCC_UNLIKELY((old_pagehandler->getFlags() & PFLAG_READABLE)!=PFLAG_READABLE)) {
 			E_Exit("cw:non-readable code page found that is no ROM page");
 		}
@@ -220,7 +220,7 @@ public:
 		return false;
 	}
 	bool writed_checked(PhysPt addr,Bitu val) {
-		if (GCC_UNLIKELY(old_pagehandler->getFlags() & PFLAG_HASROM)) return;
+		if (GCC_UNLIKELY(old_pagehandler->getFlags() & PFLAG_HASROM)) return false;
 		if (GCC_UNLIKELY((old_pagehandler->getFlags() & PFLAG_READABLE)!=PFLAG_READABLE)) {
 			E_Exit("cd:non-readable code page found that is no ROM page");
 		}
