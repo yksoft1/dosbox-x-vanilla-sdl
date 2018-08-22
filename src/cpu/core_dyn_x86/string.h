@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2013  The DOSBox Team
+ *  Copyright (C) 2002-2018  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,7 +29,8 @@ enum STRING_OP {
 static void dyn_string(STRING_OP op) {
 	DynReg * si_base=decode.segprefix ? decode.segprefix : DREG(DS);
 	DynReg * di_base=DREG(ES);
-	DynReg * tmp_reg;bool usesi;bool usedi;
+	DynReg * tmp_reg; 
+	DynReg * tmp_reg2;bool usesi;bool usedi;
 	gen_protectflags();
 	if (decode.rep) {
 		gen_dop_word_imm(DOP_SUB,true,DREG(CYCLES),decode.cycles);
@@ -54,14 +55,15 @@ static void dyn_string(STRING_OP op) {
 		IllegalOption("dyn_string op");
 	}
 	gen_load_host(&cpu.direction,DREG(TMPW),4);
-	switch (op & 3) {
+	Bit8u shift_tmp=(op & 3);
+	switch (shift_tmp) {
 	case 0:break;
-	case 1:gen_shift_word_imm(SHIFT_SHL,true,DREG(TMPW),1);break;
-	case 2:gen_shift_word_imm(SHIFT_SHL,true,DREG(TMPW),2);break;
+	case 1://gen_shift_word_imm(SHIFT_SHL,true,DREG(TMPW),1);break;
+	case 2:gen_shift_word_imm(SHIFT_SHL,true,DREG(TMPW),shift_tmp);break;//gen_shift_word_imm(SHIFT_SHL,true,DREG(TMPW),2);break;
 	default:
 		IllegalOption("dyn_string shift");
-
-	}
+	}	 // .o 1270 bytes less
+ 	
 	if (usesi) {
 		gen_preloadreg(DREG(ESI));
 		DynRegs[G_ESI].flags|=DYNFLG_CHANGED;
@@ -79,42 +81,52 @@ static void dyn_string(STRING_OP op) {
 	DynState rep_state;
 	dyn_savestate(&rep_state);
 	Bit8u * rep_start=cache.pos;
-	Bit8u * rep_ecx_jmp=NULL;
+	Bit8u * rep_ecx_jmp;
 	/* Check if ECX!=zero */
 	if (decode.rep) {
 		gen_dop_word(DOP_OR,decode.big_addr,DREG(ECX),DREG(ECX));
 		rep_ecx_jmp=gen_create_branch_long(BR_Z);
 	}
 	if (usesi) {
+	  //Bit8u tmp;
 		if (!decode.big_addr) {
 			gen_extend_word(false,DREG(EA),DREG(ESI));
-			gen_lea(DREG(EA),si_base,DREG(EA),0,0);
+			// gen_lea(DREG(EA),si_base,DREG(EA),0,0);
+			//tmp=G_EA;
+			tmp_reg2=DREG(EA);
 		} else {
-			gen_lea(DREG(EA),si_base,DREG(ESI),0,0);
+		  //tmp=G_ESI;
+			//gen_lea(DREG(EA),si_base,DREG(ESI),0,0);
+			tmp_reg2=DREG(ESI);
 		}
+		//gen_lea(DREG(EA),si_base,&DynRegs[tmp],0,0); // .o 12 bytes less
+		gen_lea(DREG(EA),si_base,tmp_reg2,0,0); // .o 154 bytes less
+		
 		switch (op&3) {
-			case 0:dyn_read_byte(DREG(EA),tmp_reg,false);break;
-			case 1:dyn_read_word(DREG(EA),tmp_reg,false);break;
-			case 2:dyn_read_word(DREG(EA),tmp_reg,true);break;
+		case 0:dyn_read_byte(DREG(EA),tmp_reg,false);break;
+		case 1:dyn_read_word(DREG(EA),tmp_reg,false);break;
+		case 2:dyn_read_word(DREG(EA),tmp_reg,true);break;
 		}
 		switch (op) {
-			case STR_OUTSB:
-				gen_call_function((void*)&IO_WriteB,"%Id%Dl",DREG(EDX),tmp_reg);break;
-			case STR_OUTSW:
-				gen_call_function((void*)&IO_WriteW,"%Id%Dw",DREG(EDX),tmp_reg);break;
-			case STR_OUTSD:
-				gen_call_function((void*)&IO_WriteD,"%Id%Dd",DREG(EDX),tmp_reg);break;
-			default:
-				break;
+		case STR_OUTSB:
+			gen_call_function((void*)&IO_WriteB,"%Id%Dl",DREG(EDX),tmp_reg);break;
+		case STR_OUTSW:
+			gen_call_function((void*)&IO_WriteW,"%Id%Dw",DREG(EDX),tmp_reg);break;
+		case STR_OUTSD:
+			gen_call_function((void*)&IO_WriteD,"%Id%Dd",DREG(EDX),tmp_reg);break;
 		}
 	}
 	if (usedi) {
 		if (!decode.big_addr) {
 			gen_extend_word(false,DREG(EA),DREG(EDI));
-			gen_lea(DREG(EA),di_base,DREG(EA),0,0);
+			//gen_lea(DREG(EA),di_base,DREG(EA),0,0);
+			tmp_reg2=DREG(EA);
 		} else {
-			gen_lea(DREG(EA),di_base,DREG(EDI),0,0);
+			//gen_lea(DREG(EA),di_base,DREG(EDI),0,0);
+			tmp_reg2=DREG(EDI);
 		}
+		gen_lea(DREG(EA),di_base,tmp_reg2,0,0); // .o 126 bytes less
+		
 		/* Maybe something special to be done to fill the value */
 		switch (op) {
 		case STR_INSB:

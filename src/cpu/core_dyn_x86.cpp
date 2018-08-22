@@ -52,9 +52,9 @@
 #include "fpu.h"
 
 #define CACHE_MAXSIZE	(4096*3)
-#define CACHE_TOTAL		(1024*1024*8)
+#define CACHE_TOTAL		(1024*1024*64)
 #define CACHE_PAGES		(512)
-#define CACHE_BLOCKS	(64*1024)
+#define CACHE_BLOCKS	(256*1024)
 #define CACHE_ALIGN		(16)
 #define DYN_HASH_SHIFT	(4)
 #define DYN_PAGE_HASH	(4096>>DYN_HASH_SHIFT)
