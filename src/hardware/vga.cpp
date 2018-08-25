@@ -386,6 +386,11 @@ void VGA_SetCGA2Table(Bit8u val0,Bit8u val1) {
 			(total[(i >> 1) & 1] << 16 ) | (total[(i >> 0) & 1] << 24 );
 #endif
 	}
+	
+	if (machine == MCH_MCGA) {
+		VGA_DAC_CombineColor(0x0,val0);
+		VGA_DAC_CombineColor(0x1,val1);
+	}
 }
 
 void VGA_SetCGA4Table(Bit8u val0,Bit8u val1,Bit8u val2,Bit8u val3) {
@@ -407,6 +412,13 @@ void VGA_SetCGA4Table(Bit8u val0,Bit8u val1,Bit8u val2,Bit8u val3) {
 			(total[((i >> 3) & 1) | ((i >> 6) & 2)] << 0  ) | (total[((i >> 2) & 1) | ((i >> 5) & 2)] << 8  ) |
 			(total[((i >> 1) & 1) | ((i >> 4) & 2)] << 16 ) | (total[((i >> 0) & 1) | ((i >> 3) & 2)] << 24 );
 #endif
+	}
+
+	if (machine == MCH_MCGA) {
+		VGA_DAC_CombineColor(0x0,val0);
+		VGA_DAC_CombineColor(0x1,val1);
+		VGA_DAC_CombineColor(0x2,val2);
+		VGA_DAC_CombineColor(0x3,val3);
 	}	
 }
 
@@ -771,6 +783,9 @@ void VGA_Reset(Section*) {
         case MCH_PC98:
             if (vga.vmemsize < _KB_bytes(512)) vga.vmemsize = _KB_bytes(512);
             break;
+		case MCH_MCGA:
+			if (vga.vmemsize < _KB_bytes(64)) vga.vmemsize = _KB_bytes(64);
+			break;
 		default:
 			E_Exit("Unexpected machine");
 	};
@@ -1235,6 +1250,8 @@ void VGA_Init() {
 	string str;
 	Bitu i,j;
 
+	vga.other.mcga_mode_control = 0;
+	
     vga.draw.render_step = 0;
     vga.draw.render_max = 1;
 

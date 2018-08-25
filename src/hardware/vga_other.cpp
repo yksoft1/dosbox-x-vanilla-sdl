@@ -27,6 +27,10 @@
 #include "render.h"
 #include "mapper.h"
 
+#define crtc(blah) vga.crtc.blah
+
+static void write_cga(Bitu port,Bitu val,Bitu /*iolen*/);
+
 static void write_crtc_index_other(Bitu /*port*/,Bitu val,Bitu /*iolen*/) {
 	vga.other.index=(Bit8u)(val & 0x1f);
 }
@@ -85,7 +89,10 @@ static void write_crtc_data_other(Bitu /*port*/,Bitu val,Bitu /*iolen*/) {
 	case 0x0C:	/* Start Address High Register */
 		// Bit 12 (depending on video mode) and 13 are actually masked too,
 		// but so far no need to implement it.
-		vga.config.display_start=(vga.config.display_start & 0x00FF) | ((val&0x3F) << 8);
+        if (machine == MCH_MCGA)
+            vga.config.display_start=(vga.config.display_start & 0x00FF) | ((val&0xFF) << 8);
+        else
+            vga.config.display_start=(vga.config.display_start & 0x00FF) | ((val&0x3F) << 8);
 		break;
 	case 0x0D:	/* Start Address Low Register */
 		vga.config.display_start=(vga.config.display_start & 0xFF00) | val;
@@ -152,6 +159,85 @@ static Bitu read_crtc_data_other(Bitu /*port*/,Bitu /*iolen*/) {
 	default:
 		LOG(LOG_VGAMISC,LOG_NORMAL)("MC6845:Read from illegal index %x",vga.other.index);
 	}
+	return (Bitu)(~0);
+}
+
+static void write_crtc_data_mcga(Bitu port,Bitu val,Bitu iolen) {
+    if (vga.other.index < 0x10) {
+        /* MCGA has a write protect, just like VGA */
+		if (vga.other.index <= 0x07 && crtc(read_only)) return;
+
+        /* 0x00 through 0x0F are the same as CGA */
+        write_crtc_data_other(port,val,iolen);
+    }
+    else {
+        switch (vga.other.index) {
+            case 0x10: /* MCGA Mode Control */
+                {
+                    const Bit8u changed = (vga.other.mcga_mode_control ^ val);
+
+                    /* bit 0: 1=select 320x200 256-color mode    0=all else
+                     * bit 1: 1=select 640x480 2-color mode      0=all else
+                     * bit 2: reserved
+                     * bit 3: 1=horizontal timing parameters computed in hardware for video mode   0=...from timing in registers 0-3
+                     * bit 4: 1=enable dot clock
+                     * bit 5: reserved
+                     * bit 6: inverse of bit 8 of vertical displayed register 0x06
+                     * bit 7: 1=write protect registers 0-7 */
+                    vga.other.mcga_mode_control = val;
+                    if (val & 0x80)
+                        crtc(read_only) = true;
+                    else
+                        crtc(read_only) = false;
+
+                    if (vga.other.mcga_mode_control & 3) {
+                        for (unsigned int i=0;i < 16;i++)
+                            VGA_DAC_CombineColor(i,i);
+
+                        VGA_DAC_UpdateColorPalette();
+                    }
+
+                    if (vga.other.mcga_mode_control & 1) { // MCGA 256-color mode
+					    VGA_SetMode(M_VGA);
+                    }
+                    else {
+                        if (vga.other.mcga_mode_control & 2) { // MCGA 640x480 2-color
+					        VGA_SetMode(M_TANDY2);
+	                        vga.tandy.addr_mask = 0xFFFF;
+                        }
+                        else {
+                            write_cga(0x3D8,vga.tandy.mode_control,1); // restore CGA
+	                        vga.tandy.addr_mask = 8*1024 - 1;
+                        }
+
+                        write_cga(0x3D9,vga.tandy.color_select,1); // restore CGA
+                    }
+
+                    if (changed & 0x0B)
+                        VGA_StartResize();
+                }
+                break;
+            default:
+                LOG(LOG_VGAMISC,LOG_NORMAL)("MC6845:MCGA Write %X to illegal index %x",(int)val,(int)vga.other.index);
+                break;
+        }
+    }
+}
+static Bitu read_crtc_data_mcga(Bitu port,Bitu iolen) {
+    if (vga.other.index < 0x10) {
+        /* 0x00 through 0x0F are the same as CGA */
+        return read_crtc_data_other(port,iolen);
+    }
+    else {
+        switch (vga.other.index) {
+            case 0x10: /* MCGA Mode Control */
+                return vga.other.mcga_mode_control;
+            default:
+		        LOG(LOG_VGAMISC,LOG_NORMAL)("MC6845:MCGA Read from illegal index %x",vga.other.index);
+                break;
+        }
+    }
+
 	return (Bitu)(~0);
 }
 
@@ -395,6 +481,10 @@ static void DecreaseHue(bool pressed) {
 
 static void write_cga_color_select(Bitu val) {
 	vga.tandy.color_select=val;
+	
+	if (vga.other.mcga_mode_control & 1) /* ignore COMPLETELY in 256-color MCGA mode */
+		return;
+		
 	switch(vga.mode) {
 	case  M_TANDY4: {
 		Bit8u base = (val & 0x10) ? 0x08 : 0;
@@ -432,17 +522,20 @@ static void write_cga(Bitu port,Bitu val,Bitu /*iolen*/) {
 	case 0x3d8:
 		vga.tandy.mode_control=(Bit8u)val;
 		vga.attr.disabled = (val&0x8)? 0: 1; 
-		if (vga.tandy.mode_control & 0x2) {		// graphics mode
+		if (vga.other.mcga_mode_control & 3) { // MCGA 256-color mode or 2-color 640x480
+            // do nothing
+        }
+		else if (vga.tandy.mode_control & 0x2) {		// graphics mode
 			if (vga.tandy.mode_control & 0x10) {// highres mode
 				if (machine == MCH_AMSTRAD) {
 					VGA_SetMode(M_AMSTRAD);			//Amstrad 640x200x16 video mode.
-				} else if ((cga_comp==1 || (cga_comp==0 && !(val&0x4))) && !mono_cga) {	// composite display
+				} else if (machine != MCH_MCGA && (cga_comp==1 || (cga_comp==0 && !(val&0x4))) && !mono_cga) {	// composite display
 					VGA_SetMode(M_CGA16);		// composite ntsc 640x200 16 color mode
 				} else {
 					VGA_SetMode(M_TANDY2);
 				}
 			} else {							// lowres mode
-				if (cga_comp==1) {				// composite display
+				if (machine != MCH_MCGA && cga_comp==1) {				// composite display
 					VGA_SetMode(M_CGA16);		// composite ntsc 640x200 16 color mode
 				} else {
 					VGA_SetMode(M_TANDY4);
@@ -895,6 +988,11 @@ void VGA_SetupOther(void) {
 		for (i=0;i<256;i++)	memcpy(&vga.draw.font[i*32],&int10_font_08[i*8],8);
 		vga.draw.font_tables[0]=vga.draw.font_tables[1]=vga.draw.font;
 	}
+    if (machine==MCH_MCGA) { // MCGA uses a 8x16 font, through double-scanning as if 8x8 CGA text mode
+        extern Bit8u int10_font_16[256 * 16];
+        for (i=0;i<256;i++)	memcpy(&vga.draw.font[i*32],&int10_font_16[i*16],16);
+        vga.draw.font_tables[0]=vga.draw.font_tables[1]=vga.draw.font;
+    }
 	if (machine==MCH_CGA || IS_TANDY_ARCH || machine==MCH_HERC) {
 		IO_RegisterWriteHandler(0x3db,write_lightpen,IO_MB);
 		IO_RegisterWriteHandler(0x3dc,write_lightpen,IO_MB);
@@ -906,7 +1004,7 @@ void VGA_SetupOther(void) {
 		MAPPER_AddHandler(HercBlend,MK_nothing,0,"hercblend","Herc Blend");
 		MAPPER_AddHandler(CycleHercPal,MK_nothing,0,"hercpal","Herc Pal");
 	}
-	if (machine==MCH_CGA || machine==MCH_AMSTRAD) {
+	if (machine==MCH_CGA || machine==MCH_MCGA || machine==MCH_AMSTRAD) {
 		vga.amstrad.mask_plane = 0x07070707;
 		vga.amstrad.write_plane = 0x0F;
 		vga.amstrad.read_plane = 0x00;
@@ -974,6 +1072,15 @@ void VGA_SetupOther(void) {
 			IO_RegisterWriteHandler(base+port_ct*2+1,write_crtc_data_other,IO_MB);
 			IO_RegisterReadHandler(base+port_ct*2,read_crtc_index_other,IO_MB);
 			IO_RegisterReadHandler(base+port_ct*2+1,read_crtc_data_other,IO_MB);
+		}
+	}
+	if (machine==MCH_MCGA) {
+		Bitu base=0x3d0;
+		for (Bitu port_ct=0; port_ct<4; port_ct++) {
+			IO_RegisterWriteHandler(base+port_ct*2,write_crtc_index_other,IO_MB);
+			IO_RegisterWriteHandler(base+port_ct*2+1,write_crtc_data_mcga,IO_MB);
+			IO_RegisterReadHandler(base+port_ct*2,read_crtc_index_other,IO_MB);
+			IO_RegisterReadHandler(base+port_ct*2+1,read_crtc_data_mcga,IO_MB);
 		}
 	}
 	if (IS_TANDY_ARCH) {

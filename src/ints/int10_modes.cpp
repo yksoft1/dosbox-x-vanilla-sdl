@@ -404,6 +404,20 @@ VideoModeBlock ModeList_OTHER[]={
 {0xFFFF  ,M_ERROR  ,0   ,0   ,0  ,0  ,0 ,0  ,0 ,0x00000 ,0x0000 ,0   ,0   ,0  ,0   ,0 	},
 };
 
+VideoModeBlock ModeList_MCGA[]={//FIXME: These are GUESSES made by adapting VGA mode timings into CGA terms
+/* mode  ,type     ,sw  ,sh  ,tw ,th ,cw,ch ,pt,pstart  ,plength,htot,vtot,hde,vde ,special flags */
+{ 0x000  ,M_TEXT   ,360 ,400 ,40 ,25 ,8 ,16 ,8 ,0xB8000 ,0x0800 ,49  ,26  ,40 ,25  ,0	}, // FIXME: According to real hardware, 70.2Hz not 70.88
+{ 0x001  ,M_TEXT   ,360 ,400 ,40 ,25 ,8 ,16 ,8 ,0xB8000 ,0x0800 ,49  ,26  ,40 ,25  ,0	},
+{ 0x002  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,16 ,8 ,0xB8000 ,0x1000 ,99  ,26  ,80 ,25  ,0	},
+{ 0x003  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,16 ,8 ,0xB8000 ,0x1000 ,99  ,26  ,80 ,25  ,0	},
+{ 0x004  ,M_CGA4   ,320 ,200 ,40 ,25 ,8 ,8  ,1 ,0xB8000 ,0x4000 ,49  ,108 ,40 ,100 ,0   },
+{ 0x005  ,M_CGA4   ,320 ,200 ,40 ,25 ,8 ,8  ,1 ,0xB8000 ,0x4000 ,49  ,108 ,40 ,100 ,0   },
+{ 0x006  ,M_CGA2   ,640 ,200 ,80 ,25 ,8 ,8  ,1 ,0xB8000 ,0x4000 ,49  ,108 ,40 ,100 ,0   },
+{ 0x011  ,M_CGA2   ,640 ,480 ,80 ,30 ,8 ,16 ,1 ,0xA0000 ,0xA000 ,49  ,127 ,40 ,120 ,0	},//GUESS
+{ 0x013  ,M_VGA    ,320 ,200 ,40 ,25 ,8 ,8  ,1 ,0xA0000 ,0x2000 ,49  ,108 ,40 ,100 ,0   },//GUESS
+{0xFFFF  ,M_ERROR  ,0   ,0   ,0  ,0  ,0 ,0  ,0 ,0x00000 ,0x0000 ,0   ,0   ,0  ,0   ,0 	},
+};
+
 VideoModeBlock Hercules_Mode=
 { 0x007  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,14 ,1 ,0xB0000 ,0x1000 ,97 ,25  ,80 ,25  ,0	};
 
@@ -557,6 +571,9 @@ bool INT10_SetCurMode(void) {
 		case MCH_CGA:
 			if (bios_mode<7) mode_changed=SetCurMode(ModeList_OTHER,bios_mode);
 			break;
+		case MCH_MCGA:
+			mode_changed=SetCurMode(ModeList_MCGA,bios_mode);
+			break;
 		case TANDY_ARCH_CASE:
 			if (bios_mode!=7 && bios_mode<=0xa) mode_changed=SetCurMode(ModeList_OTHER,bios_mode);
 			break;
@@ -688,6 +705,12 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 			return false;
 		}
 		break;
+	case MCH_MCGA:
+        if (!SetCurMode(ModeList_MCGA,mode)) {
+            LOG(LOG_INT10,LOG_ERROR)("Trying to set illegal mode %X",mode);
+            return false;
+        }
+        break;
 	case MCH_HERC:
 		// Only init the adapter if the equipment word is set to monochrome (Testdrive)
 		if ((real_readw(BIOSMEM_SEG,BIOSMEM_INITIAL_MODE)&0x30)!=0x30) return false;
@@ -734,6 +757,7 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 		else scanline=8;
 		break;
 	case M_CGA2: // graphics mode: even/odd banks interleaved
+	case M_VGA: // MCGA (GUESS!!)
 		scanline=2;
 		break;
 	case M_CGA4:
@@ -747,6 +771,17 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 	default:
 		break;
 	}
+
+	if (machine == MCH_MCGA) {
+        IO_Write(0x3c8,0);
+        for (unsigned int i=0;i<248;i++) {
+            IO_Write(0x3c9,vga_palette[i][0]);
+            IO_Write(0x3c9,vga_palette[i][1]);
+            IO_Write(0x3c9,vga_palette[i][2]);
+        }
+		IO_Write(0x3c6,0xff); //Reset Pelmask
+    }
+	
 	IO_WriteW(crtc_base,0x09 | (scanline-1) << 8);
 	//Setup the CGA palette using VGA DAC palette
 	for (Bit8u ct=0;ct<16;ct++) VGA_DAC_SetEntry(ct,cga_palette[ct][0],cga_palette[ct][1],cga_palette[ct][2]);
@@ -776,14 +811,35 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 	case MCH_AMSTRAD:
 		IO_WriteB( 0x3d9, 0x0f );
 	case MCH_CGA:
-		mode_control=mode_control_list[CurMode->mode];
+	case MCH_MCGA:
+        if (CurMode->mode == 0x13 && machine == MCH_MCGA)
+            mode_control=0x0a;
+        else if (CurMode->mode == 0x11 && machine == MCH_MCGA)
+            mode_control=0x1e;
+        else if (CurMode->mode < sizeof(mode_control_list))
+            mode_control=mode_control_list[CurMode->mode];
+        else
+            mode_control=0x00;
+			
 		if (CurMode->mode == 0x6) color_select=0x3f;
+		else if (CurMode->mode == 0x11) color_select=0x3f;
 		else color_select=0x30;
 		IO_WriteB(0x3d8,mode_control);
 		IO_WriteB(0x3d9,color_select);
 		real_writeb(BIOSMEM_SEG,BIOSMEM_CURRENT_MSR,mode_control);
 		real_writeb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAL,color_select);
 		if (mono_cga) Mono_CGA_Palette();
+		
+		if (machine == MCH_MCGA) {
+            unsigned char mcga_mode = 0x10;
+
+            if (CurMode->type == M_VGA)
+                mcga_mode |= 0x01;//320x200 256-color
+            else if (CurMode->type == M_CGA2 && CurMode->sheight > 240)
+                mcga_mode |= 0x02;//640x480 2-color
+
+            IO_WriteW(crtc_base,0x10 | (mcga_mode) << 8);
+        }
 		break;
 	case MCH_TANDY:
 		/* Init some registers */
