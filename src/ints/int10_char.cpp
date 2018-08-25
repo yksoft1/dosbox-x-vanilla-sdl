@@ -342,6 +342,7 @@ filling:
                 MCGA2_FillRow(cul,clr,start,base,attr);
             else
                 CGA2_FillRow(cul,clr,start,base,attr);
+			break;
 		case M_CGA4:
 			CGA4_FillRow(cul,clr,start,base,attr);break;
 		case M_TANDY16:		
