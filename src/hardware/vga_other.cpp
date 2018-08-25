@@ -29,6 +29,7 @@
 
 #define crtc(blah) vga.crtc.blah
 
+static Bitu read_cga(Bitu /*port*/,Bitu /*iolen*/);
 static void write_cga(Bitu port,Bitu val,Bitu /*iolen*/);
 
 static void write_crtc_index_other(Bitu /*port*/,Bitu val,Bitu /*iolen*/) {
@@ -515,6 +516,18 @@ static void write_cga_color_select(Bitu val) {
 	default:
 		break;
 	}
+}
+
+static Bitu read_cga(Bitu port,Bitu /*iolen*/) {
+	if (machine == MCH_MCGA) { // On MCGA, ports 3D8h and 3D9h are also readable
+		switch (port) {
+			case 0x3d8:
+				return vga.tandy.mode_control;
+			case 0x3d9: // color select
+				return vga.tandy.color_select;
+		}
+	}
+	return ~0UL;
 }
 
 static void write_cga(Bitu port,Bitu val,Bitu /*iolen*/) {
@@ -1012,6 +1025,11 @@ void VGA_SetupOther(void) {
 
 		IO_RegisterWriteHandler(0x3d8,write_cga,IO_MB);
 		IO_RegisterWriteHandler(0x3d9,write_cga,IO_MB);
+
+		if (machine == MCH_MCGA) { /* ports 3D8h-3D9h are readable on MCGA */
+			IO_RegisterReadHandler(0x3d8,read_cga,IO_MB);
+			IO_RegisterReadHandler(0x3d9,read_cga,IO_MB);
+		}
 
 		if( machine==MCH_AMSTRAD )
 		{
