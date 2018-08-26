@@ -404,19 +404,42 @@ VideoModeBlock ModeList_OTHER[]={
 {0xFFFF  ,M_ERROR  ,0   ,0   ,0  ,0  ,0 ,0  ,0 ,0x00000 ,0x0000 ,0   ,0   ,0  ,0   ,0 	},
 };
 
-VideoModeBlock ModeList_MCGA[]={//FIXME: These are GUESSES made by adapting VGA mode timings into CGA terms
+/* MCGA mode list.
+ * These are based off of a register capture of actual MCGA hardware for each mode.
+ * According to register captures, all modes seem to be consistently programmed as if
+ * for 40x25 CGA modes, including 80x25 modes.
+ *
+ * These modes should generally make a 70Hz VGA compatible output, except 640x480 2-color MCGA
+ * mode, which should make a 60Hz VGA compatible mode.
+ *
+ * Register values are CGA-like, meaning that the modes are defined in character clocks
+ * horizontally and character cells vertically and the actual scan line numbers are determined
+ * by the vertical param times max scanline.
+ *
+ * According to the register dump I made, vertical total values don't fully make sense and
+ * may be nonsensical and handled differently for emulation purposes. They're weird.
+ *
+ * When I can figure out which ones are directly handled, doubled, or just ignored, I can
+ * update this table and the emulation to match it.
+ *
+ * Until then, this is close enough. */
+VideoModeBlock ModeList_MCGA[]={
 /* mode  ,type     ,sw  ,sh  ,tw ,th ,cw,ch ,pt,pstart  ,plength,htot,vtot,hde,vde ,special flags */
-{ 0x000  ,M_TEXT   ,360 ,400 ,40 ,25 ,8 ,16 ,8 ,0xB8000 ,0x0800 ,49  ,26  ,40 ,25  ,0	}, // FIXME: According to real hardware, 70.2Hz not 70.88
-{ 0x001  ,M_TEXT   ,360 ,400 ,40 ,25 ,8 ,16 ,8 ,0xB8000 ,0x0800 ,49  ,26  ,40 ,25  ,0	},
-{ 0x002  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,16 ,8 ,0xB8000 ,0x1000 ,99  ,26  ,80 ,25  ,0	},
-{ 0x003  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,16 ,8 ,0xB8000 ,0x1000 ,99  ,26  ,80 ,25  ,0	},
+{ 0x000  ,M_TEXT   ,320 ,400 ,40 ,25 ,8 ,16 ,8 ,0xB8000 ,0x0800 ,49  ,26  ,40 ,25  ,0   },
+{ 0x001  ,M_TEXT   ,320 ,400 ,40 ,25 ,8 ,16 ,8 ,0xB8000 ,0x0800 ,49  ,26  ,40 ,25  ,0   },
+{ 0x002  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,16 ,8 ,0xB8000 ,0x1000 ,49  ,26  ,40 ,25  ,0   },
+{ 0x003  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,16 ,8 ,0xB8000 ,0x1000 ,49  ,26  ,40 ,25  ,0   },
 { 0x004  ,M_CGA4   ,320 ,200 ,40 ,25 ,8 ,8  ,1 ,0xB8000 ,0x4000 ,49  ,108 ,40 ,100 ,0   },
 { 0x005  ,M_CGA4   ,320 ,200 ,40 ,25 ,8 ,8  ,1 ,0xB8000 ,0x4000 ,49  ,108 ,40 ,100 ,0   },
 { 0x006  ,M_CGA2   ,640 ,200 ,80 ,25 ,8 ,8  ,1 ,0xB8000 ,0x4000 ,49  ,108 ,40 ,100 ,0   },
-{ 0x011  ,M_CGA2   ,640 ,480 ,80 ,30 ,8 ,16 ,1 ,0xA0000 ,0xA000 ,49  ,127 ,40 ,120 ,0	},//GUESS
-{ 0x013  ,M_VGA    ,320 ,200 ,40 ,25 ,8 ,8  ,1 ,0xA0000 ,0x2000 ,49  ,108 ,40 ,100 ,0   },//GUESS
-{0xFFFF  ,M_ERROR  ,0   ,0   ,0  ,0  ,0 ,0  ,0 ,0x00000 ,0x0000 ,0   ,0   ,0  ,0   ,0 	},
+{ 0x011  ,M_CGA2   ,640 ,480 ,80 ,30 ,8 ,16 ,1 ,0xA0000 ,0xA000 ,49  ,127 ,40 ,120 ,0   }, // note 1
+{ 0x013  ,M_VGA    ,320 ,200 ,40 ,25 ,8 ,8  ,1 ,0xA0000 ,0x2000 ,49  ,108 ,40 ,100 ,0   }, // note 1
+{0xFFFF  ,M_ERROR  ,0   ,0   ,0  ,0  ,0 ,0  ,0 ,0x00000 ,0x0000 ,0   ,0   ,0  ,0   ,0   },
 };
+// note 1: CGA-like 200-line vertical timing is programmed into the registers, and then the
+//         hardware doubles them again. The max scanline row is zero in these modes, so
+//         doubling twice is the only way it could work.
+
 
 VideoModeBlock Hercules_Mode=
 { 0x007  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,14 ,1 ,0xB0000 ,0x1000 ,97 ,25  ,80 ,25  ,0	};
@@ -622,8 +645,15 @@ static void FinishSetMode(bool clearmem) {
 		case M_CGA4:
 		case M_CGA2:
 		case M_TANDY16:
-			for (Bit16u ct=0;ct<16*1024;ct++) {
-				real_writew( 0xb800,ct*2,0x0000);
+			if (machine == MCH_MCGA && CurMode->mode == 0x11) {
+				for (Bit16u ct=0;ct<32*1024;ct++) {
+					real_writew( 0xa000,ct*2,0x0000);
+				}
+			}
+			else {
+				for (Bit16u ct=0;ct<16*1024;ct++) {
+					real_writew( 0xb800,ct*2,0x0000);
+				}
 			}
 			break;
 		case M_TEXT: {
@@ -757,8 +787,16 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 		else scanline=8;
 		break;
 	case M_CGA2: // graphics mode: even/odd banks interleaved
-	case M_VGA: // MCGA (GUESS!!)
-		scanline=2;
+		if (machine == MCH_MCGA && CurMode->mode >= 0x11)
+			scanline=1; // as seen on real hardware, modes 0x11 and 0x13 have max scanline register == 0x00
+		else
+			scanline=2;
+		break;
+	case M_VGA: // MCGA
+		if (machine == MCH_MCGA)
+			scanline=1; // as seen on real hardware, modes 0x11 and 0x13 have max scanline register == 0x00
+		else
+			scanline=2;
 		break;
 	case M_CGA4:
 		if (CurMode->mode!=0xa) scanline=2;
