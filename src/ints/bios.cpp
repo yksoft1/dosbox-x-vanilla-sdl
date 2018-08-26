@@ -5955,7 +5955,11 @@ private:
                     /* Tandy doesn't have a 2nd PIC, left as is for now */
                     phys_writeb(data+5,(1<<6)|(1<<5)|(1<<4));	// Feature Byte 1
                 } else {
-                    if (PS1AudioCard) { /* FIXME: Won't work because BIOS_Init() comes before PS1SOUND_Init() */
+					if (machine==MCH_MCGA) {
+						/* PS/2 model 30 */
+						phys_writeb(data+2,0xFA);
+						phys_writeb(data+3,0x00); // Submodel ID (PS/2) model 30
+					} else if (PS1AudioCard) { /* FIXME: Won't work because BIOS_Init() comes before PS1SOUND_Init() */
                         phys_writeb(data+2,0xFC);					// Model ID (PC)
                         phys_writeb(data+3,0x0B);					// Submodel ID (PS/1).
                     } else {
@@ -6680,7 +6684,8 @@ public:
 		/* model byte */
 		if (machine==MCH_TANDY || machine==MCH_AMSTRAD) phys_writeb(0xffffe,0xff);	/* Tandy model */
 		else if (machine==MCH_PCJR) phys_writeb(0xffffe,0xfd);	/* PCJr model */
-		else phys_writeb(0xffffe,0xfc);	/* PC */
+		else if (machine==MCH_MCGA) phys_writeb(0xffffe,0xfa); /* PS/2 model 30 */
+		else phys_writeb(0xffffe,0xfc); /* PC (FIXME: This is listed as model byte PS/2 model 60) */
 
 		// signature
 		phys_writeb(0xfffff,0x55);
