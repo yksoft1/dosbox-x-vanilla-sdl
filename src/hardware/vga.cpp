@@ -1252,7 +1252,9 @@ void VGA_Init() {
 
 	vga.other.mcga_mode_control = 0;
 	
-    vga.draw.render_step = 0;
+	vga.config.chained = false;
+    
+	vga.draw.render_step = 0;
     vga.draw.render_max = 1;
 
 	vga.tandy.draw_base = NULL;
