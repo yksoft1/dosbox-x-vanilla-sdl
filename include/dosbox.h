@@ -62,7 +62,8 @@ enum MachineType {
 	MCH_VGA,
 	MCH_AMSTRAD,
 	MCH_PC98,
-	MCH_MCGA                         // IBM PS/2 model 30 Multi-Color Graphics Adapter
+	MCH_MCGA,                         // IBM PS/2 model 30 Multi-Color Graphics Adapter
+	MCH_MDA
 };
 
 enum SVGACards {

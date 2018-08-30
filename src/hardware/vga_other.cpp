@@ -1016,11 +1016,11 @@ void VGA_SetupOther(void) {
         for (i=0;i<256;i++)	memcpy(&vga.draw.font[i*32],&int10_font_16[i*16],16);
         vga.draw.font_tables[0]=vga.draw.font_tables[1]=vga.draw.font;
     }
-	if (machine==MCH_CGA || IS_TANDY_ARCH || machine==MCH_HERC) {
+	if (machine==MCH_CGA || IS_TANDY_ARCH || machine==MCH_HERC || machine==MCH_MDA) {
 		IO_RegisterWriteHandler(0x3db,write_lightpen,IO_MB);
 		IO_RegisterWriteHandler(0x3dc,write_lightpen,IO_MB);
 	}
-	if (machine==MCH_HERC) {
+	if (machine==MCH_HERC || machine==MCH_MDA) {
 		extern Bit8u int10_font_14[256 * 14];
 		for (i=0;i<256;i++)	memcpy(&vga.draw.font[i*32],&int10_font_14[i*14],14);
 		vga.draw.font_tables[0]=vga.draw.font_tables[1]=vga.draw.font;
@@ -1119,7 +1119,7 @@ void VGA_SetupOther(void) {
 		IO_RegisterReadHandler(base+1,read_crtc_data_other,IO_MB);
 	}
 	if (machine==MCH_AMSTRAD) {
-		Bitu base=machine==MCH_HERC ? 0x3b4 : 0x3d4;
+		Bitu base=machine==(MCH_HERC || machine==MCH_MDA) ? 0x3b4 : 0x3d4;
 		IO_RegisterWriteHandler(base,write_crtc_index_other,IO_MB);
 		IO_RegisterWriteHandler(base+1,write_crtc_data_other,IO_MB);
 		IO_RegisterReadHandler(base,read_crtc_index_other,IO_MB);

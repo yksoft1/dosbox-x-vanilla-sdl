@@ -738,6 +738,7 @@ void DOSBOX_RealInit() {
 	else if (mtype == "tandy")         { machine = MCH_TANDY; }
 	else if (mtype == "pcjr")          { machine = MCH_PCJR; }
 	else if (mtype == "hercules")      { machine = MCH_HERC; }
+	else if (mtype == "mda")			{ machine = MCH_MDA; }
 	else if (mtype == "ega")           { machine = MCH_EGA; }
 	else if (mtype == "svga_s3")       { svgaCard = SVGA_S3Trio; }
 	else if (mtype == "vesa_nolfb")    { svgaCard = SVGA_S3Trio; int10.vesa_nolfb = true;}
@@ -853,7 +854,7 @@ void DOSBOX_SetupConfigSections(void) {
 	const char* machines[] = {
 		"hercules", "cga", "cga_mono", "cga_rgb", "cga_composite", "cga_composite2", "tandy", "pcjr", "ega",
 		"vgaonly", "svga_s3", "svga_et3000", "svga_et4000",
-		"svga_paradise", "vesa_nolfb", "vesa_oldvbe", "amstrad", "pc98", "pc9801", "pc9821", "mcga", 0 };
+		"svga_paradise", "vesa_nolfb", "vesa_oldvbe", "amstrad", "pc98", "pc9801", "pc9821", "mcga", "mda", 0 };
 
 	const char* scalers[] = { 
 		"none", "normal2x", "normal3x", "normal4x", "normal5x",
