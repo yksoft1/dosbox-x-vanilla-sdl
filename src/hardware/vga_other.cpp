@@ -979,16 +979,31 @@ Bitu read_herc_status(Bitu /*port*/,Bitu /*iolen*/) {
 	double timeInFrame = PIC_FullIndex()-vga.draw.delay.framestart;
 	Bit8u retval=0x72; // Hercules ident; from a working card (Winbond W86855AF)
 					// Another known working card has 0x76 ("KeysoGood", full-length)
-	if (timeInFrame < vga.draw.delay.vrstart ||
-		timeInFrame > vga.draw.delay.vrend) retval |= 0x80;
+					
+	if (machine == MCH_HERC) {
+		/* NTS: Vertical retrace bit is hercules-specific, as documented.
+		 * DOSLIB uses this to detect MDA vs Hercules.
+		 *
+		 * This (and DOSLIB) will be revised when I get around to
+		 * plugging in my old MDA in one machine and Hercules card
+		 * in another machine to double-check ---J.C. */
+		if (timeInFrame < vga.draw.delay.vrstart ||
+			timeInFrame > vga.draw.delay.vrend) retval |= 0x80;
+		}
+	else {
+		retval |= 0x80; // bit 7 always set on MDA (right??)
+	}
 
 	double timeInLine=fmod(timeInFrame,vga.draw.delay.htotal);
 	if (timeInLine >= vga.draw.delay.hrstart &&
 		timeInLine <= vga.draw.delay.hrend) retval |= 0x1;
 
-	// 688 Attack sub checks bit 3 - as a workaround have the bit enabled
-	// if no sync active (corresponds to a completely white screen)
-	if ((retval&0x81)==0x80) retval |= 0x8;
+	if (machine == MCH_HERC) {
+		// 688 Attack sub checks bit 3 - as a workaround have the bit enabled
+		// if no sync active (corresponds to a completely white screen)
+		if ((retval&0x81)==0x80) retval |= 0x8;
+	}
+
 	return retval;
 }
 
@@ -1075,7 +1090,7 @@ void VGA_SetupOther(void) {
 		IO_RegisterWriteHandler(0x3d0,write_crtc_index_other,IO_MB);
 		IO_RegisterWriteHandler(0x3d1,write_crtc_data_other,IO_MB);
 	}
-	if (machine==MCH_HERC) {
+	if (machine==MCH_HERC || machine==MCH_MDA) {
 		Bitu base=0x3b0;
 		for (Bitu i = 0; i < 4; i++) {
 			// The registers are repeated as the address is not decoded properly;
@@ -1089,9 +1104,15 @@ void VGA_SetupOther(void) {
 		vga.herc.enable_bits=0;
 		vga.herc.mode_control=0xa; // first mode written will be text mode
 		vga.crtc.underline_location = 13;
-		IO_RegisterWriteHandler(0x3b8,write_hercules,IO_MB);
-		IO_RegisterWriteHandler(0x3bf,write_hercules,IO_MB);
 		IO_RegisterReadHandler(0x3ba,read_herc_status,IO_MB);
+		
+		if (machine==MCH_HERC) {
+			IO_RegisterWriteHandler(0x3b8,write_hercules,IO_MB);
+			IO_RegisterWriteHandler(0x3bf,write_hercules,IO_MB);
+		}
+		if (machine==MCH_MDA) {
+			VGA_SetMode(M_HERC_TEXT); // HACK
+		}
 	}
 	if (machine==MCH_CGA) {
 		Bitu base=0x3d0;
