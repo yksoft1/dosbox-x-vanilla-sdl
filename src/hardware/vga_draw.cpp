@@ -1960,8 +1960,26 @@ static void VGA_VerticalTimer(Bitu /*val*/) {
 	switch (vga.mode) {
 	case M_EGA:
 		if (vga.vmemwrap >= 0x20000) {
-			if (!(vga.crtc.mode_control&0x1)) vga.draw.linear_mask &= ~0x10000;
-			else vga.draw.linear_mask |= 0x10000;
+			/* EGA/VGA Mode control register 0x17 effects on the linear mask */
+			if ((vga.crtc.maximum_scan_line&0x1f) == 0) {
+				/* WARNING: These hacks only work IF max scanline value == 0 (no doubling).
+				 *          The bit 0 (bit 13 replacement) mode here is needed for
+				 *          Prehistorik 2 to display it's mode select/password entry screen
+				 *          (the one with the scrolling background of various cavemen) */
+				/* if bit 0 is cleared, CGA compatible addressing is enabled.
+				 * bit 13 is replaced by bit 0 of the row counter */
+				if (!(vga.crtc.mode_control&0x1)) vga.draw.linear_mask &= ~0x8000;
+				else vga.draw.linear_mask |= 0x8000;
+				/* if bit 1 is cleared, Hercules compatible addressing is enabled.
+				 * bit 14 is replaced by bit 0 of the row counter */
+				if (!(vga.crtc.mode_control&0x2)) vga.draw.linear_mask &= ~0x10000;
+				else vga.draw.linear_mask |= 0x10000;
+			}
+			else {
+				if ((vga.crtc.mode_control&0x03) != 0x03) {
+					LOG(LOG_VGAMISC,LOG_WARN)("Guest is attempting to use CGA/Hercules compatible display mapping in M_EGA mode with max_scanline != 0, which is not yet supported");
+				}
+			}
 		}
 		/* fall through */
 	case M_LIN4:
