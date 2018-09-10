@@ -60,6 +60,8 @@ bool bochs_port_e9 = false;
 bool isa_memory_hole_512kb = false;
 bool int15_wait_force_unmask_irq = false;
 
+int unhandled_irq_method = UNHANDLED_IRQ_SIMPLE;
+
 Bit16u biosConfigSeg=0;
 
 Bitu BIOS_DEFAULT_IRQ0_LOCATION = ~0;		// (RealMake(0xf000,0xfea5))
@@ -5280,6 +5282,33 @@ void gdc_16color_enable_update_vars(void) {
 	}
 }
 
+void Default_IRQ_Handler_Mask_ISR(void) {
+	/* loosely adapted from em-dosbox */
+	IO_WriteB(IS_PC98_ARCH ? 0x00 : 0x20,0x0B); // ask the PIC for the ISR register
+	Bit8u master_isr = IO_ReadB(IS_PC98_ARCH ? 0x00 : 0x20);
+	if (master_isr) {	
+        IO_WriteB(IS_PC98_ARCH ? 0x08 : 0xA0,0x0B); // ask the PIC for the ISR register
+		Bit8u slave_isr = IO_ReadB(IS_PC98_ARCH ? 0x08 : 0xA0);
+		if (slave_isr) {
+			IO_WriteB(IS_PC98_ARCH ? 0x0A : 0xA1,IO_ReadB(IS_PC98_ARCH ? 0x0A : 0xA1)|slave_isr);
+			IO_WriteB(IS_PC98_ARCH ? 0x08 : 0xA0,0x20);//ACK
+		}
+		else {
+			IO_WriteB(IS_PC98_ARCH ? 0x02 : 0x21,IO_ReadB(IS_PC98_ARCH ? 0x02 : 0x21)|(master_isr&(~4)));
+		}
+		IO_WriteB(IS_PC98_ARCH ? 0x00 : 0x20,0x20);//ACK
+
+		LOG_MSG("Unhandled IRQ, ISR master=0x%02x slave=0x%02x",master_isr,slave_isr);
+	}
+}
+
+static Bitu Default_IRQ_Handler(void) {
+	if (unhandled_irq_method == UNHANDLED_IRQ_MASK_ISR)
+		Default_IRQ_Handler_Mask_ISR();
+
+	return CBRET_NONE;
+}
+
 class BIOS:public Module_base{
 private:
 	static Bitu cb_bios_post__func(void) {
@@ -5573,9 +5602,15 @@ private:
         }
 
         if (IS_PC98_ARCH) {
-            CALLBACK_Setup(call_irq07default,NULL,CB_IRET_EOI_PIC1,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
-            CALLBACK_Setup(call_irq815default,NULL,CB_IRET_EOI_PIC2,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
-
+			if (unhandled_irq_method == UNHANDLED_IRQ_MASK_ISR) {
+				CALLBACK_Setup(call_irq07default,Default_IRQ_Handler,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
+				CALLBACK_Setup(call_irq815default,Default_IRQ_Handler,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
+			}
+			else {
+				CALLBACK_Setup(call_irq07default,NULL,CB_IRET_EOI_PIC1,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
+				CALLBACK_Setup(call_irq815default,NULL,CB_IRET_EOI_PIC2,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
+			}
+			
             BIOS_UnsetupKeyboard();
             BIOS_UnsetupDisks();
 
@@ -6711,6 +6746,17 @@ public:
 			// FIXME: Erm, well this couldv'e been named better. It refers to the amount of conventional memory
 			//        made available to the operating system below 1MB, which is usually DOS.
 			dos_conventional_limit = section->Get_int("dos mem limit");
+
+			{
+				std::string s = section->Get_string("unhandled irq handler");
+
+				if (s == "simple")
+					unhandled_irq_method = UNHANDLED_IRQ_SIMPLE;
+				else if (s == "mask_isr")
+					unhandled_irq_method = UNHANDLED_IRQ_MASK_ISR;
+				else
+					unhandled_irq_method = UNHANDLED_IRQ_SIMPLE;
+			}
 		}
 
 		if (bochs_port_e9) {
@@ -6849,12 +6895,18 @@ public:
 
 		/* Irq 2-7 */
 		call_irq07default=CALLBACK_Allocate();
-		CALLBACK_Setup(call_irq07default,NULL,CB_IRET_EOI_PIC1,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
-
+		if (unhandled_irq_method == UNHANDLED_IRQ_MASK_ISR)
+			CALLBACK_Setup(call_irq07default,Default_IRQ_Handler,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
+		else
+			CALLBACK_Setup(call_irq07default,NULL,CB_IRET_EOI_PIC1,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
+ 
 		/* Irq 8-15 */
 		call_irq815default=CALLBACK_Allocate();
-		CALLBACK_Setup(call_irq815default,NULL,CB_IRET_EOI_PIC2,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
-
+		if (unhandled_irq_method == UNHANDLED_IRQ_MASK_ISR)
+			CALLBACK_Setup(call_irq815default,Default_IRQ_Handler,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
+		else
+			CALLBACK_Setup(call_irq815default,NULL,CB_IRET_EOI_PIC2,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
+ 
 		/* BIOS boot stages */
 		cb_bios_post.Install(&cb_bios_post__func,CB_RETF,"BIOS POST");
 		cb_bios_scan_video_bios.Install(&cb_bios_scan_video_bios__func,CB_RETF,"BIOS Scan Video BIOS");
