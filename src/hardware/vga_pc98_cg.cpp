@@ -99,8 +99,11 @@ void pc98_a1_write(Bitu port,Bitu val,Bitu iolen) {
                    // write to that cell if you write to 0x8056 instead.
             if ((a1_font_load_addr & 0x007E) == 0x0056 && (a1_font_load_addr & 0xFF00) != 0x0000)
                 pc98_font_char_write(a1_font_load_addr,a1_font_char_offset & 0xF,(a1_font_char_offset & 0x20) ? 0 : 1,val);
-            else
+            else {
+#ifndef EMSCRIPTEN
                 LOG_MSG("A1 port attempt to write FONT ROM char 0x%x",a1_font_load_addr);
+#endif
+			}
             break;
         default:
             LOG_MSG("A1 port %lx val %lx unexpected",port,val);

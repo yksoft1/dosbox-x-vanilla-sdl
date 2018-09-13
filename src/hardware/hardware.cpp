@@ -1841,6 +1841,7 @@ void HARDWARE_Init() {
 	AddExitFunction(AddExitFunctionFuncPair(HARDWARE_Destroy),true);
 }
 
+#ifndef EMSCRIPTEN
 void update_capture_fmt_menu(void) {
 	mainMenu.get_item("capture_fmt_avi_zmbv").check(native_zmbv).refresh_item(mainMenu);
 #if (C_AVCODEC)
@@ -1885,3 +1886,4 @@ bool capture_fmt_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const 
 	update_capture_fmt_menu();
 	return true;
 }
+#endif

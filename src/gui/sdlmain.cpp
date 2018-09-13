@@ -7225,8 +7225,10 @@ bool VM_PowerOn() {
 	return true;
 }
 
+#ifndef EMSCRIPTEN
 void update_capture_fmt_menu(void);
 bool capture_fmt_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem);
+#endif
 
 void update_pc98_clock_pit_menu(void) {
 	Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
@@ -8324,7 +8326,7 @@ int main(int argc, char* argv[]) {
 		{
 			DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"CaptureFormatMenu");
 			item.set_text("Capture format");
-
+#ifndef EMSCRIPTEN
 			{
 				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"capture_fmt_avi_zmbv").set_text("AVI + ZMBV").
 					set_callback_function(capture_fmt_menu_callback);
@@ -8333,6 +8335,7 @@ int main(int argc, char* argv[]) {
 					set_callback_function(capture_fmt_menu_callback);
 #endif
 			}
+#endif
 		}
 		
 		/* more */
@@ -8519,8 +8522,9 @@ int main(int argc, char* argv[]) {
 
 		OutputSettingMenuUpdate();
 		update_pc98_clock_pit_menu();
+#ifndef EMSCRIPTEN
 		update_capture_fmt_menu();
-		
+#endif
 		/* The machine just "powered on", and then reset finished */
 		if (!VM_PowerOn()) E_Exit("VM failed to power on");
 
@@ -8540,8 +8544,10 @@ int main(int argc, char* argv[]) {
         void ConstructMenu(void);
         ConstructMenu();
 
+#ifndef EMSCRIPTEN
         mainMenu.dump_log_debug(); /*DEBUG*/
-
+#endif
+		
         mainMenu.rebuild();
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
