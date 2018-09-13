@@ -307,7 +307,9 @@ static Bitu Normal_Loop(void) {
     bool saved_allow = dosbox_allow_nonrecursive_page_fault;
     Bit32u ticksNew;
 	Bits ret;
-
+#ifdef EMSCRIPTEN
+	int ticksEntry = GetTicks();
+#endif
     if (!menu.hidecycles || menu.showrt) { /* sdlmain.cpp/render.cpp doesn't even maintain the frames count when hiding cycles! */
         ticksNew = GetTicks();
         if (ticksNew >= Ticks) {
@@ -375,18 +377,72 @@ increaseticks:
             ticksDone = 0;
             ticksScheduled = 0;
         } else {
+/*** CPU cycle adjustment algorithm configuration ***/
+#ifdef EMSCRIPTEN
+// This only includes CPU usage during the main loop. Other Emscripten code
+// plus the browser also require CPU time. Low values don't take full
+// advantage of the host CPU and decrease emulation performance. High values
+// cause tick limits to be hit more often and disrupt sound.
+// Over 60 increases sound interruptions in Firefox 34 in Linux.
+// Up to 80 delivers results which aren't too bad.
+#define CPU_USAGE_TARGET 60
+// Exceeding the soft limit will case immediate cutback or
+// recalculation of CPU_CycleMax.
+#define SOFT_TICK_LIMIT 18
+// Exceeding the hard limit causes emulation to slow down compared to real
+// time. Occasional spikes triggering this are unavoidable in a browser.
+// Missed ticks are added to the backlog in an attempt to catch up later.
+#define HARD_TICK_LIMIT 25
+// The backlog cannot be allowed to grow without bound.
+#define BACKLOG_LIMIT 50
+#else
+#define CPU_USAGE_TARGET 90
+#define SOFT_TICK_LIMIT 15
+#define HARD_TICK_LIMIT 20
+#define BACKLOG_LIMIT 40
+#endif
+
             ticksNew=GetTicks();
             ticksScheduled += ticksAdded;
             if (ticksNew > ticksLast) {
                 ticksRemain = ticksNew-ticksLast;
-                ticksLast = ticksNew;
+                ticksLast = ticksNew;		
+#ifdef EMSCRIPTEN
+				/* Calculations below are meant to be based on the number of ticks
+				 * used by DOSBox. Ticks between two main loop calls include time
+				 * when DOSBox isn't running, so only time from the start of this
+				 * function is considered.
+				 */
+				ticksDone += ticksNew - ticksEntry;
+#else
                 ticksDone += ticksRemain;
+#endif
+
+#ifdef EMSCRIPTEN
+				static Bit32u backLog = 0;
+				if (ticksRemain > HARD_TICK_LIMIT) {
+					backLog += ticksRemain - HARD_TICK_LIMIT;
+					ticksRemain = HARD_TICK_LIMIT;
+					if (backLog > BACKLOG_LIMIT) {
+						backLog = BACKLOG_LIMIT;
+					}
+				} else if (backLog > 0) {
+					if (backLog < HARD_TICK_LIMIT - ticksRemain) {
+						ticksRemain += backLog;
+						backLog = 0;
+					} else {
+						backLog -= HARD_TICK_LIMIT - ticksRemain;
+						ticksRemain = HARD_TICK_LIMIT;
+					}
+				}
+#else
                 if ( ticksRemain > 20 ) {
                     ticksRemain = 20;
                 }
+#endif
                 ticksAdded = ticksRemain;
                 if (CPU_CycleAutoAdjust && !CPU_SkipCycleAutoAdjust) {
-                    if (ticksScheduled >= 250 || ticksDone >= 250 || (ticksAdded > 15 && ticksScheduled >= 5) ) {
+                    if (ticksScheduled >= 250 || ticksDone >= 250 || (ticksAdded > SOFT_TICK_LIMIT && ticksScheduled >= 5) ) {
                         if(ticksDone < 1) ticksDone = 1; // Protect against div by zero
                         /* ratio we are aiming for is around 90% usage*/
                         Bit32s ratio = (ticksScheduled * (CPU_CyclePercUsed*90*1024/100/100)) / ticksDone;
@@ -440,7 +496,7 @@ increaseticks:
                         CPU_IODelayRemoved = 0;
                         ticksDone = 0;
                         ticksScheduled = 0;
-                    } else if (ticksAdded > 15) {
+                    } else if (ticksAdded > SOFT_TICK_LIMIT) {
                         /* ticksAdded > 15 but ticksScheduled < 5, lower the cycles
                            but do not reset the scheduled/done ticks to take them into
                            account during the next auto cycle adjustment */
@@ -451,7 +507,11 @@ increaseticks:
                 }
             } else {
                 ticksAdded = 0;
+#ifndef EMSCRIPTEN
                 SDL_Delay(1);
+#else
+				emscripten_sleep_with_yield(1);
+#endif
                 ticksDone -= GetTicks() - ticksNew;
                 if (ticksDone < 0)
                     ticksDone = 0;
