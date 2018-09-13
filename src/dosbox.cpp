@@ -50,6 +50,9 @@
 #include <string.h>
 #include <ctime>
 #include <unistd.h>
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#endif
 #include "dosbox.h"
 #include "debug.h"
 #include "cpu.h"
@@ -161,6 +164,11 @@ bool				SDLNetInited;
 Bit32s				ticksDone;
 Bit32u				ticksScheduled;
 bool				ticksLocked;
+
+#ifdef EMSCRIPTEN
+static int runcount = 0;
+#endif
+
 bool				mono_cga=false;
 bool				ignore_opcode_63 = true;
 int				dynamic_core_cache_block_size = 32;
@@ -485,7 +493,53 @@ void DOSBOX_SetNormalLoop() {
 	loop=Normal_Loop;
 }
 
+#ifdef EMSCRIPTEN
+ /* Many DOS games display a text mode screen after they exit.
+  * This tries to ensure that screen will be visible. In other situations
+  * this is used to display the screen to help diagnosis.
+  */
+static int em_exitarg;
+static void em_exit_loop(void) {
+	static int counter = 0;
+ 	if (++counter < 500) {
+ 		PIC_RunQueue();
+ 		TIMER_AddTick();
+ 	} else {
+ 		emscripten_cancel_main_loop();
+ 		emscripten_force_exit(em_exitarg);
+ 	}
+}
+
+void em_exit(int exitarg) {
+ 	em_exitarg = exitarg;
+ 	emscripten_cancel_main_loop();
+ 	emscripten_set_main_loop(em_exit_loop, 0, 1);
+}
+
+static void em_main_loop(void) {
+ 	if ((*loop)()) {
+ 		/* Here, the function which called emscripten_set_main_loop() should
+ 		 * return, but that call stack is gone, so emulation ends.
+ 		 */
+ 		LOG_MSG("Emulation ended because program exited.");
+ 		em_exit(0);
+ 	}
+}
+#endif
+
 void DOSBOX_RunMachine(void){
+#ifdef EMSCRIPTEN
+	if(runcount<2)
+		runcount ++;
+	else if(runcount==2)
+	{
+		runcount++;
+
+		emscripten_set_main_loop(em_main_loop, 0, 1);
+		emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
+	}	
+	
+#endif
 	Bitu ret;
 	do {
 		ret=(*loop)();

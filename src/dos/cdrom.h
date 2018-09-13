@@ -34,7 +34,7 @@
 #include "SDL.h"
 #include "SDL_thread.h"
 
-#if defined(C_SDL2) /* SDL 1.x defines this, SDL 2.x does not */
+#if defined(C_SDL2) || defined (EMSCRIPTEN) /* SDL 1.x defines this, SDL 2.x does not */
 /** @name Frames / MSF Conversion Functions
  *  Conversion functions from frames to Minute/Second/Frames and vice versa
  */
@@ -126,7 +126,7 @@ private:
 	bool	Open				(void);
 	void	Close				(void);
 
-#if !defined(C_SDL2)
+#if !defined(C_SDL2) && !defined (EMSCRIPTEN)
 	SDL_CD*	cd;
 #endif
 	int		driveID;
@@ -392,7 +392,7 @@ private:
 
 #endif /* WIN 32 */
 
-#if defined (LINUX) || defined(OS2)
+#if (defined (LINUX) || defined(OS2)) && !defined (EMSCRIPTEN)
 
 class CDROM_Interface_Ioctl : public CDROM_Interface_SDL
 {

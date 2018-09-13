@@ -375,3 +375,12 @@ vs2015/sdl/include/SDL_config.h
 /vs2015/libpdcurses/wincon/pdcurses.lib
 /vs2015/libpdcurses/wincon/ozdemo.exe
 /vs2015/libpdcurses/wincon/firework.exe
+
+# Emscripten
+a.out
+*.bc
+*.wasm
+*.js
+*.html
+*.data
+

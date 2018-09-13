@@ -334,7 +334,7 @@ public:
 
 			std::string str;
 			cmd.FindCommand(1,str);
-#if C_DIRECTLPT			
+#if C_DIRECTLPT && !defined(EMSCRIPTEN)
 			if(str=="reallpt") {
 				CDirectLPT* cdlpt= new CDirectLPT(i, defaultirq[i],&cmd);
 				if(cdlpt->InstallationSuccessful)

@@ -76,8 +76,10 @@ void GFX_OpenGLRedrawScreen(void);
 #include "menu.h"
 #include "SDL_video.h"
 #include "ide.h"
+#ifndef EMSCRIPTEN
 #include "bitop.h"
 #include "ptrop.h"
+#endif
 #include "mapper.h"
 
 #include "../src/libs/gui_tk/gui_tk.h"
@@ -1139,6 +1141,14 @@ void GFX_LogSDLState(void) {
 	GFX_Bshift = sdl.surface->format->Bshift;
 	GFX_Amask = sdl.surface->format->Amask;
 	GFX_Ashift = sdl.surface->format->Ashift;
+	
+#if !defined(C_SDL2) && defined(EMSCRIPTEN)
+	//HACK: Emscripten's SDL1 library_sdl.js won't set Rshift, Gshift, Bshift and Ashift.
+	GFX_Rshift=0;
+	GFX_Gshift=8;
+	GFX_Bshift=16;
+	GFX_Ashift=24;
+#endif
 }
 
 #if !defined(C_SDL2) && C_OPENGL
@@ -4380,7 +4390,7 @@ void MenuFullScreenRedraw(void) {
 #endif
 }
 
-#if defined(C_SDL2) 
+#if defined(C_SDL2) && !defined (EMSCRIPTEN)
 static const SDL_TouchID no_touch_id = (SDL_TouchID)(~0ULL);
 static const SDL_FingerID no_finger_id = (SDL_FingerID)(~0ULL);
 static SDL_FingerID touchscreen_finger_lock = no_finger_id;
@@ -5501,7 +5511,7 @@ void* GetSetSDLValue(int isget, std::string target, void* setval) {
 	return NULL;
 }
 
-#if defined(C_SDL2)
+#if defined(C_SDL2) && !defined (EMSCRIPTEN)
 
 static void FingerToFakeMouseMotion(SDL_TouchFingerEvent * finger) {
     SDL_MouseMotionEvent fake;
@@ -5779,7 +5789,7 @@ void GFX_Events() {
             }
             break;
         case SDL_MOUSEMOTION:
-#if defined(C_SDL2)
+#if defined(C_SDL2) && !defined(EMSCRIPTEN)
             if (touchscreen_finger_lock == no_finger_id &&
                 touchscreen_touch_lock == no_touch_id &&
 				event.motion.which != SDL_TOUCH_MOUSEID) { /* don't handle mouse events faked by touchscreen */
@@ -5791,7 +5801,7 @@ void GFX_Events() {
             break;
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
-#if defined(C_SDL2)
+#if defined(C_SDL2) && !defined(EMSCRIPTEN)
             if (touchscreen_finger_lock == no_finger_id &&
                 touchscreen_touch_lock == no_touch_id &&
 				event.button.which != SDL_TOUCH_MOUSEID) { /* don't handle mouse events faked by touchscreen */
@@ -5801,11 +5811,13 @@ void GFX_Events() {
             HandleMouseButton(&event.button);
 #endif
             break;
+#ifndef EMSCRIPTEN
         case SDL_FINGERDOWN:
         case SDL_FINGERUP:
         case SDL_FINGERMOTION:
             HandleTouchscreenFinger(&event.tfinger);
             break;
+#endif
         case SDL_QUIT:
             throw(0);
             break;
@@ -7748,8 +7760,10 @@ int main(int argc, char* argv[]) {
     CommandLine com_line(argc,argv);
     Config myconf(&com_line);
 
+#ifndef EMSCRIPTEN
 	bitop::self_test();
 	ptrop::self_test();
+#endif	
 	
     memset(&sdl,0,sizeof(sdl)); // struct sdl isn't initialized anywhere that I can tell
 
@@ -8013,7 +8027,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 		/* -- SDL init */
-#if defined(C_SDL2)
+#if defined(C_SDL2) || defined (EMSCRIPTEN)
         if (SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO|SDL_INIT_TIMER|/*SDL_INIT_CDROM|*/SDL_INIT_NOPARACHUTE) >= 0)
 #else
 		if (SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO|SDL_INIT_TIMER|SDL_INIT_CDROM|SDL_INIT_NOPARACHUTE) >= 0)

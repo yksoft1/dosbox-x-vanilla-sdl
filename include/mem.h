@@ -23,6 +23,10 @@
 #include "dosbox.h"
 #endif
 
+#ifdef EMSCRIPTEN
+#include <endian.h>
+#endif
+
 #include "byteorder.h"
 
 typedef Bit8u const * ConstHostPt;		/* host (virtual) memory address aka ptr */

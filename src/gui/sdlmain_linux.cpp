@@ -8,8 +8,10 @@
 #include "SDL_version.h"
 #include "SDL_syswm.h"
 
+#ifndef EMSCRIPTEN
 #include <X11/XKBlib.h>
 #include <X11/extensions/XKBrules.h>
+#endif
 
 void UpdateWindowDimensions(Bitu width, Bitu height);
 void UpdateWindowMaximized(bool flag);
@@ -25,7 +27,7 @@ extern "C" void SDL1_hax_X11_jpfix(int ro_scan,int yen_scan);
 #endif
 
 void LinuxX11_OnTop(bool f) {
-#if !defined(C_SDL2)
+#if !defined(C_SDL2) && !defined (EMSCRIPTEN)
 	SDL_SysWMinfo wminfo;
 	memset(&wminfo,0,sizeof(wminfo));
 	SDL_VERSION(&wminfo.version);
@@ -62,7 +64,7 @@ void LinuxX11_OnTop(bool f) {
 }
 
 char *LinuxX11_KeySymName(Uint32 x) {
-#if !defined(C_SDL2)
+#if !defined(C_SDL2) && !defined (EMSCRIPTEN)
     SDL_SysWMinfo wminfo;
     memset(&wminfo,0,sizeof(wminfo));
     SDL_VERSION(&wminfo.version);
@@ -121,7 +123,7 @@ void Linux_JPXKBFix(void) {
 unsigned int Linux_GetKeyboardLayout(void) {
     unsigned int ret = DKM_US;
 
-#if defined(C_SDL2)
+#if defined(C_SDL2) || defined (EMSCRIPTEN)
     // TODO
 #else
     SDL_SysWMinfo wminfo;
@@ -171,7 +173,7 @@ unsigned int Linux_GetKeyboardLayout(void) {
 }
 
 void UpdateWindowDimensions_Linux(void) {
-#if defined(C_SDL2)
+#if defined(C_SDL2) || defined (EMSCRIPTEN)
     // TODO
 #else
     bool GFX_IsFullscreen();
@@ -232,7 +234,7 @@ void UpdateWindowDimensions_Linux(void) {
 }
 
 void Linux_GetDesktopResolution(int *width,int *height) {
-#if defined(C_SDL2)
+#if defined(C_SDL2) || defined (EMSCRIPTEN)
     *width = 1024; // guess
     *height = 768;
 #else

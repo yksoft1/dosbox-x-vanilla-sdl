@@ -277,7 +277,7 @@ public:
 		}
 		/* Show list of cdroms */
 		if (cmd->FindExist("-cd",false)) {
-#if !defined(C_SDL2)
+#if !defined(C_SDL2) && !defined (EMSCRIPTEN)
 			int num = SDL_CDNumDrives();
    			WriteOut(MSG_Get("PROGRAM_MOUNT_CDROMS_FOUND"),num);
 			for (int i=0; i<num; i++) {

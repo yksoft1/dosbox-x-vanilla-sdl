@@ -27,8 +27,10 @@
 #include "support.h"
 #include "debug.h"
 #include "ide.h"
+#ifndef EMSCRIPTEN
 #include "bitop.h"
 #include "ptrop.h"
+#endif
 #include "mapper.h"
 #include "zipfile.h"
 

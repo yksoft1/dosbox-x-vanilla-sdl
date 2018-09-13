@@ -57,6 +57,20 @@
 #define MIXER_SSIZE 4
 #define MIXER_VOLSHIFT 13
 
+#if defined(EMSCRIPTEN) && defined(C_SDL2)
+//see https://github.com/kripken/emscripten/issues/3477
+ typedef float mixer_t;
+ static INLINE float MIXER_CLIP(Bits SAMP) {
+ 	Bit16s samp16s;
+ 	if (SAMP < MAX_AUDIO) {
+ 		if (SAMP > MIN_AUDIO)
+ 			samp16s = SAMP;
+ 		else samp16s = MIN_AUDIO;
+ 	} else samp16s = MAX_AUDIO;
+ 	return samp16s / 32768.0f;
+ }
+#else
+typedef Bit16s mixer_t;
 static INLINE Bit16s MIXER_CLIP(Bits SAMP) {
 	if (SAMP < MAX_AUDIO) {
 		if (SAMP > MIN_AUDIO)
@@ -67,6 +81,7 @@ static INLINE Bit16s MIXER_CLIP(Bits SAMP) {
 		return MAX_AUDIO;
 	}
 }
+#endif
 
 struct mixedFraction {
 	unsigned int		w;
@@ -731,8 +746,8 @@ static void MIXER_Mix(void) {
 static void MIXER_CallBack(void * userdata, Uint8 *stream, int len) {
     Bit32s volscale1 = (Bit32s)(mixer.mastervol[0] * (1 << MIXER_VOLSHIFT));
     Bit32s volscale2 = (Bit32s)(mixer.mastervol[1] * (1 << MIXER_VOLSHIFT));
-	Bitu need = (Bitu)len/MIXER_SSIZE;
-	Bit16s *output = (Bit16s*)stream;
+	Bitu need=(Bitu)len/(sizeof(mixer_t)*2);
+ 	mixer_t *output=(mixer_t *)stream;
 	int remains;
 	Bit32s *in;
 
@@ -1007,7 +1022,11 @@ void MIXER_Init() {
 	SDL_AudioSpec obtained;
 
 	spec.freq=mixer.freq;
+#if defined(EMSCRIPTEN) && defined(C_SDL2)
+ 	spec.format=AUDIO_F32;
+#else
 	spec.format=AUDIO_S16SYS;
+#endif
 	spec.channels=2;
 	spec.callback=MIXER_CallBack;
 	spec.userdata=NULL;

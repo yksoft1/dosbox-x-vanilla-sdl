@@ -23,7 +23,7 @@
 #if C_DIRECTLPT
 
 /* Linux version */
-#if defined (LINUX)
+#if defined (LINUX) && !defined(EMSCRIPTEN)
 
 #include "parport.h"
 #include "directlpt_linux.h"

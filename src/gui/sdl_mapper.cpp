@@ -3083,10 +3083,12 @@ static struct {
 	{"jp_yen",SDLK_JP_YEN },
 #endif
 	/* more */
+#ifndef EMSCRIPTEN
 	{"jp_hankaku", SDLK_WORLD_12 },
 	{"jp_muhenkan", SDLK_WORLD_13 },
 	{"jp_henkan", SDLK_WORLD_14 },
 	{"jp_hiragana", SDLK_WORLD_15 },
+#endif
     {"colon", SDLK_COLON },
     {"caret", SDLK_CARET },
     {"atsign", SDLK_AT },
@@ -3791,6 +3793,7 @@ void MAPPER_StartUp() {
 #if !defined(C_SDL2)
 	usescancodes = false;
 
+#ifndef EMSCRIPTEN
 	if (section->Get_bool("usescancodes")) {
 		usescancodes=true;
 
@@ -3909,6 +3912,7 @@ void MAPPER_StartUp() {
 			if (key<MAX_SDLKEYS) scancode_map[key]=(Bit8u)i;
 		}
 	}
+#endif
 #endif
 
 	Prop_path* pp = section->Get_path("mapperfile");

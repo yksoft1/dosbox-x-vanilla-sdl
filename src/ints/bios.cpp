@@ -6911,7 +6911,9 @@ public:
 		cb_bios_post.Install(&cb_bios_post__func,CB_RETF,"BIOS POST");
 		cb_bios_scan_video_bios.Install(&cb_bios_scan_video_bios__func,CB_RETF,"BIOS Scan Video BIOS");
 		cb_bios_adapter_rom_scan.Install(&cb_bios_adapter_rom_scan__func,CB_RETF,"BIOS Adapter ROM scan");
+#ifndef EMSCRIPTEN
 		cb_bios_startup_screen.Install(&cb_bios_startup_screen__func,CB_RETF,"BIOS Startup screen");
+#endif
 		cb_bios_boot.Install(&cb_bios_boot__func,CB_RETF,"BIOS BOOT");
 		cb_bios_bootfail.Install(&cb_bios_bootfail__func,CB_RETF,"BIOS BOOT FAIL");
 		cb_pc98_rombasic.Install(&cb_pc98_entry__func,CB_RETF,"N88 ROM BASIC");
@@ -6941,11 +6943,13 @@ public:
 			phys_writew(wo+0x02,(Bit16u)cb_bios_adapter_rom_scan.Get_callback());		//The immediate word
 			wo += 4;
 
+#ifndef EMSCRIPTEN
 			// startup screen
 			phys_writeb(wo+0x00,(Bit8u)0xFE);						//GRP 4
 			phys_writeb(wo+0x01,(Bit8u)0x38);						//Extra Callback instruction
 			phys_writew(wo+0x02,(Bit16u)cb_bios_startup_screen.Get_callback());		//The immediate word
 			wo += 4;
+#endif
 
             // user boot hook
             if (bios_user_boot_hook != 0) {

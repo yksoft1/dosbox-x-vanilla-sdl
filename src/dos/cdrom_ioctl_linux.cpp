@@ -21,7 +21,7 @@
 #include "cdrom.h"
 #include "support.h"
 
-#if defined (LINUX)
+#if defined (LINUX) && !defined (EMSCRIPTEN)
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/cdrom.h>
