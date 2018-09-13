@@ -79,6 +79,8 @@ void GFX_OpenGLRedrawScreen(void);
 #ifndef EMSCRIPTEN
 #include "bitop.h"
 #include "ptrop.h"
+#else
+extern bool useRAF;
 #endif
 #include "mapper.h"
 
@@ -7954,6 +7956,13 @@ int main(int argc, char* argv[]) {
 		/* -- Welcome to DOSBox-X! */
 		LOG_MSG("DOSBox-X version %s",VERSION);
 		LOG(LOG_MISC,LOG_NORMAL)("Copyright 2002-2015 enhanced branch by The Great Codeholio, forked from the main project by the DOSBox Team, published under GNU GPL.");
+		
+#ifdef EMSCRIPTEN
+		Section_prop *sdldbox = static_cast<Section_prop*>(control->GetSection("dosbox"));
+		useRAF = sdldbox->Get_bool("emscripten use raf");
+		if(!useRAF)
+			LOG_MSG("Not using useRAF, cycles=max will hang");
+#endif
 
 #if defined(MACOSX)
 		LOG_MSG("Mac OS X EXE path: %s",MacOSXEXEPath.c_str());

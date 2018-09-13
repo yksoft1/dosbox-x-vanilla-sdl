@@ -167,6 +167,7 @@ bool				ticksLocked;
 
 #ifdef EMSCRIPTEN
 static int runcount = 0;
+bool useRAF = true;
 #endif
 
 bool				mono_cga=false;
@@ -576,7 +577,10 @@ static void em_exit_loop(void) {
 void em_exit(int exitarg) {
  	em_exitarg = exitarg;
  	emscripten_cancel_main_loop();
- 	emscripten_set_main_loop(em_exit_loop, 0, 1);
+	if(useRAF)
+		emscripten_set_main_loop(em_exit_loop, 0, 1);
+	else
+		emscripten_set_main_loop(em_exit_loop, 100, 1);
 }
 
 static void em_main_loop(void) {
@@ -597,8 +601,10 @@ void DOSBOX_RunMachine(void){
 	else if(runcount==2)
 	{
 		runcount++;
-
-		emscripten_set_main_loop(em_main_loop, 0, 1);
+		if(useRAF)
+			emscripten_set_main_loop(em_main_loop, 0, 1);
+		else
+			emscripten_set_main_loop(em_main_loop, 100, 1);
 	}	
 	Uint32 ticksStart = GetTicks();	
 #endif
@@ -1108,6 +1114,11 @@ void DOSBOX_SetupConfigSections(void) {
 			"It is discarded when you boot into another OS. Mainline DOSBox uses 32KB. Testing shows that it is possible\n"
 			"to run DOSBox with as little as 4KB. If DOSBox-X aborts with error \"not enough memory for internal tables\"\n"
 			"then you need to increase this value.");
+			
+#ifdef EMSCRIPTEN
+	Pbool = secprop->Add_bool("emscripten use raf",Property::Changeable::Always,true);
+	Pbool->Set_help("If set, the main loop would use requestAnimationFrame. required for cycles=max");
+#endif
 
 	// NOTE: This will be revised as I test the DOSLIB code against more VGA/SVGA hardware!
 	Pstring = secprop->Add_string("vga attribute controller mapping",Property::Changeable::WhenIdle,"auto");
