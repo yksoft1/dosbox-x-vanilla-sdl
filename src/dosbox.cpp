@@ -310,6 +310,8 @@ static Bitu Normal_Loop(void) {
 #ifdef EMSCRIPTEN
 	int ticksEntry = GetTicks();
 #endif
+
+#ifndef EMSCRIPTEN
     if (!menu.hidecycles || menu.showrt) { /* sdlmain.cpp/render.cpp doesn't even maintain the frames count when hiding cycles! */
         ticksNew = GetTicks();
         if (ticksNew >= Ticks) {
@@ -329,6 +331,7 @@ static Bitu Normal_Loop(void) {
             frames = 0;
         }
     }
+#endif //Don't show cycles in Emscripten for now
 
     try {
         while (1) {
@@ -388,13 +391,13 @@ increaseticks:
 #define CPU_USAGE_TARGET 60
 // Exceeding the soft limit will case immediate cutback or
 // recalculation of CPU_CycleMax.
-#define SOFT_TICK_LIMIT 18
+#define SOFT_TICK_LIMIT 25
 // Exceeding the hard limit causes emulation to slow down compared to real
 // time. Occasional spikes triggering this are unavoidable in a browser.
 // Missed ticks are added to the backlog in an attempt to catch up later.
-#define HARD_TICK_LIMIT 25
+#define HARD_TICK_LIMIT 40
 // The backlog cannot be allowed to grow without bound.
-#define BACKLOG_LIMIT 50
+#define BACKLOG_LIMIT 100
 #else
 #define CPU_USAGE_TARGET 90
 #define SOFT_TICK_LIMIT 15
@@ -510,7 +513,7 @@ increaseticks:
 #ifndef EMSCRIPTEN
                 SDL_Delay(1);
 #else
-				emscripten_sleep_with_yield(1);
+			//	emscripten_sleep_with_yield(1);
 #endif
                 ticksDone -= GetTicks() - ticksNew;
                 if (ticksDone < 0)
@@ -596,13 +599,23 @@ void DOSBOX_RunMachine(void){
 		runcount++;
 
 		emscripten_set_main_loop(em_main_loop, 0, 1);
-		emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
 	}	
-	
+	Uint32 ticksStart = GetTicks();	
 #endif
 	Bitu ret;
 	do {
 		ret=(*loop)();
+#ifdef EMSCRIPTEN
+ 		/* These should be very short operations, like interrupts.
+ 		 * Anything taking a long time will probably run indefinitely,
+ 		 * making DOSBox appear to hang.
+ 		 */
+ 		if (GetTicks() - ticksStart > 2000) {
+ 			LOG_MSG("Emulation aborted due to nested emulation timeout.");
+ 			em_exit(1);
+ 			break;
+ 		}
+ #endif
 	} while (!ret);
 }
 

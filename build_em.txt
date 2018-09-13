@@ -1,7 +1,7 @@
 Remember to use Emscripten's sdl2-config.
 
 My build command: (for my MSYS1+emsdk 1.38.12 Frankenstein environment)
-CC="emcc --sysroot=c:/emsdk/emscripten/1.38.12/system" CXX="em++ --sysroot=c:/emsdk/emscripten/1.38.12/system" LD="emcc" LD_CXX="em++" ./configure   --host=i386-linux --disable-dynrec --disable-dynamic-x86 --disable-fpu-x86  --enable-sdl2 --with-sdl-prefix=c:/emsdk/emscripten/1.38.12/system --disable-opengl --disable-mt32
+CC="emcc --sysroot=c:/emsdk/emscripten/1.38.12/system" CXX="em++ --sysroot=c:/emsdk/emscripten/1.38.12/system" LD="emcc" LD_CXX="em++" ./configure   --host=i386-linux --disable-dynamic-x86 --enable-sdl2 --with-sdl-prefix=c:/emsdk/emscripten/1.38.12/system --disable-opengl --disable-mt32
 emcc -O3 -s USE_SDL=2  -s TOTAL_MEMORY=134217728 -s FORCE_FILESYSTEM=1 -s DISABLE_EXCEPTION_CATCHING=0 dosbox-x.bc --memory-init-file 0 -o dosbox-x.html --preload-file d:/tmpp/th@/
 (replace --preload-file for your dosbox.conf, PC-98 font and YM2608 sample files and your game.)
 
