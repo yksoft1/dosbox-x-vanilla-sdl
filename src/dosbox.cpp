@@ -329,9 +329,9 @@ static Bitu Normal_Loop(void) {
  	if (SDL_TICKS_PASSED(ticksEntry, last_sleep + 10)) {
 		if (nosleep_lock == 0) {
 			last_sleep = ticksEntry;
-			emscripten_sleep(1);
+			emscripten_sleep_with_yield(1);
 			ticksEntry = GetTicks();
-		} else if (SDL_TICKS_PASSED(ticksEntry, last_sleep + 2000) &&
+		} else if (SDL_TICKS_PASSED(ticksEntry, last_sleep + 4000) &&
 				!SDL_TICKS_PASSED(ticksEntry, last_loop + 200)) {
 			/* Emterpreter makes code much slower, so the CPU interpreter does
 			 * not use it. That means it must not be interrupted using
@@ -429,13 +429,13 @@ increaseticks:
 #define CPU_USAGE_TARGET 60
 // Exceeding the soft limit will case immediate cutback or
 // recalculation of CPU_CycleMax.
-#define SOFT_TICK_LIMIT 25
+#define SOFT_TICK_LIMIT 20
 // Exceeding the hard limit causes emulation to slow down compared to real
 // time. Occasional spikes triggering this are unavoidable in a browser.
 // Missed ticks are added to the backlog in an attempt to catch up later.
-#define HARD_TICK_LIMIT 40
+#define HARD_TICK_LIMIT 30
 // The backlog cannot be allowed to grow without bound.
-#define BACKLOG_LIMIT 100
+#define BACKLOG_LIMIT 80
 #else
 #define CPU_USAGE_TARGET 90
 #define SOFT_TICK_LIMIT 15
@@ -553,7 +553,7 @@ increaseticks:
 #elif defined(EMTERPRETER_SYNC)
  			if (nosleep_lock == 0) {
  				last_sleep = ticksNew;
- 				emscripten_sleep(1);
+ 				emscripten_sleep_with_yield(1);
  			}
 #endif
                 ticksDone -= GetTicks() - ticksNew;
