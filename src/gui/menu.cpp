@@ -695,8 +695,10 @@ static const char *def_menu_cpu_core[] = {
     "mapper_cycauto",
     "--",
     "mapper_normal",
+#ifndef EMSCRIPTEN
     "mapper_full",
     "mapper_simple",
+#endif
 #if (C_DYNAMIC_X86)
     "mapper_dynamic",
 #endif
@@ -2484,8 +2486,10 @@ int Reflect_Menu(void) {
 	CheckMenuItem(m_handle, ID_AUTODETER, (CPU_AutoDetermineMode&CPU_AUTODETERMINE_CYCLES) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_NORMAL, (!strcasecmp(core_mode, "Normal")) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_DYNAMIC, (!strcasecmp(core_mode, "Dynamic")) ? MF_CHECKED : MF_STRING);
+#ifndef EMSCRIPTEN
 	CheckMenuItem(m_handle, ID_FULL, (!strcasecmp(core_mode, "Full")) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_SIMPLE, (!strcasecmp(core_mode, "Simple")) ? MF_CHECKED : MF_STRING);
+#endif
 	CheckMenuItem(m_handle, ID_AUTO, (!strcasecmp(core_mode, "Auto")) ? MF_CHECKED : MF_STRING);
 
 	Section_prop * sec = 0;
@@ -3108,8 +3112,10 @@ void MSG_WM_COMMAND_handle(SDL_SysWMmsg &Message) {
 #if (C_DYNAMIC_X86)
 	case ID_DYNAMIC: if (strcmp(core_mode, "dynamic") != 0) SetVal("cpu", "core", "dynamic"); break;
 #endif
+#ifndef EMSCRIPTEN
 	case ID_FULL: if (strcmp(core_mode, "full") != 0) SetVal("cpu", "core", "full"); break;
 	case ID_SIMPLE: if (strcmp(core_mode, "simple") != 0) SetVal("cpu", "core", "simple"); break;
+#endif
 	case ID_AUTO: if (strcmp(core_mode, "auto") != 0) SetVal("cpu", "core", "auto"); break;
 	case ID_KEYMAP: MAPPER_RunInternal(); break;
 	case ID_AUTOCYCLE: SetVal("cpu", "cycles", (!CPU_CycleAutoAdjust) ? "max" : "auto"); break;

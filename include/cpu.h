@@ -82,8 +82,10 @@ extern CPU_Decoder * cpudecoder;
 
 Bits CPU_Core_Normal_Run(void);
 Bits CPU_Core_Normal_Trap_Run(void);
+#ifndef EMSCRIPTEN
 Bits CPU_Core_Simple_Run(void);
 Bits CPU_Core_Full_Run(void);
+#endif
 Bits CPU_Core_Dyn_X86_Run(void);
 Bits CPU_Core_Dyn_X86_Trap_Run(void);
 Bits CPU_Core_Dynrec_Run(void);

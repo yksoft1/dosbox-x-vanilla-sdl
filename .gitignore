@@ -383,4 +383,4 @@ a.out
 *.js
 *.html
 *.data
-
+*.mem

@@ -1047,7 +1047,11 @@ void DOSBOX_SetupConfigSections(void) {
 #if (C_DYNAMIC_X86)
 		"dynamic",
 #endif
-		"normal", "full", "simple", 0 };
+		"normal", 
+#ifndef EMSCRIPTEN
+		"full", "simple", 
+#endif
+		0 };
 
 	const char* voodoo_settings[] = {
 		"false",

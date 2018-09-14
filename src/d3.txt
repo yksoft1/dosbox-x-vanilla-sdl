@@ -26,5 +26,10 @@
 "__ZN9DOS_Shell6CMD_IFEPc",
 "__Z9DOS_IOCTLv",
 "__ZN10DOS_Device14GetInformationEv",
-"__ZN10device_CON14GetInformationEv"
+"__ZN10device_CON14GetInformationEv",
+"__ZN10device_CON5WriteEPhPt",
+"__Z13DOS_WriteFiletPhPt",
+"__ZN10DOS_Device5WriteEPhPt",
+"__ZN7Program8WriteOutEPKcz",
+"__ZN10device_CON29Real_INT10_TeletypeOutputAttrEhhb"
 ]

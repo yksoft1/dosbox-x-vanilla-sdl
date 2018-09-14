@@ -15,7 +15,7 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-
+#ifndef EMSCRIPTEN
 #include <stdio.h>
 
 #include "dosbox.h"
@@ -220,3 +220,4 @@ Bits CPU_Core_Simple_Trap_Run(void) {
 void CPU_Core_Simple_Init(void) {
 
 }
+#endif
