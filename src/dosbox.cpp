@@ -342,7 +342,7 @@ static Bitu Normal_Loop(void) {
 			 * running slow overall or the page is in the background.
 			 */
 			LOG_MSG("Emulation aborted due to nested emulation timeout.");
-			//em_exit(1);
+			em_exit(1);
 		}
 	}
 	last_loop = ticksEntry;
@@ -1845,7 +1845,11 @@ void DOSBOX_SetupConfigSections(void) {
 	Pint->Set_values(rates);
 	Pint->Set_help("Mixer sample rate, setting any device's rate higher than this will probably lower their sound quality.");
 
+#if defined(EMSCRIPTEN) && defined(C_SDL2) //Emscripten SDL2 use 32-bit float samples
+	Pint = secprop->Add_int("blocksize",Property::Changeable::OnlyAtStart,2048);
+#else
 	Pint = secprop->Add_int("blocksize",Property::Changeable::OnlyAtStart,1024);
+#endif 
 	Pint->Set_values(blocksizes);
 	Pint->Set_help("Mixer block size, larger blocks might help sound stuttering but sound will also be more lagged.");
 
