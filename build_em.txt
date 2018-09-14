@@ -5,6 +5,12 @@ CC="emcc --sysroot=c:/emsdk/emscripten/1.38.12/system" CXX="em++ --sysroot=c:/em
 emcc -O3 -s USE_SDL=2  -s TOTAL_MEMORY=134217728 -s FORCE_FILESYSTEM=1 -s DISABLE_EXCEPTION_CATCHING=0 dosbox-x.bc --memory-init-file 0 -o dosbox-x.html --preload-file d:/tmpp/th@/
 (replace --preload-file for your dosbox.conf, PC-98 font and YM2608 sample files and your game.)
 
-Note: .BAT files are not supported. use BAT2EXEC.COM to compile game .BAT to executable file.
+build with Emterpreter:
+CC="emcc --sysroot=c:/emsdk/emscripten/1.38.12/system" CXX="em++ --sysroot=c:/emsdk/emscripten/1.38.12/system" LD="emcc" LD_CXX="em++" CFLAGS="-DEMTERPRETER_SYNC" CXXFLAGS="-DEMTERPRETER_SYNC" ./configure   --host=i386-linux --disable-dynamic-x86 --enable-sdl2 --with-sdl-prefix=c:/emsdk/emscripten/1.38.12/system --disable-opengl --disable-mt32
+emcc -O1 -s USE_SDL=2  -s TOTAL_MEMORY=104857600  -s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1 -s EMTERPRETIFY_WHITELIST=@d3.txt  dosbox-x.bc --memory-init-file 0 -o th5e.html --preload-file d:/tmpp/th5x@/
+(Note: -O2 or -O3 may crash asm2wasm.)
+(The Emterpretify whitelist d3.txt is incomplete. If you want to investigate for functions needed to be Emterpretified, link to HTML/JS/WASM using --profiling-funcs and see the call stack at assertion faults in Firefox.) 
+
+Note: Without Emterpreter, .BAT files are not supported. use BAT2EXEC.COM to compile game .BAT to executable file.
 for Emscripten SDL1: keyboard input is not working. Why? It worked in regular Dosbox.
 Use SDL2 for now..

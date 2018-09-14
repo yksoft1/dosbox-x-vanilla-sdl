@@ -97,7 +97,7 @@ void CALLBACK_Idle(void) {
 	Bit32u oldeip=reg_eip;
 	SegSet16(cs,CB_SEG);
 	reg_eip=CB_SOFFSET+call_idle*CB_SIZE;
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachineNoSleep();
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
 	SETFLAGBIT(IF,oldIF);

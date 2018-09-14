@@ -300,7 +300,7 @@ static void PAGING_NewPageFault(PhysPt lin_addr, Bitu page_addr, bool prepare_on
 		entry->mpl=cpu.mpl;
 		cpu.mpl=3;
 		CPU_Exception(EXCEPTION_PF,faultcode);
-		DOSBOX_RunMachine();
+		DOSBOX_RunMachineNoSleep();
 		pf_queue.used--;
 		memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
 		cpudecoder=old_cpudecoder;
