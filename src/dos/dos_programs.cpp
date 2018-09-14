@@ -1785,8 +1785,9 @@ restart_int:
 				}
 			} else {
 				// got -size
-				std::istringstream stream(isize);
-				stream >> size;
+				//std::istringstream stream(isize);
+				//stream >> size;
+				size=atoi(isize.c_str());
 				size *= 1024*1024LL; // size in megabytes
 				// low limit: 3 megs, high limit: 2 gigs
 				// Int13 limit would be 8 gigs

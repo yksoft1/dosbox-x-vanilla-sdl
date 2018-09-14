@@ -149,6 +149,7 @@ bool Value::SetValue(string const& in,Etype _type) throw(WrongType) {
 	return retval;
 }
 
+//TODO: rewrite this part without using istringstream. It won't do anything better than simple atoi/strtol/etc.
 bool Value::set_hex(std::string const& in) {
 	istringstream input(in);
 	input.flags(ios::hex);
