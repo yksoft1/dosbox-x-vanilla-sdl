@@ -23,7 +23,11 @@
 // 1: complex scalers off, scaler cache off, all simple scalers on
 // 2: complex scalers off, scaler cache on
 // 3: complex scalers on
+#ifndef EMSCRIPTEN
 #define RENDER_USE_ADVANCED_SCALERS 3
+#else
+#define RENDER_USE_ADVANCED_SCALERS 2
+#endif
 
 #include "../src/gui/render_scalers.h"
 
