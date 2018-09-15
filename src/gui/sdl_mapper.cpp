@@ -3115,7 +3115,11 @@ static void CreateDefaultBinds(void) {
 	sprintf(buffer,"mod_2 \"key %d\"",SDL_SCANCODE_LALT);CreateStringBind(buffer);
 	sprintf(buffer,"mod_3 \"key %d\"",SDL_SCANCODE_RSHIFT);CreateStringBind(buffer);
 	sprintf(buffer,"mod_3 \"key %d\"",SDL_SCANCODE_LSHIFT);CreateStringBind(buffer);
-# if defined(WIN32) && !defined(C_HX_DOS) /* F12 is not a good modifier key in Windows: https://stackoverflow.com/questions/18997754/how-to-disable-f12-to-debug-application-in-visual-studio-2012 */
+
+# if defined(EMSCRIPTEN)
+	//in browsers, F10, F11 and F12 are used. I should use F9.
+	sprintf(buffer,"host \"key %d\"",SDL_SCANCODE_F9);CreateStringBind(buffer);		
+# elif defined(WIN32) && !defined(C_HX_DOS) /* F12 is not a good modifier key in Windows: https://stackoverflow.com/questions/18997754/how-to-disable-f12-to-debug-application-in-visual-studio-2012 */
 	sprintf(buffer,"host \"key %d\"",SDL_SCANCODE_F11);CreateStringBind(buffer);
 # else
 	sprintf(buffer,"host \"key %d\"",SDL_SCANCODE_F12);CreateStringBind(buffer);
