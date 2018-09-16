@@ -1,4 +1,4 @@
-
+#ifndef EMSCRIPTEN
 #include "dos_inc.h"
 
 static const unsigned char bin_dos4gw_exe[] = {
@@ -22113,4 +22113,4 @@ struct BuiltinFileBlob bfb_DOS4GW_EXE = {
 	/*data*/			bin_dos4gw_exe,
 	/*length*/			sizeof(bin_dos4gw_exe)
 };
-
+#endif

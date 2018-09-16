@@ -1,4 +1,4 @@
-
+#ifndef EMSCRIPTEN
 #include "dos_inc.h"
 
 static const unsigned char bin_tree_exe[] = {
@@ -626,4 +626,4 @@ struct BuiltinFileBlob bfb_TREE_EXE = {
 	/*data*/			bin_tree_exe,
 	/*length*/			sizeof(bin_tree_exe)
 };
-
+#endif

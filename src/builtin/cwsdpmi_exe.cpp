@@ -1,4 +1,4 @@
-
+#ifndef EMSCRIPTEN
 #include "dos_inc.h"
 
 static const unsigned char bin_cwsdpmi_exe[] = {
@@ -1342,3 +1342,4 @@ struct BuiltinFileBlob bfb_CWSDPMI_EXE = {
 	/*length*/			sizeof(bin_cwsdpmi_exe)
 };
 
+#endif

@@ -1,4 +1,4 @@
-
+#ifndef EMSCRIPTEN
 #include "dos_inc.h"
 
 static const unsigned char bin_mem_com[] = {
@@ -956,3 +956,4 @@ struct BuiltinFileBlob bfb_MEM_COM = {
 	/*length*/			sizeof(bin_mem_com)
 };
 
+#endif

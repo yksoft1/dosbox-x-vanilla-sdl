@@ -1,4 +1,4 @@
-
+#ifndef EMSCRIPTEN
 #include "dos_inc.h"
 
 static const unsigned char bin_hexmem16_exe[] = {
@@ -5187,4 +5187,4 @@ struct BuiltinFileBlob bfb_HEXMEM16_EXE = {
 	/*data*/			bin_hexmem16_exe,
 	/*length*/			sizeof(bin_hexmem16_exe)
 };
-
+#endif

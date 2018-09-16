@@ -1,4 +1,4 @@
-
+#ifndef EMSCRIPTEN
 #include "dos_inc.h"
 
 static const unsigned char bin_dsxmenu_exe_pc98[] = {
@@ -1915,3 +1915,4 @@ struct BuiltinFileBlob bfb_DSXMENU_EXE_PC98 = {
 	/*length*/			sizeof(bin_dsxmenu_exe_pc98)
 };
 
+#endif

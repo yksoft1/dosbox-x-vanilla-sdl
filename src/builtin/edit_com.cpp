@@ -1,4 +1,4 @@
-
+#ifndef EMSCRIPTEN
 #include "dos_inc.h"
 
 static const unsigned char bin_edit_com[] = {
@@ -4013,3 +4013,4 @@ struct BuiltinFileBlob bfb_EDIT_COM = {
 	/*length*/			sizeof(bin_edit_com)
 };
 
+#endif
