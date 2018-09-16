@@ -161,9 +161,10 @@ bool Value::set_hex(std::string const& in) {
 }
 
 bool Value::set_int(string const &in) {
-	istringstream input(in);
+	//istringstream input(in);
 	Bits result = INT_MIN;
-	input >> result;
+	//input >> result;
+	result=atoi(in.c_str()); //try
 	if(result == INT_MIN) return false;
 	_int = result;
 	return true;

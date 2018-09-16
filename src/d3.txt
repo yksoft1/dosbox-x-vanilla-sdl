@@ -31,5 +31,6 @@
 "__Z13DOS_WriteFiletPhPt",
 "__ZN10DOS_Device5WriteEPhPt",
 "__ZN7Program8WriteOutEPKcz",
-"__ZN10device_CON29Real_INT10_TeletypeOutputAttrEhhb"
+"__ZN10device_CON29Real_INT10_TeletypeOutputAttrEhhb",
+"__ZN9DOS_Shell7CMD_DIREPc"
 ]
