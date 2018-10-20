@@ -4114,8 +4114,6 @@ void DOSBoxMenu::layoutMenu(void) {
 
     for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
         get_item(*i).layoutSubmenu(*this, /*toplevel*/true);
-
-    LOG_MSG("Layout complete");
 }
 
 void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
@@ -4232,12 +4230,12 @@ void DOSBoxMenu::item::placeItemFinal(DOSBoxMenu &menu,int finalwidth,bool isTop
         }
     }
 
-    LOG_MSG("Item id=%u name=\"%s\" placed at x,y,w,h=%d,%d,%d,%d. text:x,y,w,h=%d,%d,%d,%d",
+/*    LOG_MSG("Item id=%u name=\"%s\" placed at x,y,w,h=%d,%d,%d,%d. text:x,y,w,h=%d,%d,%d,%d",
         master_id,name.c_str(),
         screenBox.x,screenBox.y,
         screenBox.w,screenBox.h,
         textBox.x,textBox.y,
-        textBox.w,textBox.h);
+        textBox.w,textBox.h);*/
     boxInit = true;
 }
 
