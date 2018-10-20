@@ -376,8 +376,6 @@ vs2015/sdl/include/SDL_config.h
 /vs2015/libpdcurses/wincon/ozdemo.exe
 /vs2015/libpdcurses/wincon/firework.exe
 
-<<<<<<< HEAD
-# Emscripten
 a.out
 *.bc
 *.wasm
@@ -385,6 +383,4 @@ a.out
 *.html
 *.data
 *.mem
-=======
 dosbox-x.exe
->>>>>>> savestate
