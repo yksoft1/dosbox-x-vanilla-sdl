@@ -8526,8 +8526,6 @@ int main(int argc, char* argv[]) {
         void ConstructMenu(void);
         ConstructMenu();
 
-        mainMenu.dump_log_debug(); /*DEBUG*/
-
         mainMenu.rebuild();
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
