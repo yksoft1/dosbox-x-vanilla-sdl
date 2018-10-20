@@ -32,5 +32,6 @@
 "__ZN10DOS_Device5WriteEPhPt",
 "__ZN7Program8WriteOutEPKcz",
 "__ZN10device_CON29Real_INT10_TeletypeOutputAttrEhhb",
-"__ZN9DOS_Shell7CMD_DIREPc"
+"__ZN9DOS_Shell7CMD_DIREPc",
+"__ZN6CONFIG3RunEv"
 ]

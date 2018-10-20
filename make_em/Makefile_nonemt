@@ -120,5 +120,5 @@ ifeq ($(PRELOAD), 1)
 	--preload-file $(PREFILE) -o $(basename $(TARGET)).html 
 else
 	$(CC) -O3 -s USE_SDL=2 -s WASM=$(WASM) -s TOTAL_MEMORY=$(EMSCRIPTEN_TOTAL_MEMORY)  \
-	-o $(basename $(TARGET)).html 
+	$(TARGET) -o $(basename $(TARGET)).html 
 endif

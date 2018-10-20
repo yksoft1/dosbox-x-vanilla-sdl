@@ -120,5 +120,5 @@ ifeq ($(PRELOAD), 1)
 	--preload-file $(PREFILE) -o $(basename $(TARGET)).html 
 else
 	$(CC) -O3 -s USE_SDL=2 -s WASM=$(WASM) -s TOTAL_MEMORY=$(EMSCRIPTEN_TOTAL_MEMORY)  -s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1 \
-	-s EMTERPRETIFY_WHITELIST=@$(DBX_PATH)/src/d3.txt -o $(basename $(TARGET)).html 
+	-s EMTERPRETIFY_WHITELIST=@$(DBX_PATH)/src/d3.txt $(TARGET) -o $(basename $(TARGET)).html 
 endif
