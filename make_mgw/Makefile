@@ -8,7 +8,7 @@ RM		=	rm -f
 
 DBX_PATH	= ..
 
-CXXFLAGS = -O3  -DNDEBUG -std=gnu++98 -Wstrict-overflow=0 -Wstrict-aliasing=0 -I. \
+CXXFLAGS = -O3  -DNDEBUG -std=gnu++98 -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-pointer  -mno-ms-bitfields  -I. \
 			-I$(DBX_PATH) \
 			-I$(DBX_PATH)/include \
 			-I$(DBX_PATH)/src \
@@ -22,7 +22,7 @@ CXXFLAGS = -O3  -DNDEBUG -std=gnu++98 -Wstrict-overflow=0 -Wstrict-aliasing=0 -I
 			
 CXXFLAGS	+=	$(shell sdl2-config --cflags)
 
-CFLAGS	=	-O3 -DNDEBUG -Wstrict-overflow=0 -Wstrict-aliasing=0 -I. \
+CFLAGS	=	-O3 -DNDEBUG -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-pointer  -mno-ms-bitfields  -I. \
 			-I$(DBX_PATH) \
 			-I$(DBX_PATH)/include \
 			-I$(DBX_PATH)/src \

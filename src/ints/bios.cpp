@@ -7195,6 +7195,11 @@ void MOUSE_Unsetup_BIOS(void);
 void BIOS_OnResetComplete(Section *x) {
     INT10_OnResetComplete();
 
+	if (IS_PC98_ARCH) {
+        void PC98_BIOS_Bank_Switch_Reset(void);
+        PC98_BIOS_Bank_Switch_Reset();
+    }
+
     if (biosConfigSeg != 0) {
         ROMBIOS_FreeMemory(biosConfigSeg << 4); /* remember it was alloc'd paragraph aligned, then saved >> 4 */
         biosConfigSeg = 0;
