@@ -33,5 +33,7 @@
 "__ZN7Program8WriteOutEPKcz",
 "__ZN10device_CON29Real_INT10_TeletypeOutputAttrEhhb",
 "__ZN9DOS_Shell7CMD_DIREPc",
-"__ZN6CONFIG3RunEv"
+"__ZN6CONFIG3RunEv",
+"__ZL29BIOS_Int10RightJustifiedPrintiRiPKc",
+"__ZN4BIOS28cb_bios_startup_screen__funcEv"
 ]

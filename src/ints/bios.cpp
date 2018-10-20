@@ -6921,7 +6921,7 @@ public:
 		cb_bios_post.Install(&cb_bios_post__func,CB_RETF,"BIOS POST");
 		cb_bios_scan_video_bios.Install(&cb_bios_scan_video_bios__func,CB_RETF,"BIOS Scan Video BIOS");
 		cb_bios_adapter_rom_scan.Install(&cb_bios_adapter_rom_scan__func,CB_RETF,"BIOS Adapter ROM scan");
-#ifndef EMSCRIPTEN
+#if !defined(EMSCRIPTEN) || (defined(EMSCRIPTEN) && defined (EMTERPRETER_SYNC))
 		cb_bios_startup_screen.Install(&cb_bios_startup_screen__func,CB_RETF,"BIOS Startup screen");
 #endif
 		cb_bios_boot.Install(&cb_bios_boot__func,CB_RETF,"BIOS BOOT");
@@ -6953,7 +6953,7 @@ public:
 			phys_writew(wo+0x02,(Bit16u)cb_bios_adapter_rom_scan.Get_callback());		//The immediate word
 			wo += 4;
 
-#ifndef EMSCRIPTEN
+#if !defined(EMSCRIPTEN) || (defined(EMSCRIPTEN) && defined (EMTERPRETER_SYNC))
 			// startup screen
 			phys_writeb(wo+0x00,(Bit8u)0xFE);						//GRP 4
 			phys_writeb(wo+0x01,(Bit8u)0x38);						//Extra Callback instruction
