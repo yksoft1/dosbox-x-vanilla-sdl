@@ -8769,6 +8769,10 @@ fresh_boot:
 
 				void CALLBACK_Init();
                 CALLBACK_Init();
+#if C_DEBUG				
+				void DEBUG_ReinitCallback(void);
+                DEBUG_ReinitCallback();
+#endif
             }
 
 			DispatchVMEvent(VM_EVENT_RESET_END);
