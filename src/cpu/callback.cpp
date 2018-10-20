@@ -31,6 +31,8 @@ Bit16u CB_SEG=0,CB_SOFFSET=0;
 extern Bitu vm86_fake_io_seg;
 extern Bitu vm86_fake_io_off;
 
+unsigned int last_callback = 0;
+
 /* CallBack are located at 0xF000:0x1000  (see CB_SEG and CB_SOFFSET in callback.h)
    And they are 16 bytes each and you can define them to behave in certain ways like a
    far return or and IRET
@@ -43,7 +45,7 @@ Bitu call_stop,call_idle,call_default,call_default2;
 Bitu call_priv_io;
 
 static Bitu illegal_handler(void) {
-	E_Exit("Illegal CallBack Called");
+	E_Exit("Illegal CallBack #%u Called",last_callback);
 	return 1;
 }
 
@@ -757,6 +759,8 @@ void CALLBACK_HandlerObject::Set_RealVec(Bit8u vec,bool reinstall){
 		RealSetVec(vec,Get_RealPointer(),vectorhandler.old_vector);
 	} else E_Exit ("double usage of vector handler");
 }
+
+extern bool custom_bios;
 
 void CALLBACK_Init() {
 	{
