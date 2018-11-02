@@ -2378,6 +2378,7 @@ extern bool                         gdc_5mhz_mode;
 extern bool                         enable_pc98_egc;
 extern bool                         enable_pc98_grcg;
 extern bool                         enable_pc98_16color;
+extern bool                         enable_pc98_188usermod;
 extern bool                         pc98_31khz_mode;
 extern bool                         pc98_attr4_graphic;
 
@@ -3610,6 +3611,17 @@ static Bitu INTDC_PC98_Handler(void) {
 			if (reg_ah == 0x00) { /* CL=0x10 AL=0x00 DL=char write char to CON */
 				PC98_INTDC_WriteChar(reg_dl);
 			goto done;
+			}
+			else if (reg_ah == 0x01) { /* CL=0x10 AL=0x01 DS:DX write string to CON */
+				/* According to the example at http://tepe.tec.fukuoka-u.ac.jp/HP98/studfile/grth/gt10.pdf
+				 * the string ends in '$' just like the main DOS string output function. */
+				Bit16u ofs = reg_dx;
+				do {
+					unsigned char c = real_readb(SegValue(ds),ofs++);
+					if (c == '$') break;
+					PC98_INTDC_WriteChar(c);
+				} while (1);
+				goto done;
 			}
 			goto unknown;
 		default: /* some compilers don't like not having a default case */
@@ -5462,7 +5474,7 @@ private:
              * bit[2:2] = Extended graphics RAM (for 16-color)      1=present       0=absent
              * bit[1:1] = Graphics Charger is present               1=present       0=absent
              * bit[0:0] = DIP switch 1-8 at startup                 1=ON            0=OFF (?) */
-            mem_writeb(0x54C,(true/*TODO*/ ? 0x40/*high res*/ : 0x00/*standard*/) | (enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00) | (pc98_31khz_mode ? 0x20/*31khz*/ : 0x00/*24khz*/)); // PRXCRT, 16-color G-VRAM, GRCG
+            mem_writeb(0x54C,(true/*TODO*/ ? 0x40/*high res*/ : 0x00/*standard*/) | (enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00) | (pc98_31khz_mode ? 0x20/*31khz*/ : 0x00/*24khz*/) | (enable_pc98_188usermod ? 0x08 : 0x00)); // PRXCRT, 16-color G-VRAM, GRCG
 
             /* BIOS flags */
             /* bit[7:7] = 256-color board present (PC-H98)
