@@ -6303,6 +6303,12 @@ private:
             BIOS_Post_register_FDC();
 		}
 
+		if (IS_PC98_ARCH) {
+			/* initialize IRQ0 timer to default tick interval.
+			 * PC-98 does not pre-initialize timer 0 of the PIT to 0xFFFF the way IBM PC/XT/AT do */
+			PC98_Interval_Timer_Continue();
+		}
+
         CPU_STI();
 
 		return CBRET_NONE;
