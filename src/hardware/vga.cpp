@@ -153,6 +153,7 @@ extern bool                         gdc_5mhz_mode;
 extern bool                         enable_pc98_egc;
 extern bool                         enable_pc98_grcg;
 extern bool                         enable_pc98_16color;
+extern bool 						enable_pc98_188usermod;
 extern bool                         GDC_vsync_interrupt;
 extern uint8_t                      GDC_display_plane;
 
@@ -650,6 +651,7 @@ void VGA_Reset(Section*) {
     enable_pc98_egc = section->Get_bool("pc-98 enable egc");
     enable_pc98_grcg = section->Get_bool("pc-98 enable grcg");
     enable_pc98_16color = section->Get_bool("pc-98 enable 16-color");
+	enable_pc98_188usermod = section->Get_bool("pc-98 enable 188 user cg");
 
     // EGC implies GRCG
     if (enable_pc98_egc) enable_pc98_grcg = true;
@@ -692,6 +694,7 @@ void VGA_Reset(Section*) {
 	mainMenu.get_item("pc98_enable_egc").check(enable_pc98_egc).refresh_item(mainMenu);
 	mainMenu.get_item("pc98_enable_grcg").check(enable_pc98_grcg).refresh_item(mainMenu);
 	mainMenu.get_item("pc98_enable_analog").check(enable_pc98_16color).refresh_item(mainMenu);
+	mainMenu.get_item("pc98_enable_188user").check(enable_pc98_188usermod).refresh_item(mainMenu);
 	
 	vga_force_refresh_rate = -1;
 	str=section->Get_string("forcerate");
