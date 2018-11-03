@@ -31,6 +31,9 @@
 #include "cpu.h"
 #include "pc98_cg.h"
 #include "pc98_gdc.h"
+#include "zipfile.h"
+
+extern ZIPFile savestate_zip;
 
 extern bool non_cga_ignore_oddeven;
 extern bool non_cga_ignore_oddeven_engage;
@@ -506,6 +509,24 @@ public:
 		}
 
 		addr = PAGING_GetPhysicalAddress(addr) & 0x3FFF;
+		vga.tandy.mem_base[addr] = val;
+	}
+};
+
+class VGA_MCGATEXT_PageHandler : public PageHandler {
+public:
+	VGA_MCGATEXT_PageHandler() {
+		flags=PFLAG_NOCODE;
+	}
+	Bitu readb(PhysPt addr) {
+		addr = PAGING_GetPhysicalAddress(addr) & 0xFFFF;
+		VGAMEM_USEC_read_delay();
+		return vga.tandy.mem_base[addr];
+	}
+	void writeb(PhysPt addr,Bitu val){
+		VGAMEM_USEC_write_delay();
+
+		addr = PAGING_GetPhysicalAddress(addr) & 0xFFFF;
 		vga.tandy.mem_base[addr] = val;
 	}
 };
@@ -1290,9 +1311,41 @@ public:
              * 0xA3FFA      MSW7
              * 0xA3FFE      MSW8
              */
+			 // TODO: What does WORD-sized reading do? This returns a BYTE
             return pc98_mem_msw((addr >> 2) & 7);
         }
 
+		/* 0xA4000-0xA401F is word-sized access to the character generator.
+		 *
+		 * Some games, though not many, appear to prefer this memory-mapped I/O
+		 * rather than the I/O ports.
+		 *
+		 * This fixes:
+		 * - Eve Burst Error
+		 *
+		 * Also noted: Disassembling the CG functions of the BIOS on an actual
+		 * PC9821 laptop reveals that the BIOS also uses this method,
+		 * using REP MOVSW
+		 *
+		 * TODO: It's not clear if only 0xA4000-0xA401F is involved or if a wider
+		 * range is involved (meaning that the hardware latches A4000-A5FFF
+		 * to this function and then decodes only the low bits).
+		 *
+		 * CHECK REAL HARDWARE to answer this question. */
+		if ((addr & (~0x1F)) == 0xA4000) {
+			extern uint16_t a1_font_load_addr;
+			
+			// TODO: Does the memory address update the char offset value written to the I/O port version?
+			if (sizeof(AWT) > 1) {
+				return
+					(pc98_font_char_read(a1_font_load_addr,(addr >> 1) & 0xF,0) ) +
+					(pc98_font_char_read(a1_font_load_addr,(addr >> 1) & 0xF,1) << 8u);
+				}
+			else {
+				return pc98_font_char_read(a1_font_load_addr,(addr >> 1) & 0xF,addr & 1);
+			}
+		}
+		
         if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
             addr = (addr & 0x7FFF) + 0x20000;
         else
@@ -1379,6 +1432,38 @@ public:
         else
             addr &= 0x1FFFF;
 
+		/* 0xA4000-0xA401F is word-sized access to the character generator.
+		 *
+	 	 * Some games, though not many, appear to prefer this memory-mapped I/O
+		 * rather than the I/O ports.
+		 *
+		 * This fixes:
+		 * - Eve Burst Error
+		 *
+		 * Also noted: Disassembling the CG functions of the BIOS on an actual
+		 * PC9821 laptop reveals that the BIOS also uses this method,
+		 * using REP MOVSW
+		 *
+		 * TODO: It's not clear if only 0xA4000-0xA401F is involved or if a wider
+		 * range is involved (meaning that the hardware latches A4000-A5FFF
+		 * to this function and then decodes only the low bits).
+		 *
+		 * CHECK REAL HARDWARE to answer this question. */
+		if ((addr & (~0x1F)) == 0xA4000) {
+			extern uint16_t a1_font_load_addr;
+			
+			// TODO: Does the memory address update the char offset value written to the I/O port version?
+			if (sizeof(AWT) > 1) {
+				// FIXME: Untested
+				pc98_font_char_write(a1_font_load_addr,(addr >> 1) & 0xF,0,val);
+				pc98_font_char_write(a1_font_load_addr,(addr >> 1) & 0xF,1,val >> 8);
+			}
+			else {
+				pc98_font_char_write(a1_font_load_addr,(addr >> 1) & 0xF,addr & 1,val);
+			}
+			return;
+		}
+		
         switch (addr>>13) {
             case 0:     /* A0000-A1FFF Character RAM */
                 *((AWT*)(vga.mem.linear+addr)) = val;
@@ -1822,6 +1907,7 @@ static struct vg {
 	VGA_Slow_CGA_Handler		slow;
 //	VGA_TEXT_PageHandler		text;
 	VGA_CGATEXT_PageHandler		cgatext;
+	VGA_MCGATEXT_PageHandler	mcgatext;
 	VGA_TANDY_PageHandler		tandy;
 //	VGA_ChainedEGA_Handler		cega;
 //	VGA_ChainedVGA_Handler		cvga;
@@ -1859,9 +1945,15 @@ void VGA_SetupHandlers(void) {
 		else
 			MEM_SetPageHandler( VGA_PAGE_B8, 8, &vgaph.slow );
 		goto range_done;
+	case MCH_MCGA://Based on real hardware, A0000-BFFFF is the 64KB of RAM mapped twice
+		MEM_SetPageHandler( VGA_PAGE_A0, 16, &vgaph.mcgatext );     // A0000-AFFFF is the 64KB of video RAM
+        MEM_ResetPageHandler_Unmapped( VGA_PAGE_B0, 8 );            // B0000-B7FFF is unmapped
+		MEM_SetPageHandler( VGA_PAGE_B8, 8, &vgaph.mcgatext );      // B8000-BFFFF is the last 32KB half of video RAM, alias
+		goto range_done;
 	case MCH_PCJR:
 		MEM_SetPageHandler( VGA_PAGE_B8, 8, &vgaph.pcjr );
 		goto range_done;
+	case MCH_MDA:
 	case MCH_HERC:
 		vgapages.base=VGA_PAGE_B0;
 		/* NTS: Implemented according to [http://www.seasip.info/VintagePC/hercplus.html#regs] */
@@ -2032,10 +2124,17 @@ void VGA_StartUpdateLFB(void) {
 		// FIXME: What about the 8MB window?
 	}
 
-	/* if the DOS application or Windows 3.1 driver attempts to put the linear framebuffer
+	/* The LFB register has an enable bit */
+	if (!(vga.s3.reg_58 & 0x10)) {
+		vga.lfb.page = (unsigned int)vga.s3.la_window << 4u;
+		vga.lfb.addr = (unsigned int)vga.s3.la_window << 16u;
+		vga.lfb.handler = NULL;
+		MEM_SetLFB(0,0,NULL,NULL);
+	}
+	/* if the DOS application or Windows 3.1 driver attempts to put the linear framebuffer	
 	 * below the top of memory, then we're probably entering a DOS VM and it's probably
 	 * a 64KB window. If it's not a 64KB window then print a warning. */
-	if ((unsigned long)(vga.s3.la_window << 4UL) < (unsigned long)MEM_TotalPages()) {
+	else if ((unsigned long)(vga.s3.la_window << 4UL) < (unsigned long)MEM_TotalPages()) {
 		if (winsz != 0x10000) // 64KB window normal for entering a DOS VM in Windows 3.1 or legacy bank switching in DOS
 			LOG(LOG_MISC,LOG_WARN)("S3 warning: Window size != 64KB and address conflict with system RAM!");
 
@@ -2062,6 +2161,33 @@ static void VGA_Memory_ShutDown(Section * /*sec*/) {
 		delete[] vga.mem.linear_orgptr;
 		vga.mem.linear_orgptr = NULL;
 		vga.mem.linear = NULL;
+	}
+}
+
+void VGAMEM_LoadState(Section *sec) {
+	(void)sec;//UNUSED
+
+	if (MemBase != NULL) {
+		ZIPFileEntry *ent = savestate_zip.get_entry("vga.memory.bin");
+		if (ent != NULL) {
+			ent->rewind();
+			if (vga.vmemsize == ent->file_length)
+				ent->read(vga.mem.linear, vga.vmemsize);
+			else
+				LOG_MSG("VGA Memory load state failure: VGA Memory size mismatch");
+		}
+	}
+}
+
+void VGAMEM_SaveState(Section *sec) {
+	(void)sec;//UNUSED
+
+	if (vga.mem.linear != NULL) {
+		ZIPFileEntry *ent = savestate_zip.new_entry("vga.memory.bin");
+		if (ent != NULL) {
+			LOG_MSG("Writing vga.memory.bin vmemsize %d", vga.vmemsize);
+			ent->write(vga.mem.linear, vga.vmemsize);
+		}
 	}
 }
 
@@ -2095,6 +2221,8 @@ void VGA_SetupMemory() {
 
 	if (!VGA_Memory_ShutDown_init) {
 		AddExitFunction(AddExitFunctionFuncPair(VGA_Memory_ShutDown));
+		AddVMEventFunction(VM_EVENT_LOAD_STATE,AddVMEventFunctionFuncPair(VGAMEM_LoadState));
+		AddVMEventFunction(VM_EVENT_SAVE_STATE,AddVMEventFunctionFuncPair(VGAMEM_SaveState));
 		VGA_Memory_ShutDown_init = true;
 	}
 

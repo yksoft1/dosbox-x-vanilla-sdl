@@ -134,6 +134,10 @@ static struct {
 	bool rightctrl_pressed;
 } keyb;
 
+void PCjr_stuff_scancode(const unsigned char c) {
+	keyb.p60data = c;
+}
+
 uint8_t Mouse_GetButtonState(void);
 
 uint32_t Keyb_ig_status() {
@@ -2284,6 +2288,7 @@ void KEYBOARD_OnReset(Section *sec) {
 	write_p61(0,0,0);
 	KEYBOARD_Reset();
 	AUX_Reset();
+	keyb.p60data = 0xAA;
 }
 
 void KEYBOARD_Init() {

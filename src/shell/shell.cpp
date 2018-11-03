@@ -24,11 +24,13 @@
 #include "regs.h"
 #include "control.h"
 #include "shell.h"
+#include "cpu.h"
 #include "callback.h"
 #include "support.h"
 #include "builtin.h"
 #include "build_timestamp.h"
 
+extern bool enable_config_as_shell_commands;
 extern bool dos_shell_running_program;
 
 Bitu shell_psp = 0;
@@ -334,7 +336,7 @@ void DOS_Shell::Run(void) {
 #endif
         if (machine == MCH_CGA || machine == MCH_AMSTRAD) WriteOut(MSG_Get("SHELL_STARTUP_CGA"));
         if (machine == MCH_PC98) WriteOut(MSG_Get("SHELL_STARTUP_PC98"));
-        if (machine == MCH_HERC) WriteOut(MSG_Get("SHELL_STARTUP_HERC"));
+        if (machine == MCH_HERC || machine == MCH_MDA) WriteOut(MSG_Get("SHELL_STARTUP_HERC"));
         WriteOut(MSG_Get("SHELL_STARTUP_END"));
     }
     else {
@@ -1027,10 +1029,19 @@ void SHELL_Init() {
         VFILE_RegisterBuiltinFileBlob(bfb_DOS4GW_EXE);
         VFILE_RegisterBuiltinFileBlob(bfb_EDIT_COM);
         VFILE_RegisterBuiltinFileBlob(bfb_TREE_EXE);
-        VFILE_RegisterBuiltinFileBlob(bfb_MEM_COM);
         VFILE_RegisterBuiltinFileBlob(bfb_25_COM);
     }
 
+	/* MEM.COM is not compatible with PC-98 and/or 8086 emulation */
+	if (!IS_PC98_ARCH && CPU_ArchitectureType >= CPU_ARCHTYPE_80186)
+		VFILE_RegisterBuiltinFileBlob(bfb_MEM_COM);
+
+	/* DSXMENU.EXE */
+	if (IS_PC98_ARCH)
+		VFILE_RegisterBuiltinFileBlob(bfb_DSXMENU_EXE_PC98);
+	else
+		VFILE_RegisterBuiltinFileBlob(bfb_DSXMENU_EXE_PC);
+		
 	/* don't register 28.com unless EGA/VGA */
 	if (IS_EGAVGA_ARCH) VFILE_RegisterBuiltinFileBlob(bfb_28_COM);
 
@@ -1068,6 +1079,12 @@ void SHELL_Init() {
 	/* Setup internal DOS Variables */
 	dos.dta(RealMake(psp_seg,0x80));
 	dos.psp(psp_seg);
+	
+	/* settings */
+	{
+		Section_prop * section=static_cast<Section_prop *>(control->GetSection("dos"));
+		enable_config_as_shell_commands = section->Get_bool("shell configuration as commands");
+	}
 }
 
 /* Pfff... starting and running the shell from a configuration section INIT

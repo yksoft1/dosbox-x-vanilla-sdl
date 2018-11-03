@@ -53,6 +53,7 @@ void GFX_OpenGLRedrawScreen(void);
 #include <stdarg.h>
 #include <sys/types.h>
 #include <algorithm> // std::transform
+#include <fcntl.h>
 #ifdef WIN32
 # include <signal.h>
 # include <sys/stat.h>
@@ -106,6 +107,7 @@ void GFX_OpenGLRedrawScreen(void);
 #include "cross.h"
 #include "keymap.h"
 #include "control.h"
+#include "zipfile.h"
 
 # define MIN(a,b) ((a) < (b) ? (a) : (b))
 # define MAX(a,b) ((a) > (b) ? (a) : (b))
@@ -3641,6 +3643,39 @@ void ResetSystem(bool pressed) {
     throw int(3);
 }
 
+ZIPFile savestate_zip;
+
+void GUI_EXP_LoadState(bool pressed) {
+	if (!pressed) return;
+
+	LOG_MSG("Loading state... (experimental)");
+
+	if (savestate_zip.open("exsavest.zip",O_RDONLY) < 0) {
+		LOG_MSG("Unable to open save state");
+		return;
+	}
+
+	DispatchVMEvent(VM_EVENT_LOAD_STATE);
+
+	savestate_zip.close();
+}
+
+void GUI_EXP_SaveState(bool pressed) {
+	if (!pressed) return;
+
+	LOG_MSG("Saving state... (experimental)");
+
+	if (savestate_zip.open("exsavest.zip",O_RDWR|O_CREAT|O_TRUNC) < 0) {
+		LOG_MSG("Unable to open save state for writing");
+		return;
+	}
+
+	DispatchVMEvent(VM_EVENT_SAVE_STATE);
+
+	savestate_zip.writeZIPFooter();
+	savestate_zip.close();
+}
+ 
 bool has_GUI_StartUp = false;
 
 static void GUI_StartUp() {
@@ -3921,6 +3956,14 @@ static void GUI_StartUp() {
 	MAPPER_AddHandler(&GUI_ResetResize, MK_nothing, 0, "resetsize", "ResetSize", &item);
 	item->set_text("Reset window size");
 #endif
+
+	/* EXPERIMENTAL!!!! */
+	MAPPER_AddHandler(&GUI_EXP_SaveState, MK_f1, MMODHOST, "exp_savestate", "EX:SvState", &item);
+	item->set_text("Save State (EXPERIMENTAL)");
+
+	/* EXPERIMENTAL!!!! */
+	MAPPER_AddHandler(&GUI_EXP_LoadState, MK_f2, MMODHOST, "exp_loadstate", "EX:LdState", &item);
+	item->set_text("Load State (EXPERIMENTAL)");
 
 #if !defined(WIN32) //We don't have ways to detect lock keys in other systems now
 	/* Get Keyboard state of numlock and capslock */
@@ -7170,6 +7213,9 @@ bool VM_PowerOn() {
 	return true;
 }
 
+void update_capture_fmt_menu(void);
+bool capture_fmt_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem);
+
 void update_pc98_clock_pit_menu(void) {
 	Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 
@@ -7314,11 +7360,37 @@ bool vid_pc98_4parts_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * co
 	return true;
 }
 
+bool vid_pc98_enable_188user_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	(void)menu;//UNUSED
+	(void)menuitem;//UNUSED
+	void gdc_egc_enable_update_vars(void);
+	extern bool enable_pc98_egc;
+	extern bool enable_pc98_grcg;
+	extern bool enable_pc98_16color;
+	extern bool enable_pc98_188usermod;
+
+	if(IS_PC98_ARCH) {
+		enable_pc98_188usermod = !enable_pc98_188usermod;
+		gdc_egc_enable_update_vars();
+
+		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+		if (enable_pc98_188usermod)
+			dosbox_section->HandleInputline("pc-98 enable 188 user cg=1");
+		else
+			dosbox_section->HandleInputline("pc-98 enable 188 user cg=0");
+
+		mainMenu.get_item("pc98_enable_188user").check(enable_pc98_188usermod).refresh_item(mainMenu);
+	}
+ 
+	return true;
+}
+
 bool vid_pc98_enable_egc_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
 	void gdc_egc_enable_update_vars(void);
 	extern bool enable_pc98_egc;
 	extern bool enable_pc98_grcg;
 	extern bool enable_pc98_16color;
+	extern bool enable_pc98_188usermod;
 
 	if(IS_PC98_ARCH) {
 		enable_pc98_egc = !enable_pc98_egc;
@@ -8211,6 +8283,8 @@ int main(int argc, char* argv[]) {
 				set_callback_function(vid_pc98_enable_grcg_menu_callback);
 			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_enable_analog").set_text("Enable analog display").
 				set_callback_function(vid_pc98_enable_analog_menu_callback);
+			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_enable_188user").set_text("Enable 188+ user CG cells").
+					set_callback_function(vid_pc98_enable_188user_menu_callback);
 			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_clear_text").set_text("Clear text layer").
 				set_callback_function(vid_pc98_cleartext_menu_callback);
 			mainMenu.alloc_item(DOSBoxMenu::item_type_id,"pc98_clear_graphics").set_text("Clear graphics layer").
@@ -8261,7 +8335,20 @@ int main(int argc, char* argv[]) {
             DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"CaptureMenu");
             item.set_text("Capture");
         }
+		{
+			DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"CaptureFormatMenu");
+			item.set_text("Capture format");
 
+			{
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"capture_fmt_avi_zmbv").set_text("AVI + ZMBV").
+					set_callback_function(capture_fmt_menu_callback);
+#if (C_AVCODEC)
+				mainMenu.alloc_item(DOSBoxMenu::item_type_id,"capture_fmt_mpegts_h264").set_text("MPEG-TS + H.264").
+					set_callback_function(capture_fmt_menu_callback);
+#endif
+			}
+		}
+		
 		/* more */
 		{
 			DOSBoxMenu::item *item;
@@ -8433,6 +8520,7 @@ int main(int argc, char* argv[]) {
 		mainMenu.get_item("pc98_enable_egc").enable(IS_PC98_ARCH);
 		mainMenu.get_item("pc98_enable_grcg").enable(IS_PC98_ARCH);
 		mainMenu.get_item("pc98_enable_analog").enable(IS_PC98_ARCH);
+		mainMenu.get_item("pc98_enable_188user").enable(IS_PC98_ARCH);
 		mainMenu.get_item("pc98_clear_text").enable(IS_PC98_ARCH);
 		mainMenu.get_item("pc98_clear_graphics").enable(IS_PC98_ARCH);
 		mainMenu.get_item("dos_pc98_pit_4mhz").enable(IS_PC98_ARCH);
@@ -8446,6 +8534,7 @@ int main(int argc, char* argv[]) {
 
 		OutputSettingMenuUpdate();
 		update_pc98_clock_pit_menu();
+		update_capture_fmt_menu();
 		
 		/* The machine just "powered on", and then reset finished */
 		if (!VM_PowerOn()) E_Exit("VM failed to power on");
@@ -8465,8 +8554,6 @@ int main(int argc, char* argv[]) {
 
         void ConstructMenu(void);
         ConstructMenu();
-
-        mainMenu.dump_log_debug(); /*DEBUG*/
 
         mainMenu.rebuild();
 
@@ -8659,6 +8746,12 @@ fresh_boot:
             /* if instructed, turn off A20 at boot */
             if (disable_a20) MEM_A20_Enable(false);
 
+			/* PC-98: hide the cursor */
+			if (IS_PC98_ARCH) {
+				void PC98_show_cursor(bool show);
+				PC98_show_cursor(false);
+			}
+
 			/* new code: fire event */
 			DispatchVMEvent(VM_EVENT_GUEST_OS_BOOT);
 
@@ -8696,6 +8789,21 @@ fresh_boot:
 
 			/* new code: fire event */
 			DispatchVMEvent(VM_EVENT_RESET);
+			
+            extern bool custom_bios;
+            if (custom_bios) {
+                /* need to relocate BIOS allocations */
+                void ROMBIOS_InitForCustomBIOS(void);
+                ROMBIOS_InitForCustomBIOS();
+
+				void CALLBACK_Init();
+                CALLBACK_Init();
+#if C_DEBUG				
+				void DEBUG_ReinitCallback(void);
+                DEBUG_ReinitCallback();
+#endif
+            }
+
 			DispatchVMEvent(VM_EVENT_RESET_END);
 			
 			 /* HACK: EGA/VGA modes will need VGA BIOS mapped in, ready to go */

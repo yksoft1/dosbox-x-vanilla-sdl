@@ -297,6 +297,7 @@ void ffmpeg_flushout() {
 }
 #endif
 
+/* FIXME: This needs to be an enum */
 bool native_zmbv = false;
 bool export_ffmpeg = false;
 
@@ -622,6 +623,44 @@ void CAPTURE_VideoEvent(bool pressed) {
 	}
 
 	mainMenu.get_item("mapper_video").check(!!(CaptureState & CAPTURE_VIDEO)).refresh_item(mainMenu);
+}
+
+void CAPTURE_StartCapture(void) {
+#if (C_SSHOT)
+	if (!(CaptureState & CAPTURE_VIDEO))
+		CAPTURE_VideoEvent(true);
+#endif
+}
+
+void CAPTURE_StopCapture(void) {
+#if (C_SSHOT)
+	if (CaptureState & CAPTURE_VIDEO)
+		CAPTURE_VideoEvent(true);
+#endif
+}
+
+void CAPTURE_WaveEvent(bool pressed);
+
+void CAPTURE_StartWave(void) {
+	if (!(CaptureState & CAPTURE_WAVE))
+		CAPTURE_WaveEvent(true);
+}
+
+void CAPTURE_StopWave(void) {
+	if (CaptureState & CAPTURE_WAVE)
+		CAPTURE_WaveEvent(true);
+}
+
+void CAPTURE_MTWaveEvent(bool pressed);
+
+void CAPTURE_StartMTWave(void) {
+	if (!(CaptureState & CAPTURE_MULTITRACK_WAVE))
+		CAPTURE_MTWaveEvent(true);
+}
+
+void CAPTURE_StopMTWave(void) {
+	if (CaptureState & CAPTURE_MULTITRACK_WAVE)
+		CAPTURE_MTWaveEvent(true);
 }
 
 extern uint32_t GFX_palette32bpp[256];
@@ -1339,6 +1378,8 @@ skip_shot:
 
 		/* Everything went okay, set flag again for next frame */
 		CaptureState |= CAPTURE_VIDEO;
+		
+		mainMenu.get_item("mapper_video").check(!!(CaptureState & CAPTURE_VIDEO)).refresh_item(mainMenu);
 	}
 
 	return;
@@ -1798,4 +1839,49 @@ void HARDWARE_Init() {
 
 	/* TODO: Hardware init. We moved capture init to it's own function. */
 	AddExitFunction(AddExitFunctionFuncPair(HARDWARE_Destroy),true);
+}
+
+void update_capture_fmt_menu(void) {
+	mainMenu.get_item("capture_fmt_avi_zmbv").check(native_zmbv).refresh_item(mainMenu);
+#if (C_AVCODEC)
+	mainMenu.get_item("capture_fmt_mpegts_h264").check(export_ffmpeg).refresh_item(mainMenu);
+#endif
+}
+
+bool capture_fmt_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
+	const char *ts = menuitem->get_name().c_str();
+	Bitu old_CaptureState = CaptureState;
+	bool new_native_zmbv = native_zmbv;
+	bool new_export_ffmpeg = export_ffmpeg;
+
+	if (!strncmp(ts,"capture_fmt_",12))
+		ts += 12;
+
+#if (C_AVCODEC)
+	if (!strcmp(ts,"mpegts_h264")) {
+		new_native_zmbv = false;
+		new_export_ffmpeg = true;
+	}
+	else
+#endif
+	{
+		new_native_zmbv = true;
+		new_export_ffmpeg = false;
+	}
+
+	if (native_zmbv != new_native_zmbv || export_ffmpeg != new_export_ffmpeg) {
+		void CAPTURE_StopCapture(void);
+		CAPTURE_StopCapture();
+
+		native_zmbv = new_native_zmbv;
+		export_ffmpeg = new_export_ffmpeg;
+	}
+
+	if (old_CaptureState & CAPTURE_VIDEO) {
+		void CAPTURE_StartCapture(void);
+		CAPTURE_StartCapture();
+	}
+
+	update_capture_fmt_menu();
+	return true;
 }

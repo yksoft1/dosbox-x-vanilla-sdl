@@ -1568,7 +1568,17 @@ bool ParseCommand(char* str) {
 
         return true;
     }
+	
+    if (command == "CALLBACKS") {
+      //  DEBUG_BeginPagedContent();
 
+        void DBG_CALLBACK_Dump(void);
+        DBG_CALLBACK_Dump();
+
+      //  DEBUG_EndPagedContent();
+        return true;
+    }
+	 
 	if (command == "GDT") {LogGDT(); return true;}
 	
 	if (command == "LDT") {LogLDT(); return true;}
@@ -2963,6 +2973,12 @@ void DEBUG_ShutDown(Section * /*sec*/) {
 }
 
 Bitu debugCallback;
+
+void DEBUG_ReinitCallback(void) {
+     /* this is REQUIRED after loading a custom BIOS */
+ 	debugCallback=CALLBACK_Allocate();
+ 	CALLBACK_Setup(debugCallback,DEBUG_EnableDebugger,CB_RETF,"debugger");
+}
 
 void DEBUG_DOSStartUp(Section *x) {
 //	/* setup debug.com */

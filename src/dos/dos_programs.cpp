@@ -595,6 +595,89 @@ void SBLASTER_DOS_Shutdown();
 
 extern int swapInDisksSpecificDrive;
 
+unsigned char PC98_ITF_ROM[0x8000];
+bool PC98_ITF_ROM_init = false;
+unsigned char PC98_BANK_Select = 0x12;
+
+#include "mem.h"
+#include "paging.h"
+
+class PC98ITFPageHandler : public PageHandler {
+public:
+    PC98ITFPageHandler() : PageHandler(PFLAG_READABLE|PFLAG_HASROM) {}
+    PC98ITFPageHandler(Bitu flags) : PageHandler(flags) {}
+    HostPt GetHostReadPt(Bitu phys_page) {
+        return PC98_ITF_ROM+(phys_page&0x7)*MEM_PAGESIZE;
+    }
+    HostPt GetHostWritePt(Bitu phys_page) {
+        return PC98_ITF_ROM+(phys_page&0x7)*MEM_PAGESIZE;
+    }
+    void writeb(PhysPt addr,Bitu val){
+        LOG(LOG_CPU,LOG_ERROR)("Write %x to rom at %x",(int)val,(int)addr);
+    }
+    void writew(PhysPt addr,Bitu val){
+        LOG(LOG_CPU,LOG_ERROR)("Write %x to rom at %x",(int)val,(int)addr);
+    }
+    void writed(PhysPt addr,Bitu val){
+        LOG(LOG_CPU,LOG_ERROR)("Write %x to rom at %x",(int)val,(int)addr);
+    }
+};
+
+PC98ITFPageHandler          mem_itf_rom;
+
+void MEM_RegisterHandler(Bitu phys_page,PageHandler * handler,Bitu page_range);
+void MEM_ResetPageHandler_Unmapped(Bitu phys_page, Bitu pages);
+bool MEM_map_ROM_physmem(Bitu start,Bitu end);
+PageHandler &Get_ROM_page_handler(void);
+
+// Normal BIOS is in the BIOS memory area
+// ITF is in it's own buffer, served by mem_itf_rom
+void PC98_BIOS_Bank_Switch(void) {
+    if (PC98_BANK_Select == 0x00) {
+        MEM_RegisterHandler(0xF8,&mem_itf_rom,0x8);
+    }
+    else {
+        MEM_RegisterHandler(0xF8,&Get_ROM_page_handler(),0x8);
+    }
+	
+	PAGING_ClearTLB();
+}
+
+// BIOS behavior suggests a reset signal puts the BIOS back
+void PC98_BIOS_Bank_Switch_Reset(void) {
+    LOG_MSG("PC-98 43Dh mapping BIOS back into top of RAM");
+    PC98_BANK_Select = 0x12;
+    PC98_BIOS_Bank_Switch();
+#if 0
+    Bitu DEBUG_EnableDebugger(void);
+    DEBUG_EnableDebugger();
+#endif
+}
+ 
+void pc98_43d_write(Bitu port,Bitu val,Bitu iolen) {
+    (void)port;
+    (void)iolen;
+
+    LOG_MSG("PC-98 43Dh BIOS bank switching write: 0x%02x",(unsigned int)val);
+
+    switch (val) {
+        case 0x00: // ITF
+        case 0x10:
+        case 0x18:
+            PC98_BANK_Select = 0x00;
+            PC98_BIOS_Bank_Switch();
+            break;
+        case 0x12: // BIOS
+            PC98_BANK_Select = 0x12;
+            PC98_BIOS_Bank_Switch();
+            break;
+        default:
+            LOG_MSG("PC-98 43Dh BIOS bank switching write: 0x%02x unknown value",(unsigned int)val);
+            break;
+    };
+}
+
+
 class BOOT : public Program {
 public:
     BOOT() {
@@ -772,7 +855,35 @@ public:
 			fseek(romfp, 0, SEEK_SET);
 			fread(GetMemBase()+segbase,loadsz,1,romfp);
 			fclose(romfp);
-			
+
+            // The PC-98 BIOS has a bank switching system where at least the last 32KB
+            // can be switched to an Initial Firmware Test BIOS, which initializes the
+            // system then switches back to the full 96KB visible during runtime.
+            //
+            // We can emulate the same if a file named ITF.ROM exists in the same directory
+            // as the BIOS image we were given.
+            //
+            // To enable multiple ITFs per ROM image, we first try <bios filename>.itf.rom
+            // before trying itf.rom, for the user's convenience.
+            FILE *itffp;
+
+                               itffp = getFSFile((bios + ".itf.rom").c_str(), &isz1, &isz2);
+            if (itffp == NULL) itffp = getFSFile((bios + ".ITF.ROM").c_str(), &isz1, &isz2);
+            if (itffp == NULL) itffp = getFSFile("itf.rom", &isz1, &isz2);
+            if (itffp == NULL) itffp = getFSFile("ITF.ROM", &isz1, &isz2);
+
+            if (itffp != NULL && isz2 <= 0x8000ul) {
+                LOG_MSG("Found ITF (initial firmware test) BIOS image (0x%lx bytes)",(unsigned long)isz2);
+
+                memset(PC98_ITF_ROM,0xFF,sizeof(PC98_ITF_ROM));
+                fread(PC98_ITF_ROM,isz2,1,itffp);
+                PC98_ITF_ROM_init = true;
+
+                fclose(itffp);
+            }
+
+            IO_RegisterWriteHandler(0x43D,pc98_43d_write,IO_MB);
+			 
 			custom_bios = true;
 
 			/* boot it */
@@ -868,6 +979,9 @@ public:
                     else if (!memcmp(tmp,"VFD1.",5)) { /* FDD files */
                         newDiskSwap[i] = new imageDiskVFD(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
                     }
+					else if (!memcmp(tmp,"T98FDDIMAGE.R0\0\0",16)) {
+						newDiskSwap[i] = new imageDiskNFD(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
+					}
                     else {
                         newDiskSwap[i] = new imageDisk(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
                     }
@@ -1284,6 +1398,15 @@ public:
 
                 imageDiskList[drive-65]->Get_Geometry(&heads,&cyls,&sects,&ssize);
 
+				Bit8u RDISK_EQUIP = 0; /* 488h (ref. PC-9800 Series Technical Data Book - BIOS 1992 page 233 */
+				/* bits [7:4] = 640KB FD drives 3:0
+				 * bits [3:0] = 1MB FD drives 3:0 */
+				Bit8u F2HD_MODE = 0; /* 493h (ref. PC-9800 Series Technical Data Book - BIOS 1992 page 233 */
+				/* bits [7:4] = 640KB FD drives 3:0 ??
+				 * bits [3:0] = 1MB FD drives 3:0 ?? */
+				Bit8u F2DD_MODE = 0; /* 5CAh (ref. PC-9800 Series Technical Data Book - BIOS 1992 page 233 */
+				/* bits [7:4] = 640KB FD drives 3:0 ??
+				 * bits [3:0] = 1MB FD drives 3:0 ?? */				
                 Bitu disk_equip = 0,disk_equip_144 = 0,scsi_equip = 0;
 
                 /* FIXME: MS-DOS appears to be able to see disk image B: but only
@@ -1294,8 +1417,10 @@ public:
 
                 for (unsigned int i=0;i < 2;i++) {
                     if (imageDiskList[i] != NULL) {
-                        disk_equip |= (1 << i);
+                        disk_equip |= (0x1111u << i);
                         disk_equip_144 |= (1 << i);
+						RDISK_EQUIP |= (0x11u << i);
+						F2HD_MODE |= (0x11u << i);
                     }
                 }
 
@@ -1311,31 +1436,29 @@ public:
                     }
                 }
 
-                 if ((ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) || pc98_sect128) {
+				mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
+				mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
+				mem_writeb(0x482,scsi_equip);
+				mem_writeb(0x488,RDISK_EQUIP);
+				mem_writeb(0x493,F2HD_MODE);
+				mem_writeb(0x5CA,F2DD_MODE);
+				 
+				if ((ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) || pc98_sect128) {
                     mem_writeb(0x584,0x90/*type*/ + (drive - 65)/*drive*/); /* 1.2MB 3-mode */
-                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
-                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
-                    mem_writeb(0x482,scsi_equip);
                 }
                 else if (ssize == 512 && heads == 2 && cyls == 80 && sects == 18) {
                     mem_writeb(0x584,0x30/*type*/ + (drive - 65)/*drive*/); /* 1.44MB */
-                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
-                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
-                    mem_writeb(0x482,scsi_equip);
                 }
                 else if (drive >= 'C') {
                     /* hard drive */
                     mem_writeb(0x584,0xA0/*type*/ + (drive - 'C')/*drive*/);
-                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
-                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
-                    mem_writeb(0x482,scsi_equip);
                 }
                 else {
                     // FIXME
-                    mem_writeb(0x584,0x00);
-                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
-                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
-                    mem_writeb(0x482,scsi_equip);
+					LOG_MSG("PC-98 boot: Unable to determine boot drive type for ssize=%u heads=%u cyls=%u sects=%u. Guessing.",
+                         ssize,heads,cyls,sects);
+						 
+                    mem_writeb(0x584,(ssize < 1024 ? 0x30 : 0x90)/*type*/ + (drive - 65)/*drive*/);	
                 }
             }
             else {
@@ -3752,6 +3875,13 @@ private:
 				setbuf(newDisk, NULL);
 				newImage = new imageDiskVFD(newDisk, (Bit8u *)fileName, imagesize, (imagesize > 2880));
 			}
+			else if (!memcmp(tmp,"T98FDDIMAGE.R0\0\0",16)) {
+				fseeko64(newDisk, 0L, SEEK_END);
+				sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
+				imagesize = (Bit32u)(sectors / 2); /* orig. code wants it in KBs */
+				setbuf(newDisk, NULL);
+				newImage = new imageDiskNFD(newDisk, (Bit8u *)fileName, imagesize, (imagesize > 2880));
+			}
 			else {
 				fseeko64(newDisk, 0L, SEEK_END);
 				sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
@@ -3916,7 +4046,7 @@ void MODE::Run(void) {
 	}
 	else if (cmd->GetCount()>1) goto modeparam;
 	else if (strcasecmp(temp_line.c_str(),"mono")==0) mode=7;
-	else if (machine==MCH_HERC) goto modeparam;
+	else if (machine==MCH_HERC || machine==MCH_MDA) goto modeparam;
 	else if (strcasecmp(temp_line.c_str(),"co80")==0) mode=3;
 	else if (strcasecmp(temp_line.c_str(),"bw80")==0) mode=2;
 	else if (strcasecmp(temp_line.c_str(),"co40")==0) mode=1;

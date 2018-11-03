@@ -26,6 +26,7 @@
 #include "setup.h"
 #include "paging.h"
 #include "programs.h"
+#include "zipfile.h"
 #include "regs.h"
 #ifndef WIN32
 # include <stdlib.h>
@@ -36,6 +37,8 @@
 #include "voodoo.h"
 
 #include <string.h>
+
+extern ZIPFile savestate_zip;
 
 static MEM_Callout_t lfb_mem_cb = MEM_Callout_t_none;
 static MEM_Callout_t lfb_mmio_cb = MEM_Callout_t_none;
@@ -195,6 +198,9 @@ static RAMPageHandler ram_page_handler;
 static ROMPageHandler rom_page_handler;
 static ROMAliasPageHandler rom_page_alias_handler;
 
+PageHandler &Get_ROM_page_handler(void) {
+    return rom_page_handler;
+}
 
 extern bool pcibus_enable;
 
@@ -1067,7 +1073,7 @@ void MEM_A20_Enable(bool enabled) {
 
 	LOG(LOG_MISC,LOG_DEBUG)("MEM_A20_Enable(%u)",enabled?1:0);
 
-	if (!a20_fake_changeable) {
+	if (!a20_fake_changeable && (memory.mem_alias_pagemask & 0x100ul)) {
 		if (memory.a20.enabled) memory.mem_alias_pagemask_active |= 0x100;
 		else memory.mem_alias_pagemask_active &= ~0x100;
 		PAGING_ClearTLB();
@@ -1688,12 +1694,75 @@ void MEM_InitCallouts(void) {
     MEM_callouts[MEM_callouts_index(MEM_TYPE_MB)].resize(64);
 }
 
+void MEM_LoadState(Section *sec) {
+	(void)sec;//UNUSED
+	off_t memsize = memory.pages*4096;
+	if (MemBase != NULL) {
+		ZIPFileEntry *ent = savestate_zip.get_entry("memory.bin");
+		if (ent != NULL) {
+			LOG_MSG("memory.bin file_length: %d", ent->file_length);
+			ent->rewind();
+			/*
+				ent->file_length seemed to always return incorrect value in 
+				memory.cpp here.
+				Is that a bug in MinGW? even joncampbell123's master has exact
+				same problem in my environment. ----yksoft1
+			*/
+#if 0
+			if (memsize == ent->file_length)
+				ent->read(MemBase, memsize);
+			else
+				LOG_MSG("Memory load state failure: Memory size mismatch, should be %d, %d in savestate", memsize, ent->file_length);
+#else
+			//HACK
+			ent->read(MemBase, memsize);	
+#endif
+			}
+	}
+
+	{
+		ZIPFileEntry *ent = savestate_zip.get_entry("memory.txt");
+		if (ent != NULL) {
+			zip_nv_pair_map nv(*ent);
+			memory.a20.enabled =     nv.get_bool("a20.enabled");
+			memory.a20.controlport = (Bit8u)nv.get_ulong("a20.controlport");
+			a20_guest_changeable =   nv.get_bool("a20_guest_changeable");
+			a20_fake_changeable =    nv.get_bool("a20_fake_changeable");
+		}
+	}
+}
+
+void MEM_SaveState(Section *sec) {
+	(void)sec;//UNUSED
+
+	if (MemBase != NULL) {
+		ZIPFileEntry *ent = savestate_zip.new_entry("memory.bin");
+		if (ent != NULL) {
+			LOG_MSG("Writing memory.bin memsize %d", memory.pages*4096);
+			ent->write(MemBase, memory.pages*4096);
+		}
+	}
+
+	{
+		ZIPFileEntry *ent = savestate_zip.new_entry("memory.txt");
+		if (ent != NULL) {
+			zip_nv_write(*ent,    "a20.enabled",            memory.a20.enabled);
+			zip_nv_write_hex(*ent,"a20.controlport",        memory.a20.controlport);
+			zip_nv_write(*ent,    "a20_guest_changeable",   a20_guest_changeable);
+			zip_nv_write(*ent,    "a20_fake_changeable",    a20_fake_changeable);
+		}
+	}
+}
+
 void Init_RAM() {
 	Section_prop * section=static_cast<Section_prop *>(control->GetSection("dosbox"));
 	Bitu i;
 
 	/* please let me know about shutdown! */
 	if (!has_Init_RAM) {
+		AddVMEventFunction(VM_EVENT_LOAD_STATE,AddVMEventFunctionFuncPair(MEM_LoadState));
+		AddVMEventFunction(VM_EVENT_SAVE_STATE,AddVMEventFunctionFuncPair(MEM_SaveState));
+		
 		AddExitFunction(AddExitFunctionFuncPair(ShutDownRAM));
 		has_Init_RAM = true;
 	}
@@ -1705,7 +1774,7 @@ void Init_RAM() {
 	LOG(LOG_MISC,LOG_DEBUG)("Initializing RAM emulation (system memory)");
 
 	// CHECK: address mask init must have been called!
-	assert(memory.mem_alias_pagemask > 0xFF);
+	assert(memory.mem_alias_pagemask >= 0xFF);
 
 	/* Setup the Physical Page Links */
 	Bitu memsizekb = section->Get_int("memsizekb");
@@ -1792,6 +1861,19 @@ void Init_RAM() {
 	 *        address ranges it is not responding to when mapping changes. */
 	for (i=0xa0;i<0x100;i++) /* we want to make sure adapter ROM is unmapped entirely! */
 		memory.phandlers[i] = NULL;//&unmapped_page_handler;
+}
+
+/* ROM BIOS emulation will call this to impose an additional cap on RAM
+ * to make sure the upper alias of the ROM BIOS has room. */
+void MEM_cut_RAM_up_to(Bitu addr) {
+	Bitu pages = addr >> 12ul;
+	
+	if (memory.reported_pages > pages) {
+		LOG(LOG_MISC,LOG_DEBUG)("Memory: Reducing RAM to 0x%lx",(unsigned long)addr);
+		
+		do { memory.phandlers[--memory.reported_pages] = NULL;
+		} while (memory.reported_pages > pages);
+	}
 }
 
 static IO_ReadHandleObject PS2_Port_92h_ReadHandler;
@@ -1954,7 +2036,7 @@ void Init_MemoryAccessArray() {
 	LOG(LOG_MISC,LOG_DEBUG)("Initializing memory access array (page handler callback system). mem_alias_pagemask=%lx",(unsigned long)memory.mem_alias_pagemask);
 
 	// CHECK: address mask init must have been called!
-	assert(memory.mem_alias_pagemask > 0xFF);
+	assert(memory.mem_alias_pagemask >= 0xFF);
 
 	// we maintain a different page count for page handlers because we want to maintain a
 	// "cache" of sorts of what device responds to a given memory address.

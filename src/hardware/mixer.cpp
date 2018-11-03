@@ -688,6 +688,11 @@ void MixerChannel::FillUp(void) {
 	MIXER_FillUp();
 }
 
+void MIXER_MixSingle(Bitu /*val*/) {
+	MIXER_FillUp();
+	PIC_AddEvent(MIXER_MixSingle,1000.0 / mixer.freq);
+}
+
 static void MIXER_Mix(void) {
 	Bitu thr;
 
@@ -731,9 +736,13 @@ static void MIXER_CallBack(void * userdata, Uint8 *stream, int len) {
 	int remains;
 	Bit32s *in;
 
-	if (mixer.mute)
-		mixer.work_in = mixer.work_out = 0;
-		
+    if (mixer.mute) {
+		if ((CaptureState & (CAPTURE_WAVE|CAPTURE_VIDEO|CAPTURE_MULTITRACK_WAVE)) != 0)
+			mixer.work_out = mixer.work_in;
+		else
+			mixer.work_out = mixer.work_in = 0;
+	}
+	 
     if (mixer.prebuffer_wait) {
         remains = (int)mixer.work_in - (int)mixer.work_out;
         if (remains < 0) remains += mixer.work_wrap;
@@ -742,7 +751,7 @@ static void MIXER_CallBack(void * userdata, Uint8 *stream, int len) {
             mixer.prebuffer_wait = false;
     }
 
-    if (!mixer.prebuffer_wait) {
+	if (!mixer.prebuffer_wait && !mixer.mute) {
         in = &mixer.work[mixer.work_out][0];
         while (need > 0) {
             if (mixer.work_out == mixer.work_in) break;
@@ -982,7 +991,7 @@ void MIXER_Init() {
 	mixer.nosound=section->Get_bool("nosound");
 	mixer.blocksize=section->Get_int("blocksize");
 	mixer.swapstereo=section->Get_bool("swapstereo");
-	mixer.sampleaccurate=section->Get_bool("sample accurate");//FIXME: Make this bool mean something again!
+	mixer.sampleaccurate=section->Get_bool("sample accurate");
 	mixer.mute=false;
 
 	/* Initialize the internal stuff */
@@ -1022,6 +1031,7 @@ void MIXER_Init() {
 		mixer.freq=obtained.freq;
 		mixer.blocksize=obtained.samples;
 		TIMER_AddTickHandler(MIXER_Mix);
+		if (mixer.sampleaccurate) PIC_AddEvent(MIXER_MixSingle,1000.0 / mixer.freq);
 		SDL_PauseAudio(0);
 	}
 	mixer_start_pic_time = PIC_FullIndex();

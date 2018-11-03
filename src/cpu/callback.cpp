@@ -31,6 +31,8 @@ Bit16u CB_SEG=0,CB_SOFFSET=0;
 extern Bitu vm86_fake_io_seg;
 extern Bitu vm86_fake_io_off;
 
+unsigned int last_callback = 0;
+
 /* CallBack are located at 0xF000:0x1000  (see CB_SEG and CB_SOFFSET in callback.h)
    And they are 16 bytes each and you can define them to behave in certain ways like a
    far return or and IRET
@@ -43,10 +45,24 @@ Bitu call_stop,call_idle,call_default,call_default2;
 Bitu call_priv_io;
 
 static Bitu illegal_handler(void) {
-	E_Exit("Illegal CallBack Called");
+	E_Exit("Illegal CallBack #%u Called",last_callback);
 	return 1;
 }
 
+void DBG_CALLBACK_Dump(void) {
+ 	LOG_MSG("Callbacks");
+    for (Bitu i=0;i < CB_MAX;i++) {
+        if (CallBack_Handlers[i] == &illegal_handler)
+            continue;
+
+        LOG_MSG("  [%u] func=%p desc='%s'",
+            (unsigned int)i,
+            (void*)((uintptr_t)CallBack_Handlers[i]), /* shut the compiler up by func -> uintptr_t -> void* conversion */
+            CallBack_Description[i] != NULL ? CallBack_Description[i] : "");
+    }
+ 	LOG_MSG("--------------");
+}
+ 
 void CALLBACK_Dump(void) {
 	LOG(LOG_CPU,LOG_DEBUG)("Callback dump");
     for (Bitu i=0;i < CB_MAX;i++) {
@@ -331,8 +347,19 @@ Bitu CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress, bool use_
 		return (use_cb?0x13:0x0f);
 	case CB_IRQ1:	// keyboard int9
 		phys_writeb(physAddress+0x00,(Bit8u)0x50);			// push ax
-		phys_writew(physAddress+0x01,(Bit16u)0x60e4);		// in al, 0x60
-        if (IS_PC98_ARCH) {
+		if (machine == MCH_PCJR || IS_PC98_ARCH) {
+			/* NTS: NEC PC-98 does not have keyboard input on port 60h, it's a 8251 UART elsewhere.
+			 *
+			 * IBM PCjr reads the infared input on NMI interrupt, which then calls INT 48h to
+			 * translate to IBM PC/XT scan codes before passing AL directly to IRQ1 (INT 9).
+			 * PCjr keyboard handlers, including games made for the PCjr, assume the scan code
+			 * is in AL and do not read the I/O port */
+			phys_writew(physAddress+0x01,(Bit16u)0x9090); // nop, nop
+		}
+		else {
+			phys_writew(physAddress+0x01,(Bit16u)0x60e4); // in al, 0x60
+		}
+        if (IS_PC98_ARCH || IS_TANDY_ARCH) {
             phys_writew(physAddress+0x03,(Bit16u)0x9090);		// nop, nop
             phys_writeb(physAddress+0x05,(Bit8u)0x90);			// nop
             phys_writew(physAddress+0x06,(Bit16u)0x9090);		// nop, nop (PC-98 does not have INT 15h keyboard hook)
@@ -344,7 +371,7 @@ Bitu CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress, bool use_
         }
 
 		if (use_cb) {
-            if (IS_PC98_ARCH)
+            if (IS_PC98_ARCH || IS_TANDY_ARCH)
                 phys_writew(physAddress+0x08,(Bit16u)0x9090);	// nop nop
             else
                 phys_writew(physAddress+0x08,(Bit16u)0x0473);	// jc skip
@@ -746,6 +773,8 @@ void CALLBACK_HandlerObject::Set_RealVec(Bit8u vec,bool reinstall){
 		RealSetVec(vec,Get_RealPointer(),vectorhandler.old_vector);
 	} else E_Exit ("double usage of vector handler");
 }
+
+extern bool custom_bios;
 
 void CALLBACK_Init() {
 	{

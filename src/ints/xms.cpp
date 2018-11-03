@@ -34,7 +34,12 @@
 
 #include <algorithm>
 
-#define XMS_HANDLES							50		/* 50 XMS Memory Blocks */ 
+#define XMS_HANDLES_MIN 4
+#define XMS_HANDLES_MAX	256	/* 256 XMS Memory Blocks */
+#define XMS_HANDLES_DEFAULT 50 /* DOSBox SVN default */
+
+unsigned int XMS_HANDLES = XMS_HANDLES_DEFAULT;
+
 #define XMS_VERSION    						0x0300	/* version 3.00 */
 #define XMS_DRIVER_VERSION					0x0301	/* my driver version 3.01 */
 
@@ -151,7 +156,7 @@ static RealPt xms_callback;
 static bool umb_available = false;
 static bool umb_init = false;
 
-static XMS_Block xms_handles[XMS_HANDLES];
+static XMS_Block xms_handles[XMS_HANDLES_MAX];
 
 Bitu XMS_GetTotalHandles(void) {
     return XMS_HANDLES;
@@ -627,6 +632,16 @@ public:
 
 		if (!section->Get_bool("xms")) return;
 
+		XMS_HANDLES = section->Get_int("xms handles");
+		if (XMS_HANDLES == 0)
+			XMS_HANDLES = XMS_HANDLES_DEFAULT;
+		else if (XMS_HANDLES < XMS_HANDLES_MIN)
+			XMS_HANDLES = XMS_HANDLES_MIN;
+		else if (XMS_HANDLES > XMS_HANDLES_MAX)
+			XMS_HANDLES = XMS_HANDLES_MAX;
+			
+		LOG_MSG("XMS: %u handles allocated for use by the DOS environment",XMS_HANDLES);
+
 		/* NTS: Disable XMS emulation if CPU type is less than a 286, because extended memory did not
 		 *      exist until the CPU had enough address lines to read past the 1MB mark.
 		 *
@@ -687,6 +702,12 @@ public:
 		umb_available=section->Get_bool("umb");
 		first_umb_seg=section->Get_hex("umb start");
 		first_umb_size=section->Get_hex("umb end");
+
+		/* This code will mess up the MCB chain in PCjr mode if umb=true */
+		if (umb_available && machine == MCH_PCJR) {
+			LOG(LOG_MISC,LOG_DEBUG)("UMB emulation is incompatible with PCjr emulation, disabling UMBs");
+			umb_available = false;
+		}
 
 		DOS_GetMemory_Choose();
 

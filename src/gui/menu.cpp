@@ -819,6 +819,7 @@ static const char *def_menu_video_pc98[] = {
 	"pc98_enable_egc",
 	"pc98_enable_grcg",
 	"pc98_enable_analog",
+	"pc98_enable_188user",
 	"--",
 	"pc98_clear_text",
 	"pc98_clear_graphics",
@@ -909,11 +910,22 @@ static const char *def_menu_capture[] = {
     "mapper_scrshot",
     "--",
 #endif
+	"CaptureFormatMenu",
+	"--",
     "mapper_video",
     "mapper_recwave",
     "mapper_recmtwave",
     "mapper_caprawopl",
     "mapper_caprawmidi",
+    NULL
+};
+
+/* capture format menu ("CaptureFormatMenu") */
+static const char *def_menu_capture_format[] = {
+    "capture_fmt_avi_zmbv",
+#if (C_AVCODEC)
+    "capture_fmt_mpegts_h264",
+#endif
     NULL
 };
 
@@ -1056,6 +1068,9 @@ void ConstructMenu(void) {
 	
     /* capture menu */
     ConstructSubMenu(mainMenu.get_item("CaptureMenu").get_master_id(), def_menu_capture);
+	
+	/* capture format menu */
+	ConstructSubMenu(mainMenu.get_item("CaptureFormatMenu").get_master_id(), def_menu_capture_format);
 }
 
 bool MENU_SetBool(std::string secname, std::string value) {
@@ -4100,8 +4115,6 @@ void DOSBoxMenu::layoutMenu(void) {
 
     for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
         get_item(*i).layoutSubmenu(*this, /*toplevel*/true);
-
-    LOG_MSG("Layout complete");
 }
 
 void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
@@ -4218,12 +4231,12 @@ void DOSBoxMenu::item::placeItemFinal(DOSBoxMenu &menu,int finalwidth,bool isTop
         }
     }
 
-    LOG_MSG("Item id=%u name=\"%s\" placed at x,y,w,h=%d,%d,%d,%d. text:x,y,w,h=%d,%d,%d,%d",
+/*    LOG_MSG("Item id=%u name=\"%s\" placed at x,y,w,h=%d,%d,%d,%d. text:x,y,w,h=%d,%d,%d,%d",
         master_id,name.c_str(),
         screenBox.x,screenBox.y,
         screenBox.w,screenBox.h,
         textBox.x,textBox.y,
-        textBox.w,textBox.h);
+        textBox.w,textBox.h);*/
     boxInit = true;
 }
 
