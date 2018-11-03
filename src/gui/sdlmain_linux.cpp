@@ -8,7 +8,7 @@
 #include "SDL_version.h"
 #include "SDL_syswm.h"
 
-#ifndef EMSCRIPTEN
+#if !defined(C_SDL2) && !defined(EMSCRIPTEN)
 #include <X11/XKBlib.h>
 #include <X11/extensions/XKBrules.h>
 #endif
