@@ -2987,6 +2987,17 @@ void PC98_BIOS_FDC_CALL_GEO_UNPACK(unsigned int &fdc_cyl,unsigned int &fdc_head,
     if (fdc_sz > 8) fdc_sz = 8;
 }
 
+/* NTS: FDC calls reset IRQ 0 timer to a specific fixed interval,
+ *      because the real BIOS likely does the same in the act of
+ *      controlling the floppy drive.
+ *
+ *      Resetting the interval is required to prevent Ys II from
+ *      crashing after disk swap (divide by zero/overflow) because
+ *      Ys II reads the timer after INT 1Bh for whatever reason
+ *      and the upper half of the timer byte later affects a divide
+ *      by 3 in the code. */
+void PC98_Interval_Timer_Continue(void);
+
 void PC98_BIOS_FDC_CALL(unsigned int flags) {
     static unsigned int fdc_cyl[2]={0,0},fdc_head[2]={0,0},fdc_sect[2]={0,0},fdc_sz[2]={0,0}; // FIXME: Rename and move out. Making "static" is a hack here.
     Bit32u img_heads=0,img_cyl=0,img_sect=0,img_ssz=0;
@@ -3033,6 +3044,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 				return;
 			}
 
+			/* fake like we use the timer */
+			PC98_Interval_Timer_Continue();
+			
 			fdc_cyl[drive] = reg_cl;
 
 			reg_ah = 0x00;
@@ -3083,6 +3097,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 				/* TODO? Error code? */
 				return;
 			}
+			
+			/* fake like we use the timer */
+			PC98_Interval_Timer_Continue();			
 
 			size = reg_bx;
 			while (size > 0) {
@@ -3157,6 +3174,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
                 /* TODO? Error code? */
                 return;
             }
+
+			/* fake like we use the timer */
+			PC98_Interval_Timer_Continue();
 
             size = reg_bx;
             memaddr = (SegValue(es) << 4U) + reg_bp;
@@ -3251,6 +3271,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
                 return;
             }
 
+			/* fake like we use the timer */
+			PC98_Interval_Timer_Continue();
+			
             size = reg_bx;
             memaddr = (SegValue(es) << 4U) + reg_bp;
             while (size > 0) {
@@ -3294,6 +3317,30 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
             reg_ah = 0x00;
             CALLBACK_SCF(false);
             break;
+		case 0x0D: /* format track */
+			if (floppy == NULL) {
+				CALLBACK_SCF(true);
+				reg_ah = 0x00;
+				/* TODO? Error code? */
+				return;
+			}
+
+			PC98_BIOS_FDC_CALL_GEO_UNPACK(/*&*/fdc_cyl[drive],/*&*/fdc_head[drive],/*&*/fdc_sect[drive],/*&*/fdc_sz[drive]);
+			unitsize = PC98_FDC_SZ_TO_BYTES(fdc_sz[drive]);
+
+			/* fake like we use the timer */
+			PC98_Interval_Timer_Continue();
+
+			LOG_MSG("WARNING: INT 1Bh FDC format track command not implemented. Formatting is faked, for now on C/H/S/sz %u/%u/%u/%u drive %c.",
+				(unsigned int)fdc_cyl[drive],
+				(unsigned int)fdc_head[drive],
+				(unsigned int)fdc_sect[drive],
+				(unsigned int)unitsize,
+				drive + 'A');
+
+			reg_ah = 0x00;
+			CALLBACK_SCF(false);
+			break;		
         case 0x0A: /* read ID */
 			/* NTS: PC-98 "MEGDOS" used by some games seems to rely heavily on this call to
 			 * verify the floppy head is where it thinks it should be! */
@@ -3344,6 +3391,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 					fdc_sect[drive] = 1;
 			}
 
+			/* fake like we use the timer */
+			PC98_Interval_Timer_Continue();
+			
             reg_ah = 0x00;
             CALLBACK_SCF(false);
             break;
@@ -6275,6 +6325,12 @@ private:
 
             void BIOS_Post_register_FDC();
             BIOS_Post_register_FDC();
+		}
+
+		if (IS_PC98_ARCH) {
+			/* initialize IRQ0 timer to default tick interval.
+			 * PC-98 does not pre-initialize timer 0 of the PIT to 0xFFFF the way IBM PC/XT/AT do */
+			PC98_Interval_Timer_Continue();
 		}
 
         CPU_STI();

@@ -3411,7 +3411,7 @@ void BIND_MappingEvents(void) {
 # endif
 #endif
 #if defined(SDL_VIDEO_DRIVER_X11)
-# if defined(C_SDL2)
+# if defined(C_SDL2) || !defined(SDL_DOSBOX_X_SPECIAL)
 # else
                 {
                     char *LinuxX11_KeySymName(Uint32 x);
