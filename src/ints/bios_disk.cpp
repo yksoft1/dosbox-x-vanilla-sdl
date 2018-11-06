@@ -373,11 +373,31 @@ typedef struct {
 } NFDHDR; // =0x120 
 
 typedef struct {
+	char	sig[16];            // +0x000
+	char	comment[0x100];     // +0x010
+	UINT8	headersize[4];      // +0x110
+	uint8_t prot;               // +0x114
+	uint8_t nhead;              // +0x115
+	uint8_t _unknown_[10];      // +0x116
+	uint32_t trackheads[164];   // +0x120	
+	uint32_t addinfo;           // +0x3b0
+	uint8_t _unknown2_[12];     // +0x3b4
+} NFDHDRR1;                     // =0x3c0
+
+typedef struct {
 	uint8_t log_cyl; // +0x0
 	uint8_t log_head; // +0x1
 	uint8_t log_rec; // +0x2
 	uint8_t sec_len_pow2; // +0x3 sz = 128 << len_pow2
-	uint8_t _unknown_[12]; // +0x4
+    uint8_t flMFM;              // +0x4
+	uint8_t flDDAM;             // +0x5
+	uint8_t byStatus;           // +0x6
+	uint8_t bySTS0;             // +0x7
+	uint8_t bySTS1;             // +0x8
+	uint8_t bySTS2;             // +0x9
+	uint8_t byRetry;            // +0xA
+	uint8_t byPDA;              // +0xB
+	uint8_t _unknown_[4];       // +0xC
 } NFDHDR_ENTRY; // =0x10 
 #pragma pack(pop)
 
@@ -1851,12 +1871,16 @@ imageDiskD88::~imageDiskD88() {
      return Write_Sector(h,c,s,data);
  }
 
- imageDiskNFD::imageDiskNFD(FILE *imgFile, Bit8u *imgName, Bit32u imgSizeK, bool isHardDisk) : imageDisk(ID_NFD) {
-     (void)isHardDisk;//UNUSED
-     NFDHDR head;
+imageDiskNFD::imageDiskNFD(FILE *imgFile, Bit8u *imgName, Bit32u imgSizeK, bool isHardDisk, unsigned int revision) : imageDisk(ID_NFD) {
+	(void)isHardDisk;//UNUSED
+	union {
+		NFDHDR head;
+		NFDHDRR1 headr1;
+	}; // these occupy the same location of memory
 
-     assert(sizeof(NFDHDR) == 0x120);
-     assert(sizeof(NFDHDR_ENTRY) == 0x10);
+	assert(sizeof(NFDHDR) == 0x120);
+	assert(sizeof(NFDHDRR1) == 0x3C0);
+	assert(sizeof(NFDHDR_ENTRY) == 0x10);
 
      heads = 0;
      cylinders = 0;
@@ -1891,51 +1915,123 @@ imageDiskD88::~imageDiskD88() {
      off_t fsz = ftell(diskimg);
 
      fseek(diskimg,0,SEEK_SET);
-     if (fread(&head,sizeof(head),1,diskimg) != 1) return;
+    if (revision == 0) {
+		if (fread(&head,sizeof(head),1,diskimg) != 1) return;
+	}
+	else if (revision == 1) {
+		if (fread(&headr1,sizeof(headr1),1,diskimg) != 1) return;
+	}
+	else {
+		abort();
+	}
 
      // validate fd_size
      if ((uint32_t)host_readd((ConstHostPt)(&head.headersize)) < sizeof(head)) return;
      if ((uint32_t)host_readd((ConstHostPt)(&head.headersize)) > (uint32_t)fsz) return;
 
+	unsigned int data_offset = host_readd((ConstHostPt)(&head.headersize));
+	  
      std::vector< std::pair<uint32_t,NFDHDR_ENTRY> > seclist;
-     unsigned int secents = (host_readd((ConstHostPt)(&head.headersize)) - sizeof(head)) / sizeof(NFDHDR_ENTRY);
-     if (secents == 0) return;
-     secents--;
-     if (secents == 0) return;
+    if (revision == 0) {
+         unsigned int secents = (host_readd((ConstHostPt)(&head.headersize)) - sizeof(head)) / sizeof(NFDHDR_ENTRY);
+         if (secents == 0) return;
+         secents--;
+         if (secents == 0) return;
 
-     unsigned int data_offset = host_readd((ConstHostPt)(&head.headersize));
+         for (unsigned int i=0;i < secents;i++) {
+             uint32_t ofs = (uint32_t)ftell(diskimg);
+             NFDHDR_ENTRY e;
 
-     for (unsigned int i=0;i < secents;i++) {
-         uint32_t ofs = (uint32_t)ftell(diskimg);
-         NFDHDR_ENTRY e;
+             if (fread(&e,sizeof(e),1,diskimg) != 1) return;
+             seclist.push_back( std::pair<uint32_t,NFDHDR_ENTRY>(ofs,e) );
 
-         if (fread(&e,sizeof(e),1,diskimg) != 1) return;
-         seclist.push_back( std::pair<uint32_t,NFDHDR_ENTRY>(ofs,e) );
+             if (e.log_cyl == 0xFF || e.log_head == 0xFF || e.log_rec == 0xFF || e.sec_len_pow2 > 7)
+                 continue;
 
-         if (e.log_cyl == 0xFF || e.log_head == 0xFF || e.log_rec == 0xFF || e.sec_len_pow2 > 7)
-             continue;
+            LOG_MSG("NFD %u/%u: ofs=%lu data=%lu cyl=%u head=%u sec=%u len=%u",
+                     (unsigned int)i,
+                     (unsigned int)secents,
+                     (unsigned long)ofs,
+                     (unsigned long)data_offset,
+                     e.log_cyl,
+                     e.log_head,
+                     e.log_rec,
+                     128 << e.sec_len_pow2);
 
-         LOG_MSG("NFD %u/%u: ofs=%lu data=%lu cyl=%u head=%u sec=%u len=%u",
-             (unsigned int)i,
-             (unsigned int)secents,
-             (unsigned long)ofs,
-             (unsigned long)data_offset,
-             e.log_cyl,
-             e.log_head,
-             e.log_rec,
-             128 << e.sec_len_pow2);
+             vfdentry vent;
+             vent.sector_size = 128 << e.sec_len_pow2;
+             vent.data_offset = (uint32_t)data_offset;
+             vent.entry_offset = (uint32_t)ofs;
+             vent.track = e.log_cyl;
+             vent.head = e.log_head;
+             vent.sector = e.log_rec;
+             dents.push_back(vent);
 
-         vfdentry vent;
-         vent.sector_size = 128 << e.sec_len_pow2;
-         vent.data_offset = (uint32_t)data_offset;
-         vent.entry_offset = (uint32_t)ofs;
-         vent.track = e.log_cyl;
-         vent.head = e.log_head;
-         vent.sector = e.log_rec;
-         dents.push_back(vent);
+             data_offset += 128u << e.sec_len_pow2;
+             if (data_offset > (unsigned int)fsz) return;
+         }
+     }
+     else {
+         /* R1 has an array of offsets to where each tracks begins.
+          * The end of the track is an entry like 0x1A 0x00 0x00 0x00 0x00 0x00 0x00 .... */
+         /* The R1 images I have as reference always have offsets in ascending order. */
+         for (unsigned int ti=0;ti < 164;ti++) {
+             uint32_t trkoff = host_readd((ConstHostPt)(&headr1.trackheads[ti]));
 
-         data_offset += 128u << e.sec_len_pow2;
-         if (data_offset > (unsigned int)fsz) return;
+             if (trkoff == 0) break;
+
+             fseek(diskimg,trkoff,SEEK_SET);
+             if (ftell(diskimg) != trkoff) return;
+
+             NFDHDR_ENTRY e;
+
+            // track id
+             if (fread(&e,sizeof(e),1,diskimg) != 1) return;
+             unsigned int sectors = host_readw((ConstHostPt)(&e) + 0);
+             unsigned int diagcount = host_readw((ConstHostPt)(&e) + 2);
+
+             LOG_MSG("NFD R1 track ent %u offset %lu sectors %u diag %u",ti,(unsigned long)trkoff,sectors,diagcount);
+
+             for (unsigned int s=0;s < sectors;s++) {
+                 uint32_t ofs = (uint32_t)ftell(diskimg);
+
+                 if (fread(&e,sizeof(e),1,diskimg) != 1) return;
+
+                LOG_MSG("NFD %u/%u: ofs=%lu data=%lu cyl=%u head=%u sec=%u len=%u rep=%u",
+                         (unsigned int)s,
+                         (unsigned int)sectors,
+                         (unsigned long)ofs,
+                         (unsigned long)data_offset,
+                         e.log_cyl,
+                         e.log_head,
+                         e.log_rec,
+                        128 << e.sec_len_pow2,
+                         e.byRetry);
+
+                 vfdentry vent;
+                 vent.sector_size = 128 << e.sec_len_pow2;
+                 vent.data_offset = (uint32_t)data_offset;
+                 vent.entry_offset = (uint32_t)ofs;
+                 vent.track = e.log_cyl;
+                 vent.head = e.log_head;
+                 vent.sector = e.log_rec;
+                 dents.push_back(vent);
+
+                 data_offset += 128u << e.sec_len_pow2;
+                 if (data_offset > (unsigned int)fsz) return;
+             }
+			 
+             for (unsigned int d=0;d < diagcount;d++) {
+                 if (fread(&e,sizeof(e),1,diskimg) != 1) return;
+
+                 unsigned int retry = e.byRetry;
+                 unsigned int len = host_readd((ConstHostPt)(&e) + 10);
+
+                 LOG_MSG("NFD diag %u/%u: retry=%u len=%u data=%lu",d,diagcount,retry,len,(unsigned long)data_offset);
+
+                 data_offset += (1+retry) * len;
+             }			 
+         }
      }
 
      if (!dents.empty()) {
