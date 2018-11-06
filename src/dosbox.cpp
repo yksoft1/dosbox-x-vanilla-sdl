@@ -817,8 +817,12 @@ void Init_VGABIOS() {
 
 	if (VGA_BIOS_Size_override >= 512 && VGA_BIOS_Size_override <= 65536)
 		VGA_BIOS_Size = (VGA_BIOS_Size_override + 0x7FF) & (~0xFFF);
-	else if (IS_VGA_ARCH)
-		VGA_BIOS_Size = 0x3000; /* <- Experimentation shows the S3 emulation can fit in 12KB, doesn't need all 32KB */
+	else if (IS_VGA_ARCH) {
+		if (svgaCard == SVGA_S3Trio)
+			VGA_BIOS_Size = 0x4000;
+		else
+			VGA_BIOS_Size = 0x3000;
+	}
 	else if (machine == MCH_EGA) {
 		if (VIDEO_BIOS_always_carry_16_high_font)
 			VGA_BIOS_Size = 0x3000;
@@ -1573,6 +1577,11 @@ void DOSBOX_SetupConfigSections(void) {
 	Pint->Set_help("IF nonzero, VESA modes with vertical resolution higher than the specified pixel count will not be listed.\n"
 			"This is another way the modelist can be capped for DOS applications that have trouble with long modelists.");
 
+	Pbool = secprop->Add_bool("vesa vbe put modelist in vesa information",Property::Changeable::Always,false);
+	Pbool->Set_help("If set, the VESA modelist is placed in the VESA information structure itself when the DOS application\n"
+                     "queries information on the VESA BIOS. Setting this option may help with some games, though it limits\n"
+                     "the mode list reported to the DOS application.");
+					 
 	Pbool = secprop->Add_bool("vesa vbe 1.2 modes are 32bpp",Property::Changeable::Always,true);
 	Pbool->Set_help("If set, truecolor (16M color) VESA BIOS modes in the 0x100-0x11F range are 32bpp. If clear, they are 24bpp.\n"
 			"Some DOS games and demos assume one bit depth or the other and do not enumerate VESA BIOS modes, which is why this\n"

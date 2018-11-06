@@ -2458,8 +2458,10 @@ extern void GFX_UpdateDisplayDimensions(int width, int height);
 #endif
 
 static void DrawButtons(void) {
+#if defined(C_SDL2)
+	SDL_FillRect(mapper.draw_surface,0,0);
+#else
 	SDL_FillRect(mapper.surface,0,0);
-#if !defined(C_SDL2)
 	SDL_LockSurface(mapper.surface);
 #endif
 	for (CButton_it but_it = buttons.begin();but_it!=buttons.end();but_it++) {
@@ -3635,7 +3637,7 @@ void MAPPER_RunInternal() {
     SDL_SetPaletteColors(sdl2_map_pal_ptr, map_pal, 0, 6);
     SDL_SetSurfacePalette(mapper.draw_surface, sdl2_map_pal_ptr);
     if (last_clicked) {
-        last_clicked->BindColor();
+        last_clicked->SetColor(CLR_WHITE);
         last_clicked=NULL;
     }
 #else
@@ -3662,7 +3664,7 @@ void MAPPER_RunInternal() {
 			DrawButtons();
         } else {
 #if defined(C_SDL2)
-            SDL_UpdateWindowSurface(mapper.window);
+            //SDL_UpdateWindowSurface(mapper.window);
 #endif
         }
 		BIND_MappingEvents();
