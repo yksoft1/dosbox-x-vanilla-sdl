@@ -2236,13 +2236,20 @@ void KEYBOARD_OnEnterPC98_phase2(Section *sec) {
     pc98_mouse_8255.writePortC(0x00);
 }
 
+extern bool enable_slave_pic;
+
 void KEYBOARD_OnReset(Section *sec) {
 	Section_prop *section=static_cast<Section_prop *>(control->GetSection("keyboard"));
 
 	LOG(LOG_MISC,LOG_DEBUG)("Keyboard reinitializing");
 
 	if ((keyb.enable_aux=section->Get_bool("aux")) != false) {
-		LOG(LOG_KEYBOARD,LOG_NORMAL)("Keyboard AUX emulation enabled");
+		if (machine == MCH_PCJR) {
+			keyb.enable_aux = false;
+		}
+		else {
+			LOG(LOG_KEYBOARD,LOG_NORMAL)("Keyboard AUX emulation enabled");
+		}
 	}
 
 	TIMER_DelTickHandler(&KEYBOARD_TickHandler);
@@ -2254,7 +2261,7 @@ void KEYBOARD_OnReset(Section *sec) {
 
 	const char * sbtype=section->Get_string("auxdevice");
 	keyb.ps2mouse.type = MOUSE_NONE;
-	if (sbtype != NULL) {
+	if (sbtype != NULL && machine != MCH_PCJR && enable_slave_pic) {
 		if (!strcasecmp(sbtype,"2button"))
 			keyb.ps2mouse.type=MOUSE_2BUTTON;
 		else if (!strcasecmp(sbtype,"3button"))
