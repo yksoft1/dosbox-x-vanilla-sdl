@@ -109,6 +109,7 @@ struct button_event {
 	Bit8u buttons;
 };
 
+extern bool enable_slave_pic;
 extern uint8_t p7fd8_8255_mouse_int_enable;
 
 uint8_t MOUSE_IRQ = 12; // IBM PC/AT default
@@ -199,12 +200,18 @@ static struct {
 bool Mouse_SetPS2State(bool use) {
 	if (use && (!ps2callbackinit)) {
 		useps2callback = false;
-		PIC_SetIRQMask(MOUSE_IRQ,true);
+		
+		if (MOUSE_IRQ != 0)
+             PIC_SetIRQMask(MOUSE_IRQ,true);
+
 		return false;
 	}
 	useps2callback = use;
 	Mouse_AutoLock(useps2callback);
-	PIC_SetIRQMask(MOUSE_IRQ,!useps2callback);
+
+	if (MOUSE_IRQ != 0)
+		PIC_SetIRQMask(MOUSE_IRQ,!useps2callback);
+		 
 	return true;
 }
 
@@ -300,8 +307,10 @@ void MOUSE_Limit_Events(Bitu /*val*/) {
         if (IS_PC98_ARCH)
             p7fd8_8255_mouse_irq_signal = true;
 
-        if (!IS_PC98_ARCH || (IS_PC98_ARCH && p7fd8_8255_mouse_int_enable))
-		    PIC_ActivateIRQ(MOUSE_IRQ);
+		if (MOUSE_IRQ != 0) {
+			if (!IS_PC98_ARCH || (IS_PC98_ARCH && p7fd8_8255_mouse_int_enable))
+				PIC_ActivateIRQ(MOUSE_IRQ);
+		}
 	}
 }
 
@@ -327,8 +336,10 @@ INLINE void Mouse_AddEvent(Bit8u type) {
         if (IS_PC98_ARCH)
             p7fd8_8255_mouse_irq_signal = true;
 
-        if (!IS_PC98_ARCH || (IS_PC98_ARCH && p7fd8_8255_mouse_int_enable))
-            PIC_ActivateIRQ(MOUSE_IRQ);
+		if (MOUSE_IRQ != 0) {
+			if (!IS_PC98_ARCH || (IS_PC98_ARCH && p7fd8_8255_mouse_int_enable))
+				PIC_ActivateIRQ(MOUSE_IRQ);
+		}
     }
 }
 
@@ -820,7 +831,8 @@ static void Mouse_SetSensitivity(Bit16u px, Bit16u py, Bit16u dspeed){
 
 
 static void Mouse_ResetHardware(void){
-	PIC_SetIRQMask(MOUSE_IRQ,false);
+	if (MOUSE_IRQ != 0)
+		PIC_SetIRQMask(MOUSE_IRQ,false);
 
     if (IS_PC98_ARCH)
         p7fd8_8255_mouse_int_enable = 1;
@@ -1318,10 +1330,13 @@ bool MouseTypeNone();
 void MOUSE_OnReset(Section *sec) {
     if (IS_PC98_ARCH)
         MOUSE_IRQ = 13; // PC-98 standard
+    else if (!enable_slave_pic)
+		MOUSE_IRQ = 0;
     else
         MOUSE_IRQ = 12; // IBM PC/AT standard
 
-    PIC_SetIRQMask(MOUSE_IRQ,true);
+	if (MOUSE_IRQ != 0)
+		PIC_SetIRQMask(MOUSE_IRQ,true);
 }
 
 void MOUSE_ShutDown(Section *sec) {
@@ -1335,6 +1350,9 @@ void BIOS_PS2Mouse_Startup(Section *sec) {
 
 	/* NTS: This assumes MOUSE_Init() is called after KEYBOARD_Init() */
 	en_bios_ps2mouse = section->Get_bool("biosps2");
+	
+	if (!enable_slave_pic || machine == MCH_PCJR) return;
+	
 	if (!en_bios_ps2mouse) return;
 
 	if (MouseTypeNone()) {
@@ -1372,9 +1390,11 @@ void BIOS_PS2Mouse_Startup(Section *sec) {
 	//	pop ds
 	//	iret
 
-	Bit8u hwvec=(MOUSE_IRQ>7)?(0x70+MOUSE_IRQ-8):(0x8+MOUSE_IRQ);
-	RealSetVec(hwvec,CALLBACK_RealPointer(call_int74));
-
+	if (MOUSE_IRQ != 0) {
+		Bit8u hwvec=(MOUSE_IRQ>7)?(0x70+MOUSE_IRQ-8):(0x8+MOUSE_IRQ);
+		RealSetVec(hwvec,CALLBACK_RealPointer(call_int74));
+	}
+	
 	// Callback for ps2 user callback handling
 	useps2callback = false; ps2callbackinit = false;
  	call_ps2=CALLBACK_Allocate();
