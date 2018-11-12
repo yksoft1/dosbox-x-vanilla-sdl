@@ -298,6 +298,13 @@ void PC98_GDC_state::idle_proc(void) {
                 param_ram_wptr = current_command & 0xF;
                 current_command = GDC_CMD_PARAMETER_RAM_LOAD;
                 break;
+			case GDC_CMD_CURSOR_ADDRESS_READ:  // 0xE0       1 1 1 0 0 0 0 0
+                write_rfifo((unsigned char)( vga.config.cursor_start         & 0xFFu));
+                write_rfifo((unsigned char)((vga.config.cursor_start >>  8u) & 0xFFu));
+                write_rfifo((unsigned char)((vga.config.cursor_start >> 16u) & 0xFFu));
+                write_rfifo(0x00); // TODO
+                write_rfifo(0x00); // TODO
+				break;
             default:
                 LOG_MSG("GDC: Unknown command 0x%x",current_command);
                 break;
@@ -446,6 +453,14 @@ void PC98_GDC_state::flush_fifo_old(void) {
     }
 }
 
+bool PC98_GDC_state::write_rfifo(const uint16_t c) {
+    if (rfifo_write >= PC98_GDC_FIFO_SIZE)
+        return false;
+
+    rfifo[rfifo_write++] = c;
+    return true;
+}
+ 
 bool PC98_GDC_state::write_fifo(const uint16_t c) {
     if (fifo_write >= PC98_GDC_FIFO_SIZE)
         flush_fifo_old();
