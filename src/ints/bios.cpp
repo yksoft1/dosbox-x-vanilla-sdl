@@ -5836,9 +5836,23 @@ private:
             callback[5].Set_RealVec(0x1C,/*reinstall*/true);
 
             /* INT 1Dh *STUB* */
+            /* Place it in the PC-98 int vector area at FD80:0000 to satisfy some DOS games
+             * that detect PC-98 from the segment value of the vector (issue #927).
+             * Note that on real hardware (PC-9821) INT 1Dh appears to be a stub that IRETs immediately. */				
             callback[6].Install(&INT1D_PC98_Handler,CB_IRET,"Int 1D ???");
-            callback[6].Set_RealVec(0x1D,/*reinstall*/true);
+            //callback[6].Set_RealVec(0x1D,/*reinstall*/true);
+            {
+                Bitu ofs = 0xFD813; /* 0xFD80:0013 try not to look like a phony address */
+                unsigned int vec = 0x1D;
+                Bit32u target = callback[6].Get_RealPointer();
 
+                phys_writeb(ofs+0,0xEA);        // JMP FAR <callback>
+                phys_writed(ofs+1,target);
+
+                phys_writew((vec*4)+0,(ofs-0xFD800));
+                phys_writew((vec*4)+2,0xFD80);
+            }
+			
             /* INT 1Eh *STUB* */
             callback[7].Install(&INT1E_PC98_Handler,CB_IRET,"Int 1E ???");
             callback[7].Set_RealVec(0x1E,/*reinstall*/true);
@@ -7465,6 +7479,16 @@ void ROMBIOS_Init() {
 		}
 	}
 
+    /* PC-98 BIOS vectors appear to reside at segment 0xFD80. This is so common some games
+     * use it (through INT 1Dh) to detect whether they are running on PC-98 or not (issue #927).
+     *
+     * Note that INT 1Dh is one of the few BIOS interrupts not intercepted by PC-98 MS-DOS */
+    if (IS_PC98_ARCH) {
+        if (ROMBIOS_GetMemory(128,"PC-98 INT vector stub segment 0xFD80",1,0xFD800) == 0) {
+            LOG_MSG("WARNING: Was not able to mark off 0xFD800 off-limits for PC-98 int vector stubs");
+        }
+    }
+	 
 	/* install the font */
 	if (rom_bios_8x8_cga_font) {
 		for (i=0;i<128*8;i++) {
