@@ -478,9 +478,14 @@ void PIC_runIRQs(void) {
 		}
 	}
 
+    if (slave.auto_eoi)
+        slave.check_for_irq();
+    if (master.auto_eoi)
+        master.check_for_irq();
+		 
 	/* if we cleared all IRQs, then stop checking.
 	 * otherwise, keep the flag set for the next IRQ to process. */
-	if (i == max && (master.irr&master.imrr) == 0) {
+	if (i == max && (master.irr&master.imrr) == 0 && (slave.irr&slave.imrr) == 0) {
         PIC_IRQCheckPending = 0;
         PIC_IRQCheck = 0;
     }
