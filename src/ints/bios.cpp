@@ -2473,7 +2473,7 @@ static Bitu INT18_PC98_Handler(void) {
                  * TODO: Is this what real PC-98 BIOSes do? */
                 void check_keyboard_fire_IRQ1(void);
                 check_keyboard_fire_IRQ1();
-                PIC_SetIRQMask(1,false);		
+                IO_WriteB(0x02,IO_ReadB(0x02) & (~(1u << /*IRQ*/1u))); // unmask IRQ1		
 				
                 reg_ip += 1; /* step over IRET, to NOPs which then JMP back to callback */
             }
@@ -2494,7 +2494,7 @@ static Bitu INT18_PC98_Handler(void) {
                  * TODO: Is this what real PC-98 BIOSes do? */
                 void check_keyboard_fire_IRQ1(void);
                 check_keyboard_fire_IRQ1();
-                PIC_SetIRQMask(1,false);
+                IO_WriteB(0x02,IO_ReadB(0x02) & (~(1u << /*IRQ*/1u))); // unmask IRQ1
 				 
                 reg_bh = 0;
             }
@@ -2524,7 +2524,7 @@ static Bitu INT18_PC98_Handler(void) {
                  * TODO: Is this what real PC-98 BIOSes do? */
                 void check_keyboard_fire_IRQ1(void);
                 check_keyboard_fire_IRQ1();
-                PIC_SetIRQMask(1,false);			
+                IO_WriteB(0x02,IO_ReadB(0x02) & (~(1u << /*IRQ*/1u))); // unmask IRQ1			
 			
                 reg_bh = 0;
             }
