@@ -2465,6 +2465,16 @@ static Bitu INT18_PC98_Handler(void) {
                 reg_ax = temp16;
             }
             else {
+                /* Keyboard checks.
+                 * If the interrupt got masked, unmask it.
+                 * If the keyboard has data waiting, make sure the interrupt signal is active in case the last interrupt handler
+                 * handled the keyboard interrupt and never read the keyboard (Quarth).
+                 *
+                 * TODO: Is this what real PC-98 BIOSes do? */
+                void check_keyboard_fire_IRQ1(void);
+                check_keyboard_fire_IRQ1();
+                PIC_SetIRQMask(1,false);		
+				
                 reg_ip += 1; /* step over IRET, to NOPs which then JMP back to callback */
             }
             break;
@@ -2476,6 +2486,16 @@ static Bitu INT18_PC98_Handler(void) {
                 reg_bh = 1;
             }
             else {
+                /* Keyboard checks.
+                 * If the interrupt got masked, unmask it.
+                 * If the keyboard has data waiting, make sure the interrupt signal is active in case the last interrupt handler
+                 * handled the keyboard interrupt and never read the keyboard (Quarth).
+                 *
+                 * TODO: Is this what real PC-98 BIOSes do? */
+                void check_keyboard_fire_IRQ1(void);
+                check_keyboard_fire_IRQ1();
+                PIC_SetIRQMask(1,false);
+				 
                 reg_bh = 0;
             }
             break;
@@ -2496,6 +2516,16 @@ static Bitu INT18_PC98_Handler(void) {
                 reg_bh = 1;
             }
             else {
+                /* Keyboard checks.
+                 * If the interrupt got masked, unmask it.
+                 * If the keyboard has data waiting, make sure the interrupt signal is active in case the last interrupt handler
+                 * handled the keyboard interrupt and never read the keyboard (Quarth).
+                 *
+                 * TODO: Is this what real PC-98 BIOSes do? */
+                void check_keyboard_fire_IRQ1(void);
+                check_keyboard_fire_IRQ1();
+                PIC_SetIRQMask(1,false);			
+			
                 reg_bh = 0;
             }
             break;
@@ -3031,6 +3061,37 @@ void PC98_BIOS_FDC_CALL_GEO_UNPACK(unsigned int &fdc_cyl,unsigned int &fdc_head,
  *      by 3 in the code. */
 void PC98_Interval_Timer_Continue(void);
 
+void FDC_WAIT_TIMER_HACK(void) {
+    unsigned int v;
+
+    // Explanation:
+    //
+    // Originally the FDC code here changed the timer interval back to the stock 100hz
+    // normally used in PC-98, to fix Ys II. However that seems to break other booter
+    // games that hook IRQ 0 directly and set the timer ONCE, then access the disk.
+    //
+    // For example, "Angelus" ran WAY too slow with the timer hack because it programs
+    // the timer to a 600hz interval and expects it to stay that way.
+    //
+    // So the new method to satisfy both games is to loop here until the timer
+    // count is below the maximum that would occur if the 100hz tick count were
+    // still in effect, even if the timer interval was reprogrammed.
+    //
+    // NTS: Writing port 0x77 to relatch the timer also seems to break games
+    //
+    // TODO: As a safety against getting stuck, perhaps PIC_FullIndex() should be used
+    //       to break out of the loop if this runs for more than 1 second, since that
+    //       is a sign the timer is in an odd state that will never terminate this loop.
+
+    do {
+        void CALLBACK_Idle(void);
+        CALLBACK_Idle();
+
+        v  = IO_ReadB(0x71);
+        v |= IO_ReadB(0x71) << 8;
+    } while (v >= 0x60);
+}
+ 
 void PC98_BIOS_FDC_CALL(unsigned int flags) {
     static unsigned int fdc_cyl[2]={0,0},fdc_head[2]={0,0},fdc_sect[2]={0,0},fdc_sz[2]={0,0}; // FIXME: Rename and move out. Making "static" is a hack here.
     Bit32u img_heads=0,img_cyl=0,img_sect=0,img_ssz=0;
@@ -3077,8 +3138,8 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 				return;
 			}
 
-			/* fake like we use the timer */
-			PC98_Interval_Timer_Continue();
+            // Hack for Ys II
+            FDC_WAIT_TIMER_HACK();
 			
 			fdc_cyl[drive] = reg_cl;
 
@@ -3101,6 +3162,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 			}
 			floppy->Get_Geometry(&img_heads, &img_cyl, &img_sect, &img_ssz);
 
+            // Hack for Ys II
+            FDC_WAIT_TIMER_HACK();
+			 
 			/* Prevent reading 1.44MB floppyies using 1.2MB read commands and vice versa.
 			 * FIXME: It seems MS-DOS 5.0 booted from a HDI image has trouble understanding
 			 * when Drive A: (the first floppy) is a 1.44MB drive or not and fails
@@ -3130,9 +3194,6 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 				/* TODO? Error code? */
 				return;
 			}
-			
-			/* fake like we use the timer */
-			PC98_Interval_Timer_Continue();			
 
 			size = reg_bx;
 			while (size > 0) {
@@ -3178,6 +3239,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
             }
 	        floppy->Get_Geometry(&img_heads, &img_cyl, &img_sect, &img_ssz);
 
+			// Hack for Ys II
+            FDC_WAIT_TIMER_HACK();
+			 
             /* Prevent reading 1.44MB floppyies using 1.2MB read commands and vice versa.
              * FIXME: It seems MS-DOS 5.0 booted from a HDI image has trouble understanding
              *        when Drive A: (the first floppy) is a 1.44MB drive or not and fails
@@ -3207,9 +3271,6 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
                 /* TODO? Error code? */
                 return;
             }
-
-			/* fake like we use the timer */
-			PC98_Interval_Timer_Continue();
 
             size = reg_bx;
             memaddr = (SegValue(es) << 4U) + reg_bp;
@@ -3293,6 +3354,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
             }
 	        floppy->Get_Geometry(&img_heads, &img_cyl, &img_sect, &img_ssz);
 
+            // Hack for Ys II
+            FDC_WAIT_TIMER_HACK();
+			 
             /* TODO: Error if write protected */
 
             PC98_BIOS_FDC_CALL_GEO_UNPACK(/*&*/fdc_cyl[drive],/*&*/fdc_head[drive],/*&*/fdc_sect[drive],/*&*/fdc_sz[drive]);
@@ -3304,9 +3368,6 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
                 return;
             }
 
-			/* fake like we use the timer */
-			PC98_Interval_Timer_Continue();
-			
             size = reg_bx;
             memaddr = (SegValue(es) << 4U) + reg_bp;
             while (size > 0) {
@@ -3346,7 +3407,10 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
                 /* TODO? Error code? */
                 return;
             }
-
+			
+            // Hack for Ys II
+            FDC_WAIT_TIMER_HACK();
+			
             reg_ah = 0x00;
             CALLBACK_SCF(false);
             break;
@@ -3361,8 +3425,8 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 			PC98_BIOS_FDC_CALL_GEO_UNPACK(/*&*/fdc_cyl[drive],/*&*/fdc_head[drive],/*&*/fdc_sect[drive],/*&*/fdc_sz[drive]);
 			unitsize = PC98_FDC_SZ_TO_BYTES(fdc_sz[drive]);
 
-			/* fake like we use the timer */
-			PC98_Interval_Timer_Continue();
+            // Hack for Ys II
+            FDC_WAIT_TIMER_HACK();
 
 			LOG_MSG("WARNING: INT 1Bh FDC format track command not implemented. Formatting is faked, for now on C/H/S/sz %u/%u/%u/%u drive %c.",
 				(unsigned int)fdc_cyl[drive],
@@ -3386,6 +3450,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 
 	        floppy->Get_Geometry(&img_heads, &img_cyl, &img_sect, &img_ssz);
 
+			// Hack for Ys II
+            FDC_WAIT_TIMER_HACK();
+			 
             if (reg_ah & 0x10) { // seek to track number in CL
                 if (img_cyl != 0 && reg_cl >= img_cyl) {
                     CALLBACK_SCF(true);
@@ -3424,9 +3491,6 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 					fdc_sect[drive] = 1;
 			}
 
-			/* fake like we use the timer */
-			PC98_Interval_Timer_Continue();
-			
             reg_ah = 0x00;
             CALLBACK_SCF(false);
             break;
@@ -3691,11 +3755,11 @@ static Bitu INTDC_PC98_Handler(void) {
 
 	switch (reg_cl) {
 		case 0x10:
-			if (reg_ah == 0x00) { /* CL=0x10 AL=0x00 DL=char write char to CON */
+			if (reg_ah == 0x00) { /* CL=0x10 AH=0x00 DL=char write char to CON */
 				PC98_INTDC_WriteChar(reg_dl);
 			goto done;
 			}
-			else if (reg_ah == 0x01) { /* CL=0x10 AL=0x01 DS:DX write string to CON */
+			else if (reg_ah == 0x01) { /* CL=0x10 AH=0x01 DS:DX write string to CON */
 				/* According to the example at http://tepe.tec.fukuoka-u.ac.jp/HP98/studfile/grth/gt10.pdf
 				 * the string ends in '$' just like the main DOS string output function. */
 				Bit16u ofs = reg_dx;
@@ -3706,6 +3770,13 @@ static Bitu INTDC_PC98_Handler(void) {
 				} while (1);
 				goto done;
 			}
+            else if (reg_ah == 0x02) { /* CL=0x10 AH=0x02 DL=attribute set console output attribute */
+                /* Ref: https://nas.jmc/jmcs/docs/browse/Computer/Platform/PC%2c%20NEC%20PC%2d98/Collections/Undocumented%209801%2c%209821%20Volume%202%20%28webtech.co.jp%29%20English%20translation/memdos%2eenglish%2dgoogle%2dtranslate%2etxt
+                 *
+                 * DL is the attribute byte (in the format written directly to video RAM, not the ANSI code) */
+                mem_writeb(0x71D,reg_dl);   /* 60:11D */
+                goto done;
+            }		
 			goto unknown;
 		default: /* some compilers don't like not having a default case */
 			goto unknown;
@@ -5883,7 +5954,7 @@ private:
             real_writed(0,0x0e*4,CALLBACK_RealPointer(call_default2));	//design your own railroad
 
         if (IS_PC98_ARCH) {
-            real_writew(0,0x58A,0xFFFFU); // countdown timer value
+            real_writew(0,0x58A,0x0001U); // countdown timer value
 	        PIC_SetIRQMask(0,true); /* PC-98 keeps the timer off unless INT 1Ch is called to set a timer interval */
         }
 
@@ -6378,6 +6449,7 @@ private:
 			/* initialize IRQ0 timer to default tick interval.
 			 * PC-98 does not pre-initialize timer 0 of the PIT to 0xFFFF the way IBM PC/XT/AT do */
 			PC98_Interval_Timer_Continue();
+			PIC_SetIRQMask(0,true); /* PC-98 keeps the timer off unless INT 1Ch is called to set a timer interval */
 		}
 
         CPU_STI();
