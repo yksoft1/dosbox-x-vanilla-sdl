@@ -52,9 +52,9 @@
 #include <unistd.h>
 #ifdef EMSCRIPTEN
 #include <emscripten.h>
-#if defined(C_SDL2)
+//#if defined(C_SDL2)
 # define SDL_TICKS_PASSED(A, B)  ((Sint32)((B) - (A)) <= 0)
-#endif
+//#endif
 #endif
 #include "dosbox.h"
 #include "debug.h"

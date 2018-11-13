@@ -8095,6 +8095,9 @@ int main(int argc, char* argv[]) {
         SetMapperKeyboardLayout(host_keyboard_layout);
 
 		/* -- -- Initialise Joystick seperately. This way we can warn when it fails instead of exiting the application */
+#if defined(EMSCRIPTEN) && !defined (C_SDL2)
+		sdl.num_joysticks = 0;
+#else
 		LOG(LOG_MISC,LOG_DEBUG)("Initializing SDL joystick subsystem...");
 		if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) >= 0) {
 			sdl.num_joysticks = SDL_NumJoysticks();
@@ -8104,7 +8107,8 @@ int main(int argc, char* argv[]) {
 			LOG(LOG_GUI,LOG_WARN)("Failed to init joystick support");
 			sdl.num_joysticks = 0;
 		}
-
+#endif
+		
         /* must redraw after modeset */
         sdl.must_redraw_all = true;
         sdl.deferred_resize = false;
