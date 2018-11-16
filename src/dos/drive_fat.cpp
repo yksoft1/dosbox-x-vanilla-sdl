@@ -669,7 +669,7 @@ struct _PC98RawPartition {
 };
 #pragma pack(pop)
 
-fatDrive::fatDrive(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders) : loadedDisk(NULL) {
+fatDrive::fatDrive(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders, std::vector<std::string> &options) : loadedDisk(NULL) {
 	created_successfully = true;
 	FILE *diskfile;
 	Bit32u filesize;
@@ -733,10 +733,10 @@ fatDrive::fatDrive(const char *sysFilename, Bit32u bytesector, Bit32u cylsector,
         }
 	}
 
-    fatDriveInit(sysFilename, bytesector, cylsector, headscyl, cylinders, filesize);
+    fatDriveInit(sysFilename, bytesector, cylsector, headscyl, cylinders, filesize, options);
 }
 
-fatDrive::fatDrive(imageDisk *sourceLoadedDisk) : loadedDisk(NULL) {
+fatDrive::fatDrive(imageDisk *sourceLoadedDisk, std::vector<std::string> &options) : loadedDisk(NULL) {
 	if (sourceLoadedDisk == 0) {
 		created_successfully = false;
 		return;
@@ -804,7 +804,7 @@ Bit32u fatDrive::getSectSize(void) {
     return sector_size;
 }
 
-void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders, Bit64u filesize) {
+void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders, Bit64u filesize, std::vector<std::string> &options) {
 	Bit32u startSector;
 	bool pc98_512_to_1024_allow = false;
 	struct partTable mbrData;
@@ -814,6 +814,24 @@ void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u c
 		return;
 	}
 
+    //for (const auto &opt : options) {
+	for (std::vector<std::string>::iterator i=options.begin();i!=options.end();i++)
+		std::string opt = *i;
+        size_t equ = opt.find_first_of('=');
+        std::string name,value;
+
+        if (equ != std::string::npos) {
+            name = opt.substr(0,equ);
+            value = opt.substr(equ+1);
+        }
+        else {
+            name = opt;
+            value.clear();
+        }
+
+//        LOG_MSG("'%s' = '%s'",name.c_str(),value.c_str());
+    }
+	 
 	loadedDisk->Addref();
 
     if (loadedDisk->getSectSize() > sizeof(bootbuffer)) {
