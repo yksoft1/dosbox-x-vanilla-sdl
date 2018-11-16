@@ -751,7 +751,7 @@ fatDrive::fatDrive(imageDisk *sourceLoadedDisk, std::vector<std::string> &option
 
     loadedDisk = sourceLoadedDisk;
 
-    fatDriveInit("", loadedDisk->sector_size, loadedDisk->sectors, loadedDisk->heads, loadedDisk->cylinders, loadedDisk->diskSizeK);
+    fatDriveInit("", loadedDisk->sector_size, loadedDisk->sectors, loadedDisk->heads, loadedDisk->cylinders, loadedDisk->diskSizeK, options);
 }
 
 Bit8u fatDrive::Read_AbsoluteSector(Bit32u sectnum, void * data) {
@@ -816,7 +816,7 @@ void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u c
 	}
 
     //for (const auto &opt : options) {
-	for (std::vector<std::string>::iterator i=options.begin();i!=options.end();i++)
+	for (std::vector<std::string>::iterator i=options.begin();i!=options.end();i++) {
 		std::string opt = *i;
         size_t equ = opt.find_first_of('=');
         std::string name,value;
