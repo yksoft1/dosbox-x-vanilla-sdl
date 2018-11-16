@@ -961,6 +961,7 @@ void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u c
         }
         else {
             /* IBM PC master boot record search */
+			int m;
             if (opt_partition_index >= 0) {
                 /* user knows best! */
                 if (opt_partition_index >= 4) {
