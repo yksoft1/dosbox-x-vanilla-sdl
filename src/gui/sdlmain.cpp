@@ -7775,6 +7775,7 @@ void OutputSettingMenuUpdate(void) {
 }
 
 bool custom_bios = false;
+char* exe_path;
 
 //extern void UI_Init(void);
 int main(int argc, char* argv[]) {
@@ -7798,6 +7799,8 @@ int main(int argc, char* argv[]) {
     ImmDisableIME((DWORD)(-1));
 #endif
 
+	exe_path=argv[0];
+	
 #if defined(MACOSX)
     /* The resource system of DOSBox-X relies on being able to locate the Resources subdirectory
        within the DOSBox-X .app bundle. To do this, we have to first know where our own executable

@@ -438,9 +438,9 @@ BRESULT pcmmix_regfile(PMIXDAT *dat, const OEMCHAR *fname, UINT rate) {
 	BRESULT	r;
 
 	r = FAILURE;
-	fh = file_open(fname);
+	fh = file_open_rb(fname);
 	if (fh == FILEH_INVALID) {
-		_TRACEOUT("file_open %s error", fname);
+		_TRACEOUT("file_open_rb %s error", fname);
 		goto pmrf_err1;
 	}
 	size = file_getsize(fh);

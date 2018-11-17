@@ -59,9 +59,21 @@ extern "C" void _TRACEOUT(const char *fmt,...) {
     va_end(va);
 }
 
+extern char* exe_path;
 void getbiospath(OEMCHAR *path, const OEMCHAR *fname, int maxlen) {
-    LOG_MSG("PC98FM getbiospath fname='%s'",fname);
-    snprintf(path,maxlen,"%s",fname);
+#ifdef WIN32
+	char separator='\\';
+	char exe_directory[CROSS_LEN];
+	GetModuleFileName(NULL, exe_directory, CROSS_LEN);
+#else
+	char separator='/';
+	char exe_directory[CROSS_LEN];
+	safe_strncpy(exe_directory, exe_path ,CROSS_LEN);
+#endif
+	*(strrchr(exe_directory, separator)+1)='\0'; //NTS: Beware of "XuGongGai" on Windows and Codepage 950/932!
+	
+	snprintf(path,maxlen,"%s%s",exe_directory,fname);
+    LOG_MSG("PC98FM getbiospath fname='%s' path='%s'",fname, path);
 }
 
 enum {
