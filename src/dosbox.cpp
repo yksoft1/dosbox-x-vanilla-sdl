@@ -1205,6 +1205,9 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool->Set_help("If set, PC-98 emulation will allow the DOS application to enable the 'scanline effect'\n"
                     "in 200-line graphics modes upconverted to 400-line raster display. When enabled, odd\n"
                     "numbered scanlines are blanked instead of doubled");
+					
+    Pbool = secprop->Add_bool("pc-98 bus mouse",Property::Changeable::WhenIdle,true);
+    Pbool->Set_help("Enable PC-98 bus mouse emulation. Disabling this option does not disable INT 33h emulation.");
 
 	Pstring = secprop->Add_string("pc-98 video mode",Property::Changeable::WhenIdle,"");
 	Pstring->Set_values(pc98videomodeopt);
