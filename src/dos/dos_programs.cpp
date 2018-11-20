@@ -795,6 +795,9 @@ public:
         bool swaponedrive = false;
 		bool force = false;
 		
+		//Hack To allow long commandlines
+		ChangeToLongCmd();
+		
         boot_debug_break = false;
         if (cmd->FindExist("-debug",true))
             boot_debug_break = true;
@@ -808,8 +811,6 @@ public:
 		if (cmd->FindString("-bios",bios,true))
 			bios_boot = true;
 
-		//Hack To allow long commandlines
-		ChangeToLongCmd();
 		/* In secure mode don't allow people to boot stuff. 
 		 * They might try to corrupt the data on it */
 		if(control->SecureMode()) {
