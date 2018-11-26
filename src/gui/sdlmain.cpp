@@ -3722,6 +3722,20 @@ static void GUI_StartUp() {
     LOG(LOG_GUI,LOG_DEBUG)("This version compiled against SDL 1.x");
 #endif
 
+#if defined(C_SDL2)
+    /* while we're here, SDL 2.0.5 has some issues with Linux/X11, encourage the user to update SDL2. */
+    {
+        SDL_version v;
+        SDL_GetVersion(&v);
+        LOG(LOG_GUI,LOG_DEBUG)("SDL2 version %u.%u.%u",v.major,v.minor,v.patch);
+# if defined(LINUX)
+        /* Linux/X11 2.0.5 has window positioning issues i.e. with XFCE */
+        if (v.major == 2 && v.minor == 0 && v.patch == 5)
+            LOG_MSG("WARNING: Your SDL2 library is known to have some issues with Linux/X11, please update your SDL2 library");
+# endif
+    }
+#endif
+
 	AddExitFunction(AddExitFunctionFuncPair(GUI_ShutDown));
 	GUI_LoadFonts();
 
@@ -4621,15 +4635,9 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 								touchscreen_touch_lock = event.tfinger.touchId;
 								Sint32 x,y;
 
-#if defined(WIN32)
 								/* NTS: Windows versions of SDL2 do normalize the coordinates */
 								x = (Sint32)(event.tfinger.x * sdl.clip.w);
 								y = (Sint32)(event.tfinger.y * sdl.clip.h);
-#else
-								/* NTS: Linux versions of SDL2 don't normalize the coordinates? */
-								x = event.tfinger.x; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-								y = event.tfinger.y; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-#endif
 
 								memset(&event.button,0,sizeof(event.button));
 								event.type = SDL_MOUSEBUTTONDOWN;
