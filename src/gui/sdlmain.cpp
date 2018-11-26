@@ -1868,14 +1868,8 @@ dosurface:
 			) {
 				sdl.clip.x=(Sint16)((sdl.desktop.full.width-width)/2);
 				sdl.clip.y=(Sint16)((sdl.desktop.full.height-height)/2);
-				if (sdl.clip.x < 0) sdl.clip.x = 0;
-				if (sdl.clip.y < 0) sdl.clip.y = 0;
-				
-				int fw = std::max((int)sdl.desktop.full.width,  (sdl.clip.x+sdl.clip.w));
-				int fh = std::max((int)sdl.desktop.full.height, (sdl.clip.y+sdl.clip.h));
-				
-				sdl.surface = SDL_SetVideoMode(fw, fh, bpp, wflags);
-			 
+				sdl.surface=SDL_SetVideoMode(sdl.desktop.full.width,
+					sdl.desktop.full.height, bpp, wflags);
                 sdl.deferred_resize = false;
                 sdl.must_redraw_all = true;
             } else {
@@ -6316,19 +6310,6 @@ static BOOL WINAPI ConsoleEventHandler(DWORD event) {
 
 void Null_Init(Section *sec);
 
-void SDL_OnSectionPropChange(Section *x) {
-    (void)x;//UNUSED
-    Section_prop * section = static_cast<Section_prop *>(control->GetSection("sdl"));
-     {
-        bool cfg_want_menu = section->Get_bool("showmenu");
-         /* -- -- decide whether to set menu */
-        if (menu_gui && !control->opt_nomenu && cfg_want_menu)
-            DOSBox_SetMenu();
-        else
-            DOSBox_NoMenu();
-    }
-}
-
 void SDL_SetupConfigSection() {
 	Section_prop * sdl_sec=control->AddSection_prop("sdl",&Null_Init);
 
@@ -7771,6 +7752,7 @@ void AspectRatio_mapper_shortcut(bool pressed) {
 
 	if (!GFX_GetPreventFullscreen()) {
 		SetVal("render", "aspect", render.aspect ? "false" : "true");
+		mainMenu.get_item("mapper_aspratio").check(render.aspect).refresh_item(mainMenu);
 	}
 }
 
@@ -8085,12 +8067,6 @@ int main(int argc, char* argv[]) {
 
 		/* -- -- other steps to prepare SDL window/output */
 		SDL_Prepare();
-        
-		/* -- NOW it is safe to send change events to SDL */
-        {
-            Section_prop *sdl_sec = static_cast<Section_prop*>(control->GetSection("sdl"));
-            sdl_sec->onpropchange.push_back(&SDL_OnSectionPropChange);
-        }
 
         /* -- -- Keyboard layout detection and setup */
         KeyboardLayoutDetect();
@@ -8382,6 +8358,18 @@ int main(int argc, char* argv[]) {
 #endif
 			}
 		}
+		
+		/* more */
+		{
+			DOSBoxMenu::item *item;
+
+			MAPPER_AddHandler(&SetCyclesCount_mapper_shortcut, MK_nothing, 0, "editcycles", "EditCycles", &item);
+			item->set_text("Edit cycles");
+
+			MAPPER_AddHandler(&HideMenu_mapper_shortcut, MK_escape, MMODHOST, "togmenu", "TogMenu", &item);
+			item->set_text("Hide/show menu bar");
+			item->check(!menu.toggle);
+		}
 
 #if (HAVE_D3D9_H) && defined(WIN32)
 		D3D_reconfigure();
@@ -8411,26 +8399,16 @@ int main(int argc, char* argv[]) {
         if (host_keyboard_layout == DKM_JPN && IS_PC98_ARCH)
             SetMapperKeyboardLayout(DKM_JPN_PC98);
 
-		/* more */
-		{
-			DOSBoxMenu::item *item;
+		RENDER_Init();
 
-			MAPPER_AddHandler(&SetCyclesCount_mapper_shortcut, MK_nothing, 0, "editcycles", "EditCycles", &item);
-			item->set_text("Edit cycles");
-
-			MAPPER_AddHandler(&HideMenu_mapper_shortcut, MK_escape, MMODHOST, "togmenu", "TogMenu", &item);
-			item->set_text("Hide/show menu bar");
-			item->check(!menu.toggle);
-		}
-		
-        {
+        { /* Depends on RENDER_Init */
 			DOSBoxMenu::item *item;
 
 			MAPPER_AddHandler(&AspectRatio_mapper_shortcut, MK_nothing, 0, "aspratio", "AspRatio", &item);
 			item->set_text("Fit to aspect ratio");
+			item->check(render.aspect);
         }
 
-		RENDER_Init();
 		CAPTURE_Init();
 		IO_Init();
 		HARDWARE_Init();

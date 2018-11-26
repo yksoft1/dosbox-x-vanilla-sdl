@@ -722,8 +722,6 @@ bool RENDER_GetAspect(void) {
 	return render.aspect;
 }
 
-void RENDER_UpdateFromScalerSetting(void);
-
 void RENDER_SetForceUpdate(bool f) {
 	render.forceUpdate = f;
 }
@@ -739,7 +737,6 @@ void RENDER_UpdateFrameskipMenu(void) {
 }
 
 void VGA_SetupDrawing(Bitu /*val*/);
-void RENDER_UpdateScalerMenu(void);
 
 void RENDER_OnSectionPropChange(Section *x) {
 	Section_prop * section = static_cast<Section_prop *>(control->GetSection("render"));
@@ -761,11 +758,8 @@ void RENDER_OnSectionPropChange(Section *x) {
 		
 	mainMenu.get_item("vga_9widetext").check(vga.draw.char9_set).refresh_item(mainMenu);
 	mainMenu.get_item("doublescan").check(vga.draw.doublescan_set).refresh_item(mainMenu);
-	mainMenu.get_item("mapper_aspratio").check(render.aspect).refresh_item(mainMenu);
 	
 	RENDER_UpdateFrameskipMenu();
-    RENDER_UpdateFromScalerSetting();
-    RENDER_UpdateScalerMenu();	
 }
 
 std::string RENDER_GetScaler(void) {
@@ -779,7 +773,6 @@ extern const char *scaler_menu_opts[][2];
 void RENDER_UpdateScalerMenu(void) {
 	const std::string scaler = RENDER_GetScaler();
 
-	mainMenu.get_item("scaler_forced").check(render.scale.forced);
 	for (size_t i=0;scaler_menu_opts[i][0] != NULL;i++) {
 		const std::string name = std::string("scaler_set_") + scaler_menu_opts[i][0];
 		mainMenu.get_item(name).check(scaler == scaler_menu_opts[i][0]).refresh_item(mainMenu);
@@ -792,11 +785,6 @@ void RENDER_UpdateFromScalerSetting(void) {
 	std::string f = prop->GetSection()->Get_string("force");
 	std::string scaler = prop->GetSection()->Get_string("type");
 
-	bool p_forced = render.scale.forced;
-    unsigned int p_size = render.scale.size;
-    bool p_hardware = render.scale.hardware;
-    unsigned int p_op = render.scale.op;
-	
 	render.scale.forced = false;
 	if(f == "forced") render.scale.forced = true;
 
@@ -829,14 +817,6 @@ void RENDER_UpdateFromScalerSetting(void) {
 	else if (scaler == "hardware3x") { render.scale.op = scalerOpNormal; render.scale.size = 6; render.scale.hardware=true; }
 	else if (scaler == "hardware4x") { render.scale.op = scalerOpNormal; render.scale.size = 8; render.scale.hardware=true; }
 	else if (scaler == "hardware5x") { render.scale.op = scalerOpNormal; render.scale.size = 10; render.scale.hardware=true; }
-
-	bool reset = false;
-	if (p_forced != render.scale.forced) reset = true;
-    if (p_size != render.scale.size) reset = true;
-    if (p_hardware != render.scale.hardware) reset = true;
-    if (p_op != render.scale.op) reset = true;
-
-    if (reset) RENDER_CallBack(GFX_CallBackReset);
 }
 
 void RENDER_Init() {
@@ -849,6 +829,9 @@ void RENDER_Init() {
 	vga.draw.doublescan_set=section->Get_bool("doublescan");
 	vga.draw.char9_set=section->Get_bool("char9");
 
+	mainMenu.get_item("vga_9widetext").check(vga.draw.char9_set).refresh_item(mainMenu);
+	mainMenu.get_item("doublescan").check(vga.draw.doublescan_set).refresh_item(mainMenu);
+	
 	//For restarting the renderer.
 	static bool running = false;
 	bool aspect = render.aspect;
@@ -863,10 +846,6 @@ void RENDER_Init() {
 	render.pal.last=255;
 	render.aspect=section->Get_bool("aspect");
 	render.frameskip.max=section->Get_int("frameskip");
-
-    mainMenu.get_item("vga_9widetext").check(vga.draw.char9_set).refresh_item(mainMenu);
-    mainMenu.get_item("doublescan").check(vga.draw.doublescan_set).refresh_item(mainMenu);
-    mainMenu.get_item("mapper_aspratio").check(render.aspect).refresh_item(mainMenu);
 	
 	RENDER_UpdateFrameskipMenu();
 
