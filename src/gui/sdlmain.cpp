@@ -1639,6 +1639,9 @@ void DOSBoxMenu::item::drawMenuItem(DOSBoxMenu &menu) {
         /* separators never change visual state on hover/select */
     }
     else if (!status.enabled) {
+        if (itemHover)
+             bgcolor = GFX_GetRGB(79, 79, 79);
+			 
         fgcolor = GFX_GetRGB(144, 144, 144);
         fgshortcolor = GFX_GetRGB(63, 63, 144);
         fgcheckcolor = GFX_GetRGB(144, 144, 63);
@@ -1871,8 +1874,8 @@ dosurface:
 				if (sdl.clip.x < 0) sdl.clip.x = 0;
 				if (sdl.clip.y < 0) sdl.clip.y = 0;
 				
-				int fw = std::max((int)sdl.desktop.full.width,  (sdl.clip.x+sdl.clip.w));
-				int fh = std::max((int)sdl.desktop.full.height, (sdl.clip.y+sdl.clip.h));
+				int fw = (std::max)((int)sdl.desktop.full.width,  (sdl.clip.x+sdl.clip.w));
+				int fh = (std::max)((int)sdl.desktop.full.height, (sdl.clip.y+sdl.clip.h));
 				
 				sdl.surface = SDL_SetVideoMode(fw, fh, bpp, wflags);
 			 
