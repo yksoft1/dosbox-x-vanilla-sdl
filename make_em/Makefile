@@ -16,9 +16,9 @@ WASM=1
 #Set maximum RAM that Emscripten use (in bytes).
 EMSCRIPTEN_TOTAL_MEMORY=83886080
 
-SDL_CONFIG ?= $(EMSCRIPTEN_ROOT)/system/bin/sdl2-config 
-SDL_CFLAGS := $(shell $(SDL_CONFIG) --cflags) 
-SDL_LIBS := $(shell $(SDL_CONFIG) --libs)
+#SDL_CONFIG ?= $(EMSCRIPTEN_ROOT)/system/bin/sdl2-config 
+SDL_CFLAGS := -s USE_SDL=2
+SDL_LIBS := -s USE_SDL=2
 
 DBX_PATH	= ..
 
