@@ -392,9 +392,10 @@ enum PRIORITY_LEVELS {
 
 #if !defined(C_SDL2)
 void                        GUI_ResetResize(bool);
+#endif
 void						GUI_LoadFonts();
 void						GUI_Run(bool);
-#endif
+
 void						Restart(bool pressed);
 bool						RENDER_GetAspect(void);
 bool						RENDER_GetAutofit(void);
@@ -866,6 +867,10 @@ void PauseDOSBox(bool pressed) {
 }
 
 #if defined(C_SDL2)
+SDL_Window* GFX_GetSDLWindow(void) {
+    return sdl.window;
+}
+ 
 static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYPES screenType) {
     static SCREEN_TYPES lastType = SCREEN_SURFACE;
     if (sdl.renderer) {
@@ -3709,9 +3714,7 @@ static void GUI_StartUp() {
 #endif
 
 	AddExitFunction(AddExitFunctionFuncPair(GUI_ShutDown));
-#if !defined(C_SDL2)
 	GUI_LoadFonts();
-#endif
 
 	sdl.active=false;
 	sdl.updating=false;
@@ -3965,10 +3968,10 @@ static void GUI_StartUp() {
 #else
 	MAPPER_AddHandler(&PauseDOSBox, MK_pause, MMOD2, "pause", "Pause");
 #endif
-#if !defined(C_SDL2)
 	MAPPER_AddHandler(&GUI_Run, MK_nothing, 0, "gui", "ShowGUI", &item);
 	item->set_text("Configuration GUI");
 
+#if !defined(C_SDL2)
 	MAPPER_AddHandler(&GUI_ResetResize, MK_nothing, 0, "resetsize", "ResetSize", &item);
 	item->set_text("Reset window size");
 #endif
@@ -8168,10 +8171,11 @@ int main(int argc, char* argv[]) {
 # if defined(WIN32)
 		Reflect_Menu();
 # endif
+#endif
 
 		if (control->opt_startui)
 			GUI_Run(false);
-#endif
+
 		if (control->opt_editconf.length() != 0)
 			launcheditor(control->opt_editconf);
 		if (control->opt_opencaptures.length() != 0)
