@@ -771,16 +771,13 @@ bool DOSBox_Paused()
 bool pause_on_vsync = false;
 
 #if defined(C_SDL2)
-bool GFX_IsFullscreen() {
+static bool IsFullscreen() {
 	if (sdl.window == NULL) return false;
     uint32_t windowFlags = SDL_GetWindowFlags(sdl.window);
     if (windowFlags & SDL_WINDOW_FULLSCREEN_DESKTOP) return true;
     return false;
 }
 
-static bool IsFullscreen() {
-    return GFX_IsFullscreen();
-}
 #endif
 
 void PauseDOSBox(bool pressed) {
@@ -899,6 +896,10 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
         if (!sdl.update_window) {
             SDL_GetWindowSize(sdl.window, &currWidth, &currHeight);
             sdl.update_display_contents = ((width == currWidth) && (height == currHeight));
+
+            currentWindowWidth = currWidth;
+            currentWindowHeight = currHeight;
+
             return sdl.window;
         }
     }
@@ -928,6 +929,10 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
         }
         SDL_GetWindowSize(sdl.window, &currWidth, &currHeight);
         sdl.update_display_contents = ((width == currWidth) && (height == currHeight));
+
+        currentWindowWidth = currWidth;
+        currentWindowHeight = currHeight;
+		
         return sdl.window;
     }
     /* Fullscreen mode switching has its limits, and is also problematic on
@@ -954,6 +959,10 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
     /* Maybe some requested fullscreen resolution is unsupported? */
     SDL_GetWindowSize(sdl.window, &currWidth, &currHeight);
     sdl.update_display_contents = ((width == currWidth) && (height == currHeight));
+
+    currentWindowWidth = currWidth;
+    currentWindowHeight = currHeight;
+
     return sdl.window;
 }
 
@@ -3798,6 +3807,19 @@ static void GUI_StartUp() {
 		}
 	}
 	sdl.desktop.doublebuf=section->Get_bool("fulldouble");
+#if defined(C_SDL2)
+    {
+        SDL_DisplayMode dm;
+        if (SDL_GetDesktopDisplayMode(0/*FIXME display index*/,&dm) == 0) {
+            sdl.desktop.full.width = dm.w;
+            sdl.desktop.full.height = dm.h;
+            LOG_MSG("SDL2 reports desktop display mode %u x %u",dm.w,dm.h);
+        }
+        else {
+            LOG_MSG("SDL2 unable to determine desktop display mode, error %s",SDL_GetError());
+        }
+    }
+#endif	
 #if !defined(C_SDL2)
   #if SDL_VERSION_ATLEAST(1, 2, 10)
 	if (!sdl.desktop.full.width || !sdl.desktop.full.height){
@@ -3811,12 +3833,13 @@ static void GUI_StartUp() {
   #endif
 #endif
 
-	int width=1024;// int height=768;
+    int width=1024;
+    int height=768;
 	if (!sdl.desktop.full.width) {
 		sdl.desktop.full.width=width;
 	}
 	if (!sdl.desktop.full.height) {
-		sdl.desktop.full.height=width;
+		sdl.desktop.full.height=height;
 	}
 	sdl.mouse.autoenable=section->Get_bool("autolock");
 	sdl.mouse.synced=section->Get_bool("synced");
@@ -4103,6 +4126,18 @@ void GFX_HandleVideoResize(int width, int height) {
            The older values from application startup are returned. */
         sdl.desktop.full.width = width;
         sdl.desktop.full.height = height;
+    }
+    /* TODO: Only if FULLSCREEN_DESKTOP */
+    {
+        SDL_DisplayMode dm;
+        if (SDL_GetDesktopDisplayMode(0/*FIXME display index*/,&dm) == 0) {
+            sdl.desktop.full.width = dm.w;
+            sdl.desktop.full.height = dm.h;
+            LOG_MSG("SDL2 reports desktop display mode %u x %u",dm.w,dm.h);
+        }
+        else {
+            LOG_MSG("SDL2 unable to determine desktop display mode, error %s",SDL_GetError());
+        }
     }
 
     /* Even if the new window's dimensions are actually the desired ones
@@ -4988,11 +5023,9 @@ void GFX_LosingFocus(void) {
 
 static bool PasteClipboardNext(); // added emendelson from dbDOS
 
-#if !defined(C_SDL2)
 bool GFX_IsFullscreen(void) {
 	return sdl.desktop.fullscreen;
 }
-#endif
 
 #if defined(__WIN32__) && !defined(C_SDL2)
 void OpenFileDialog( char * path_arg ) {
