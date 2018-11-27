@@ -727,7 +727,6 @@ public:
 		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
 
 		name->raise(); /* make sure keyboard focus is on the text field, ready for the user */
-		this->raise(); /* make sure THIS WINDOW has the keyboard focus */
 
 		name->posToEnd(); /* position the cursor at the end where the user is most likely going to edit */
 	}
@@ -872,12 +871,15 @@ public:
 			UI_Startup(dynamic_cast<GUI::ScreenSDL*>(getScreen()));
 		} else if (sname == "autoexec") {
 			Section_line *section = static_cast<Section_line *>(control->GetSection((const char *)sname));
-			new AutoexecEditor(getScreen(), 50, 30, section);
+			AutoexecEditor *np = new AutoexecEditor(getScreen(), 50, 30, section);
+            np->raise();
 		} else if ((sec = control->GetSection((const char *)sname))) {
 			Section_prop *section = static_cast<Section_prop *>(sec);
-			new SectionEditor(getScreen(), 50, 30, section);
+			SectionEditor *np = new SectionEditor(getScreen(), 50, 30, section);
+            np->raise();
 		} else if (arg == "About") {
-			new GUI::MessageBox2(getScreen(), 200, 150, 280, "About DOSBox", "\nDOSBox-X\nAn emulator for old DOS Games\n\nCopyright 2002-2014\nThe DOSBox Team");
+            const char *msg = PACKAGE_STRING " (C) 2002-2018 The DOSBox Team\nA fork of DOSBox 0.74 by TheGreatCodeholio\nFor more info visit http://dosbox-x.com\nBased on DOSBox (http://dosbox.com)\n\n";
+			new GUI::MessageBox2(getScreen(), 100, 150, 480, "About DOSBox-X", msg);
 		} else if (arg == "Introduction") {
 			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO"));
 		} else if (arg == "Getting Started") {
@@ -912,7 +914,8 @@ static void UI_Execute(GUI::ScreenSDL *screen) {
 	SDL_Event event;
 
 	sdlscreen = screen->getSurface();
-	new ConfigurationWindow(screen, 30, 30, "DOSBox Configuration");
+	ConfigurationWindow *cfg_wnd = new ConfigurationWindow(screen, 30, 30, "DOSBox Configuration");
+    cfg_wnd->raise();
 
 	// event loop
 	while (running) {
@@ -955,10 +958,12 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 		case 1:
 			new SaveDialog(screen, 90, 100, "Save Configuration...");
 			break;
-		case 2:
+		case 2: {
 			sec = control->GetSection("sdl");
 			section=static_cast<Section_prop *>(sec); 
-			new SectionEditor(screen,50,30,section);
+			SectionEditor *p = new SectionEditor(screen,50,30,section);
+            p->raise();
+		}
 			break;
 		case 3:
 			sec = control->GetSection("dosbox");
@@ -992,8 +997,10 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 		case 9:
 			new SaveLangDialog(screen, 90, 100, "Save Language File...");
 			break;
-		case 10:
-			new ConfigurationWindow(screen, 30, 30, "DOSBox Configuration");
+		case 10: {
+			ConfigurationWindow *np = new ConfigurationWindow(screen, 30, 30, "DOSBox Configuration");
+            np->raise();
+		}
 			break;
 		case 11:
 			sec = control->GetSection("parallel");
@@ -1020,15 +1027,18 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 			section=static_cast<Section_prop *>(sec);
 			new SectionEditor(screen,50,30,section);
 			break;
-		case 16:
-			new SetCycles(screen, 90, 100, "Set CPU Cycles...");
-			break;
-		case 17:
-			new SetVsyncrate(screen, 90, 100, "Set vertical syncrate...");
-			break;
-		case 18:
-			new SetLocalSize(screen, 90, 100, "Set Default Local Freesize...");
-			break;
+		case 16: {
+			SetCycles *np1 = new SetCycles(screen, 90, 100, "Set CPU Cycles...");
+            np1->raise();
+            } break;
+		case 17: {
+			SetVsyncrate *np2 = new SetVsyncrate(screen, 90, 100, "Set vertical syncrate...");
+            np2->raise();
+            } break;
+		case 18: {
+			SetLocalSize *np3 = new SetLocalSize(screen, 90, 100, "Set Default Local Freesize...");
+            np3->raise();
+            } break;
 		default:
 			break;
 	}

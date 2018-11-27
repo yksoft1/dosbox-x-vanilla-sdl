@@ -238,6 +238,12 @@ extern RGB Titlebar;
 /// Title bar text color for windows. May be customized.
 extern RGB TitlebarText;
 
+/// Title bar color for windows. May be customized.
+extern RGB TitlebarInactive;
+
+/// Title bar text color for windows. May be customized.
+extern RGB TitlebarInactiveText;
+
 /// Convert separate r, g, b and a values (each 0-255) to an RGB value.
 static inline RGB rgba(int r, int g, int b, int a=0) {
 	return (((r&255)<<RedShift)|((g&255)<<GreenShift)|((b&255)<<BlueShift)|((a&255)<<AlphaShift));
@@ -2176,6 +2182,9 @@ public:
 		close = new GUI::Button(this, width/2-40, 10, "Close", 70);
 		close->addActionHandler(this);
 		setText(text);
+
+		close->raise(); /* make sure keyboard focus is on the close button */
+		this->raise(); /* make sure THIS WINDOW has the keyboard focus */		
 	}
 
 	/// Set a new text. Size of the box is adjusted accordingly.

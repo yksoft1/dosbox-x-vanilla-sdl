@@ -48,6 +48,8 @@ namespace Color {
 	RGB EditableBackground =	0xffffffff;
 	RGB Titlebar =			0xff000080;
 	RGB TitlebarText =		0xffffffff;
+	RGB TitlebarInactive =			0xffffffff;
+	RGB TitlebarInactiveText =		0xff7f7f7f;	
 }
 
 std::map<const char *,Font *,Font::ltstr> Font::registry;
@@ -752,11 +754,13 @@ void ToplevelWindow::paint(Drawable &d) const
 	d.setColor(Color::Border);
 	d.drawLine(32,5,32,30);
 
-	d.setColor(Color::Titlebar);
+    bool active = hasFocus();
+	
+ 	d.setColor(active ? Color::Titlebar : Color::TitlebarInactive);
 	d.fillRect(33,5,width-39,26);
 
 	const Font *font = Font::getFont("title");
-	d.setColor(Color::TitlebarText);
+	d.setColor(active ? Color::TitlebarText : Color::TitlebarInactiveText);
 	d.setFont(font);
 	d.drawText(31+(width-39-font->getWidth(title))/2,5+(26-font->getHeight())/2+font->getAscent(),title,false,0);
 }
@@ -1411,6 +1415,14 @@ static const Key SDL_to_GUI(const SDL_keysym &key)
 {
 	GUI::Key::Special ksym = GUI::Key::None;
 	switch (key.sym) {
+#if !defined(C_SDL2) /* hack for SDL1 that fails to send char code for spacebar up event */
+    case SDLK_SPACE:
+    	return Key(' ', ksym,
+    		(key.mod&KMOD_SHIFT)>0,
+    		(key.mod&KMOD_CTRL)>0,
+    		(key.mod&KMOD_ALT)>0,
+    		(key.mod&KMOD_META)>0);
+#endif		
 	case SDLK_ESCAPE: ksym = GUI::Key::Escape; break;
 	case SDLK_BACKSPACE: ksym = GUI::Key::Backspace; break;
 	case SDLK_TAB: ksym = GUI::Key::Tab; break;
@@ -1506,7 +1518,42 @@ void ScreenSDL::paint(Drawable &d) const {
 bool ScreenSDL::event(const SDL_Event &event) {
 	bool rc;
 
+#if defined(C_SDL2)
+    /* handle mouse events only if it comes from the mouse.
+     * ignore the fake mouse events some OSes generate from the touchscreen.
+     * Note that Windows will fake mouse events, Linux/X11 wil not */
+    if (event.type == SDL_MOUSEMOTION || event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) {
+        if (event.button.which == SDL_TOUCH_MOUSEID) /* don't handle mouse events faked by touchscreen */
+            return true;/*eat the event or else it will just keep calling objects until processed*/
+    }
+#endif
+	
 	switch (event.type) {
+#if defined(C_SDL2)
+    case SDL_FINGERUP:
+    case SDL_FINGERDOWN:
+    case SDL_FINGERMOTION: {
+        SDL_Event fake;
+        bool comb = false;
+         memset(&fake,0,sizeof(fake));
+        fake.type = SDL_MOUSEMOTION;
+		fake.motion.state = SDL_BUTTON(1);
+        fake.motion.x = (Sint32)(event.tfinger.x * surface->w);
+        fake.motion.y = (Sint32)(event.tfinger.y * surface->h);
+        fake.motion.xrel = (Sint32)event.tfinger.dx;
+        fake.motion.yrel = (Sint32)event.tfinger.dy;
+        comb |= this->event(fake);
+         if (event.type == SDL_FINGERUP || event.type == SDL_FINGERDOWN) {
+            memset(&fake,0,sizeof(fake));
+            fake.button.button = SDL_BUTTON_LEFT;
+            fake.button.x = (Sint32)(event.tfinger.x * surface->w);
+            fake.button.y = (Sint32)(event.tfinger.y * surface->h);
+            fake.type = (event.type == SDL_FINGERUP) ? SDL_MOUSEBUTTONUP : SDL_MOUSEBUTTONDOWN;
+            comb |= this->event(fake);
+        }
+         return comb;
+    }
+#endif
 	case SDL_KEYUP: {
 		const Key &key = SDL_to_GUI(event.key.keysym);
 		if (key.special == GUI::Key::None && key.character == 0) break;
