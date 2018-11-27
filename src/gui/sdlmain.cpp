@@ -314,23 +314,6 @@ void UpdateWindowDimensions(Bitu width, Bitu height) {
 	currentWindowHeight = height;
 }
 
-void UpdateWindowDimensions(void) {
-#if defined(WIN32) && !defined(C_SDL2)
-	// When maximized, SDL won't actually tell us our new dimensions, so get it ourselves.
-	// FIXME: Instead of GetHWND() we need to track our own handle or add something to SDL 1.x
-	//        to provide the handle!
-	RECT r = { 0 };
-
-	GetClientRect(GetHWND(), &r);
-    UpdateWindowDimensions(r.right, r.bottom);
-    UpdateWindowMaximized(IsZoomed(GetHWND()));
-#endif
-#if defined(LINUX) && !defined(C_SDL2)
-    void UpdateWindowDimensions_Linux(void);
-    UpdateWindowDimensions_Linux();
-#endif
-}
-
 #if C_OPENGL
 #include "SDL_opengl.h"
 
@@ -390,9 +373,7 @@ enum PRIORITY_LEVELS {
 # define MAPPERFILE				"mapper-" VERSION ".map"
 #endif
 
-#if !defined(C_SDL2)
 void                        GUI_ResetResize(bool);
-#endif
 void						GUI_LoadFonts();
 void						GUI_Run(bool);
 
@@ -574,6 +555,31 @@ struct SDL_Block {
 };
 
 static SDL_Block sdl;
+
+void UpdateWindowDimensions(void) {
+#if defined(C_SDL2)
+    int w = 640,h = 480;
+    SDL_GetWindowSize(sdl.window, &w, &h);
+    UpdateWindowDimensions(w,h);
+
+    Uint32 fl = SDL_GetWindowFlags(sdl.window);
+    UpdateWindowMaximized((fl & SDL_WINDOW_MAXIMIZED) != 0);
+#endif
+#if defined(WIN32) && !defined(C_SDL2)
+	// When maximized, SDL won't actually tell us our new dimensions, so get it ourselves.
+	// FIXME: Instead of GetHWND() we need to track our own handle or add something to SDL 1.x
+	//        to provide the handle!
+	RECT r = { 0 };
+
+	GetClientRect(GetHWND(), &r);
+    UpdateWindowDimensions(r.right, r.bottom);
+    UpdateWindowMaximized(IsZoomed(GetHWND()));
+#endif
+#if defined(LINUX) && !defined(C_SDL2)
+    void UpdateWindowDimensions_Linux(void);
+    UpdateWindowDimensions_Linux();
+#endif
+}
 
 void SDL_rect_cliptoscreen(SDL_Rect &r) {
 	if (r.x < 0) {
@@ -864,6 +870,8 @@ void PauseDOSBox(bool pressed) {
 }
 
 #if defined(C_SDL2)
+static bool SDL2_resize_enable = false;
+
 SDL_Window* GFX_GetSDLWindow(void) {
     return sdl.window;
 }
@@ -923,7 +931,8 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
                                       SDL_WINDOWPOS_UNDEFINED_DISPLAY(sdl.displayNumber),
                                       width, height,
                                       (GFX_IsFullscreen() ? (sdl.desktop.full.display_res ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN) : 0)
-                                      | ((screenType == SCREEN_OPENGL) ? SDL_WINDOW_OPENGL : 0) | SDL_WINDOW_SHOWN);
+                                      | ((screenType == SCREEN_OPENGL) ? SDL_WINDOW_OPENGL : 0) | SDL_WINDOW_SHOWN
+                                      | (SDL2_resize_enable ? SDL_WINDOW_RESIZABLE : 0));
         if (sdl.window) {
             GFX_SetTitle(-1, -1, -1, false); //refresh title.
         }
@@ -943,6 +952,7 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
      * if one is not interested in scaling.
      * On Android, desktop res is the only way.
      */
+	SDL_SetWindowResizable(sdl.window, SDL2_resize_enable ? SDL_TRUE : SDL_FALSE);	 
     if (GFX_IsFullscreen()) {
         SDL_DisplayMode displayMode;
         SDL_GetWindowDisplayMode(sdl.window, &displayMode);
@@ -966,6 +976,15 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
     return sdl.window;
 }
 
+void GFX_SetResizeable(bool enable) {
+    if (SDL2_resize_enable != enable) {
+        SDL2_resize_enable = enable;
+
+        if (sdl.window != NULL)
+            SDL_SetWindowResizable(sdl.window, SDL2_resize_enable ? SDL_TRUE : SDL_FALSE);
+    }
+}
+ 
 // Used for the mapper UI and more: Creates a fullscreen window with desktop res
 // on Android, and a non-fullscreen window with the input dimensions otherwise.
 SDL_Window * GFX_SetSDLSurfaceWindow(Bit16u width, Bit16u height) {
@@ -1788,6 +1807,9 @@ Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,G
     case SCREEN_SURFACE:
     {
         GFX_ResetSDL();
+		
+		SDL_SetWindowMinimumSize(sdl.window, 1, 1); /* NTS: 0 x 0 is not valid */
+		
 dosurface:
         sdl.desktop.type=SCREEN_SURFACE;
         sdl.clip.w=width;
@@ -1813,17 +1835,96 @@ dosurface:
                 goto dosurface;
             }
         } else {
+            int width = sdl.draw.width;
+            int height = sdl.draw.height;		
             int menuheight = 0;
+
+			sdl.clip.x = 0; sdl.clip.y = 0;
+
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+			/* scale the menu bar if the window is large enough */
+			{
+				Bitu consider_height = menu.maxwindow ? currentWindowHeight : height;
+				Bitu consider_width = menu.maxwindow ? currentWindowWidth : width;
+				Bitu final_height = max(max(consider_height, userResizeWindowHeight), (Bitu)(sdl.clip.y + sdl.clip.h));
+				Bitu final_width = max(max(consider_width, userResizeWindowWidth), (Bitu)(sdl.clip.x + sdl.clip.w));
+				Bitu scale = 1;
+
+				while ((final_width / scale) >= (640 * 2) && (final_height / scale) >= (400 * 2))
+					scale++;
+
+				LOG_MSG("menuScale=%lu", (unsigned long)scale);
+				mainMenu.setScale(scale);
+			}
+		 
             if (mainMenu.isVisible()) menuheight = mainMenu.menuBox.h;
 #endif
 
-            sdl.clip.x=sdl.overscan_width;
-            sdl.clip.y=sdl.overscan_width + menuheight;
-            sdl.window=GFX_SetSDLWindowMode(width+2*sdl.overscan_width, height+menuheight+2*sdl.overscan_width,
-                                            sdl.desktop.type);
+			/* menu size and consideration of width and height */
+			Bitu consider_height = height + (unsigned int)menuheight + (sdl.overscan_width * 2);
+			Bitu consider_width = width + (sdl.overscan_width * 2);
+
+			if (menu.maxwindow) {
+				if (consider_height < currentWindowHeight)
+					consider_height = currentWindowHeight;
+				if (consider_width < currentWindowWidth)
+					consider_width = currentWindowWidth;
+			}
+
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+			if (mainMenu.isVisible())
+			{
+				/* enforce a minimum 640x400 surface size.
+				 * the menus are useless below 640x400 */
+				if (consider_width < (640 + (sdl.overscan_width * 2)))
+					consider_width = (640 + (sdl.overscan_width * 2));
+				if (consider_height < (400 + (sdl.overscan_width * 2) + (unsigned int)menuheight))
+					consider_height = (400 + (sdl.overscan_width * 2) + (unsigned int)menuheight);
+			}
+#endif
+
+			/* decide where the rectangle on the screen goes */
+			int final_width,final_height,ax,ay;
+
+			/* center the screen in the window */
+			{
+
+				final_height = (int)max(max(consider_height, userResizeWindowHeight), (Bitu)(sdl.clip.y + sdl.clip.h)) - (int)menuheight - ((int)sdl.overscan_width * 2);
+				final_width = (int)max(max(consider_width, userResizeWindowWidth), (Bitu)(sdl.clip.x + sdl.clip.w)) - ((int)sdl.overscan_width * 2);
+				ax = (final_width - (sdl.clip.x + sdl.clip.w)) / 2;
+				ay = (final_height - (sdl.clip.y + sdl.clip.h)) / 2;
+				if (ax < 0) ax = 0;
+				if (ay < 0) ay = 0;
+				sdl.clip.x += ax + (int)sdl.overscan_width;
+				sdl.clip.y += ay + (int)sdl.overscan_width;
+				// sdl.clip.w = currentWindowWidth - sdl.clip.x;
+				// sdl.clip.h = currentWindowHeight - sdl.clip.y;
+			}
+
+			{
+				final_width += (int)sdl.overscan_width * 2;
+				final_height += (int)menuheight + (int)sdl.overscan_width * 2;
+				sdl.clip.y += (int)menuheight;
+
+				LOG_MSG("surface consider=%ux%u final=%ux%u",
+					(unsigned int)consider_width,
+					(unsigned int)consider_height,
+					(unsigned int)final_width,
+					(unsigned int)final_height);
+			}
+
+			sdl.window = GFX_SetSDLWindowMode(final_width, final_height, SCREEN_SURFACE);
             if (sdl.window == NULL)
                 E_Exit("Could not set windowed video mode %ix%i: %s",(int)width,(int)height,SDL_GetError());
+
+			sdl.surface = SDL_GetWindowSurface(sdl.window);
+			if (sdl.surface->w < (sdl.clip.x+sdl.clip.w) ||
+				sdl.surface->h < (sdl.clip.y+sdl.clip.h)) {
+				/* the window surface must not be smaller than the size we want!
+				 * This is a way to prevent that! */
+				SDL_SetWindowMinimumSize(sdl.window, sdl.clip.x+sdl.clip.w, sdl.clip.y+sdl.clip.h);
+				sdl.window = GFX_SetSDLWindowMode(sdl.clip.x+sdl.clip.w, sdl.clip.y+sdl.clip.h, SCREEN_SURFACE);
+			}
         }
         sdl.surface = SDL_GetWindowSurface(sdl.window);
         if (sdl.surface == NULL)
@@ -1842,6 +1943,12 @@ dosurface:
             retFlags = GFX_CAN_32;
             break;
         }
+		
+		/* WARNING: If the user is resizing our window to smaller than what we want, SDL2 will give us a
+		 *          window surface according to the smaller size, and then we crash! */
+		assert(sdl.surface->w >= (sdl.clip.x+sdl.clip.w));
+		assert(sdl.surface->h >= (sdl.clip.y+sdl.clip.h));
+		
         /* Fix a glitch with aspect=true occuring when
         changing between modes with different dimensions */
         SDL_FillRect(sdl.surface, NULL, SDL_MapRGB(sdl.surface->format, 0, 0, 0));
@@ -3916,6 +4023,7 @@ static void GUI_StartUp() {
 
 #if defined(C_SDL2)
     /* Initialize screen for first time */
+	GFX_SetResizeable(true);
     if (!GFX_SetSDLSurfaceWindow(640,400))
         E_Exit("Could not initialize video: %s",SDL_GetError());
     sdl.surface = SDL_GetWindowSurface(sdl.window);
@@ -4008,10 +4116,8 @@ static void GUI_StartUp() {
 	MAPPER_AddHandler(&GUI_Run, MK_nothing, 0, "gui", "ShowGUI", &item);
 	item->set_text("Configuration GUI");
 
-#if !defined(C_SDL2)
 	MAPPER_AddHandler(&GUI_ResetResize, MK_nothing, 0, "resetsize", "ResetSize", &item);
 	item->set_text("Reset window size");
-#endif
 
 	/* EXPERIMENTAL!!!! */
 	MAPPER_AddHandler(&GUI_EXP_SaveState, MK_f1, MMODHOST, "exp_savestate", "EX:SvState", &item);
@@ -4130,6 +4236,13 @@ void GFX_RedrawScreen(Bit32u nWidth, Bit32u nHeight) {
     RedrawScreen(nWidth, nHeight);
 }
 
+bool GFX_MustActOnResize() {
+    if (!GFX_IsFullscreen())
+        return false;
+
+    return true;
+}
+
 #if defined(C_SDL2)
 void GFX_HandleVideoResize(int width, int height) {
     /* Maybe a screen rotation has just occurred, so we simply resize.
@@ -4154,6 +4267,30 @@ void GFX_HandleVideoResize(int width, int height) {
         }
     }
 
+    /* assume the resize comes from user preference UNLESS the window
+     * is fullscreen or maximized */
+    if (!menu.maxwindow && !sdl.desktop.fullscreen && !sdl.init_ignore && NonUserResizeCounter == 0 && !window_was_maximized) {
+        UpdateWindowDimensions();
+        UpdateWindowDimensions((unsigned int)width, (unsigned int)height);
+
+        /* if the dimensions actually changed from our surface dimensions, then
+           assume it's the user's input. Linux/X11 is good at doing this anyway,
+           but the Windows SDL 1.x support will return us a resize event for the
+           window size change resulting from SDL mode set. */
+        if (width != sdl.surface->w || height != sdl.surface->h) {
+            userResizeWindowWidth = (unsigned int)width;
+            userResizeWindowHeight = (unsigned int)height;
+        }
+    }
+    else {
+        UpdateWindowDimensions();
+    }
+
+    window_was_maximized = menu.maxwindow;
+    if (NonUserResizeCounter > 0)
+        NonUserResizeCounter--;
+
+
     /* Even if the new window's dimensions are actually the desired ones
      * we may still need to re-obtain a new window surface or do
      * a different thing. So we basically call GFX_SetSize, but without
@@ -4170,13 +4307,6 @@ void GFX_HandleVideoResize(int width, int height) {
     sdl.update_window = true;
 }
 #else
-bool GFX_MustActOnResize() {
-    if (!GFX_IsFullscreen())
-        return false;
-
-    return true;
-}
-
 static void HandleVideoResize(void * event) {
 	if(sdl.desktop.fullscreen) return;
 
@@ -4636,8 +4766,8 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 								Sint32 x,y;
 
 								/* NTS: Windows versions of SDL2 do normalize the coordinates */
-								x = (Sint32)(event.tfinger.x * sdl.clip.w);
-								y = (Sint32)(event.tfinger.y * sdl.clip.h);
+								x = (Sint32)(event.tfinger.x * currentWindowWidth);
+								y = (Sint32)(event.tfinger.y * currentWindowHeight);
 
 								memset(&event.button,0,sizeof(event.button));
 								event.type = SDL_MOUSEBUTTONDOWN;
@@ -4655,15 +4785,9 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 								touchscreen_touch_lock = no_touch_id;
 								Sint32 x,y;
 
-#if defined(WIN32)
 								/* NTS: Windows versions of SDL2 do normalize the coordinates */
-								x = (Sint32)(event.tfinger.x * sdl.clip.w);
-								y = (Sint32)(event.tfinger.y * sdl.clip.h);
-#else
-								/* NTS: Linux versions of SDL2 don't normalize the coordinates? */
-								x = event.tfinger.x; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-								y = event.tfinger.y; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-#endif
+								x = (Sint32)(event.tfinger.x * currentWindowWidth);
+								y = (Sint32)(event.tfinger.y * currentWindowHeight);
 
 								memset(&event.button,0,sizeof(event.button));
 								event.type = SDL_MOUSEBUTTONUP;
@@ -4679,15 +4803,9 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 								touchscreen_touch_lock == event.tfinger.touchId) {
 								Sint32 x,y;
 
-#if defined(WIN32)
 								/* NTS: Windows versions of SDL2 do normalize the coordinates */
-								x = (Sint32)(event.tfinger.x * sdl.clip.w);
-								y = (Sint32)(event.tfinger.y * sdl.clip.h);
-#else
-								/* NTS: Linux versions of SDL2 don't normalize the coordinates? */
-								x = event.tfinger.x; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-								y = event.tfinger.y; /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-#endif
+								x = (Sint32)(event.tfinger.x * currentWindowWidth);
+								y = (Sint32)(event.tfinger.y * currentWindowHeight);
 
 								memset(&event.button,0,sizeof(event.button));
 								event.type = SDL_MOUSEMOTION;
@@ -5567,15 +5685,10 @@ static void FingerToFakeMouseMotion(SDL_TouchFingerEvent * finger) {
     SDL_MouseMotionEvent fake;
 
     memset(&fake,0,sizeof(fake));
-#if defined(WIN32)
 	/* NTS: Windows versions of SDL2 do normalize the coordinates */
-	fake.x = (Sint32)(finger->x * sdl.clip.w);
-	fake.y = (Sint32)(finger->y * sdl.clip.h);
-#else
-	/* NTS: Linux versions of SDL2 don't normalize the coordinates? */
-    fake.x = finger->x;     /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-    fake.y = finger->y;     /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-#endif
+	fake.x = (Sint32)(finger->x * currentWindowWidth);
+	fake.y = (Sint32)(finger->y * currentWindowHeight);
+
     fake.xrel = finger->dx;
     fake.yrel = finger->dy;
     HandleMouseMotion(&fake);
@@ -5609,7 +5722,6 @@ static void HandleTouchscreenFinger(SDL_TouchFingerEvent * finger) {
             touchscreen_finger_lock = finger->fingerId;
             touchscreen_touch_lock = finger->touchId;
             FingerToFakeMouseMotion(finger);
-            Mouse_ButtonPressed(0);
         }
     }
     else if (finger->type == SDL_FINGERUP) {
@@ -5618,7 +5730,6 @@ static void HandleTouchscreenFinger(SDL_TouchFingerEvent * finger) {
             touchscreen_finger_lock = no_finger_id;
             touchscreen_touch_lock = no_touch_id;
             FingerToFakeMouseMotion(finger);
-            Mouse_ButtonReleased(0);
         }
     }
     else if (finger->type == SDL_FINGERMOTION) {
@@ -8627,10 +8738,8 @@ int main(int argc, char* argv[]) {
 
 		UpdateOverscanMenu();
 		
-#if !defined(C_SDL2)
         void GUI_ResetResize(bool pressed);
         GUI_ResetResize(true);
-#endif
 
         void ConstructMenu(void);
         ConstructMenu();
@@ -9040,7 +9149,6 @@ bool Get_Custom_SaveDir(std::string& savedir) {
 	return false;
 }
 
-#if !defined(C_SDL2)
 void GUI_ResetResize(bool pressed) {
 	void RENDER_CallBack( GFX_CallBackFunctions_t function );
 
@@ -9060,7 +9168,6 @@ void GUI_ResetResize(bool pressed) {
 		RENDER_CallBack(GFX_CallBackReset);
     }
 }
-#endif
 
 bool MOUSE_IsLocked()
 {
