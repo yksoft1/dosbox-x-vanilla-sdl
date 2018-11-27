@@ -2192,6 +2192,9 @@ public:
 		case MK_kpminus:
 			key=SDL_SCANCODE_KP_MINUS;
 			break;
+        case MK_kpplus:
+             key=SDL_SCANCODE_KP_PLUS;
+             break;			
         case MK_minus:
             key=SDL_SCANCODE_MINUS;
             break;
