@@ -531,6 +531,9 @@ protected:
 	/// \c true if this window should be visible on screen.
 	bool visible;
 
+    /// \c true if the user should be allowed to TAB to this window.
+    bool tabbable;
+
 	/// Parent window.
 	Window *const parent;
 
@@ -541,6 +544,9 @@ protected:
     /// \c true if this window is transient (such as menu popus)
     bool transient;
 
+    /// \c toplevel window
+    bool toplevel;
+	
     /// \c mouse is within the boundaries of the window
     bool mouse_in_window;
 	 
@@ -1039,6 +1045,11 @@ public:
 	/// Draw a straight line from (\p x1,\p y1) to (\p x2,\p y2).
 	void drawLine(int x1, int y1, int x2, int y2) { gotoXY(x1,y1); drawLine(x2,y2); };
 
+	/// Draw a straight line from the current position to the given coordinates.
+	void drawDotLine(int x2, int y2);
+	/// Draw a straight line from (\p x1,\p y1) to (\p x2,\p y2).
+	void drawDotLine(int x1, int y1, int x2, int y2) { gotoXY(x1,y1); drawDotLine(x2,y2); };
+
 	/// Draw a circle centered at the current position with diameter \p d.
 	/** The current position is not changed. */
 	void drawCircle(int d);
@@ -1053,6 +1064,13 @@ public:
 	/** The current position is set to the top left corner. */
 	void drawRect(int x, int y, int w, int h) { gotoXY(x, y); drawRect(w, h); };
 
+	/// Draw a rectangle with top left at the current position and size \p w, \p h.
+	/** The current position is not changed. */
+	void drawDotRect(int w, int h);
+	/// Draw a rectangle with top left at the given coordinates and size \p w, \p h.
+	/** The current position is set to the top left corner. */
+	void drawDotRect(int x, int y, int w, int h) { gotoXY(x, y); drawDotRect(w, h); };
+	
 	/// Flood-fill an area at the current position.
 	/** A continuous area with the same RGB value as the selected pixel is
 	    changed to the current color. The current position is not changed. */
@@ -1416,7 +1434,7 @@ public:
 	/** If \p width is given, the resulting label is a word-wrapped multiline label */
 	template <typename STR> Label(Window *parent, int x, int y, const STR text, int width = 0, const Font *font = Font::getFont("default"), RGB color = Color::Text) :
 		Window(parent, x, y, (width?width:1), 1), font(font), color(color), text(text), interpret(width != 0)
-	{ resize(); }
+	{ resize(); tabbable = false; }
 
 	/// Set a new text. Size of the label is adjusted accordingly.
 	template <typename STR> void setText(const STR text) { this->text = text; resize(); }
@@ -1445,7 +1463,7 @@ public:
 	}
 
 	/// Paint label
-	virtual void paint(Drawable &d) const { d.setColor(color); d.drawText(0, font->getAscent(), text, interpret, 0); }
+	virtual void paint(Drawable &d) const { d.setColor(color); d.drawText(0, font->getAscent(), text, interpret, 0); if (hasFocus()) d.drawDotRect(0,0,width-1,height-1); }
 
 	virtual bool raise() { return false; }
 };
@@ -1484,6 +1502,9 @@ protected:
 	/// Horizontal scrolling offset.
 	int offset;
 
+    /// Allow user to type Tab into multiline
+    bool enable_tab_input;
+
 	/// Ensure that pos is visible.
 	void checkOffset() {
 		if (lastpos == pos) return;
@@ -1510,7 +1531,7 @@ public:
 	/// Create an input with given position and width. If not set, height is calculated from the font and input is single-line.
 	Input(Window *parent, int x, int y, int w, int h = 0) :
 		Window(parent,x,y,w,(h?h:Font::getFont("input")->getHeight()+10)), ActionEventSource("GUI::Input"),
-		text(""), pos(0), lastpos(0), posx(0), posy(0), start_sel(0), end_sel(0), blink(true), insert(true), multi(h != 0), offset(0)
+		text(""), pos(0), lastpos(0), posx(0), posy(0), start_sel(0), end_sel(0), blink(true), insert(true), multi(h != 0), offset(0), enable_tab_input(false)
 	{ Timer::add(this,30); }
 
 	~Input() {
@@ -1852,7 +1873,7 @@ public:
 	 *  always the screen the logical parent resides on. */
 	template <typename STR> Menu(Window *parent, int x, int y, const STR name) :
 		TransientWindow(parent,x,y,4,4), ActionEventSource(name), selected(-1)
-		{ setVisible(false); }
+		{ setVisible(false); tabbable = false;}
 
 	~Menu() {
 		setVisible(false);
@@ -2078,7 +2099,7 @@ protected:
 public:
 	/// Create a menubar with given position and size
 	/** Height is autocalculated from font size */
-	Menubar(Window *parent, int x, int y, int w) : Window(parent,x,y,w,Font::getFont("menu")->getHeight()+5), ActionEventSource("GUI::Menubar"), selected(-1), lastx(0) {}
+	Menubar(Window *parent, int x, int y, int w) : Window(parent,x,y,w,Font::getFont("menu")->getHeight()+5), ActionEventSource("GUI::Menubar"), selected(-1), lastx(0) {tabbable = false;}
 
 	/// Add a Menu.
 	template <typename STR> void addMenu(const STR name) {
@@ -2303,6 +2324,7 @@ template <typename STR> ToplevelWindow::ToplevelWindow(Screen *parent, int x, in
 #endif
 	systemMenu->addItem("Close");
 	systemMenu->addActionHandler(this);
+	toplevel = true;
 }
 
 template <typename STR> Button::Button(Window *parent, int x, int y, const STR text, int w, int h) :

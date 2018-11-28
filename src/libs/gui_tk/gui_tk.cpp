@@ -256,6 +256,39 @@ void Drawable::clear(RGB clear)
 	}
 }
 
+void Drawable::drawDotLine(int x2, int y2)
+{
+	int x0 = x2, x1 = x, y0 = y2, y1 = y;
+	int dx = x2-x1, dy = y2-y1;
+	drawPixel();
+ 	if (abs(dx) > abs(dy)) {
+		if (x1 > x2) {
+			x = x2; x2 = x1; x1 = x;
+			y = y2; y2 = y1; y1 = y;
+		}
+		for (x = x1; x <= x2; x++) {
+			y = y1+(x-x1)*dy/dx-lineWidth/2;
+			for (int i = 0; i < lineWidth; i++, y++) {
+                if (((x^y)&1) == 0)
+                    drawPixel();
+            }
+        }
+    } else if (y1 != y2) {
+        if (y1 > y2) {
+            x = x2; x2 = x1; x1 = x;
+            y = y2; y2 = y1; y1 = y;
+        }
+        for (y = y1; y <= y2; y ++) {
+            x = x1+(y-y1)*dx/dy-lineWidth/2;
+            for (int i = 0; i < lineWidth; i++, x++) {
+                if (((x^y)&1) == 0)
+                    drawPixel();
+            }
+		}
+	}
+ 	drawPixel(x0,y0);
+}
+
 void Drawable::drawLine(int x2, int y2)
 {
 	int x0 = x2, x1 = x, y0 = y2, y1 = y;
@@ -321,6 +354,19 @@ void Drawable::drawRect(int w, int h)
 	drawLine(x-w-lineWidth+1,y);
 	gotoXY(x+lineWidth/2,y);
 	drawLine(x,y-h);
+}
+
+
+void Drawable::drawDotRect(int w, int h)
+{
+	gotoXY(x-lineWidth/2,y);
+	drawDotLine(x+w+lineWidth-1,y);
+	gotoXY(x-(lineWidth-1)/2,y);
+	drawDotLine(x,y+h);
+	gotoXY(x+(lineWidth-1)/2,y);
+	drawDotLine(x-w-lineWidth+1,y);
+	gotoXY(x+lineWidth/2,y);
+	drawDotLine(x,y-h);
 }
 
 void Drawable::fill()
@@ -533,9 +579,11 @@ Window::Window(Window *parent, int x, int y, int w, int h) :
 	x(x), y(y),
 	dirty(true),
 	visible(true),
+	tabbable(true),
 	parent(parent),
 	mouseChild(NULL),
 	transient(false),
+	toplevel(false),
 	mouse_in_window(false)
 {
 	parent->addChild(this);
@@ -617,12 +665,25 @@ bool Window::keyDown(const Key &key)
 	if (key.shift) {
 		std::list<Window *>::reverse_iterator i = children.rbegin(), e = children.rend();
 		++i;
-		while (i != e && !(*i)->raise()) ++i;
-		return i != e;
+        while (i != e) {
+            if ((*i)->tabbable) {
+                if ((*i)->raise())
+                    break;
+            }
+            ++i;
+        }
+        return (i != e) || toplevel/*prevent TAB escape to another window*/;
 	} else {
 		std::list<Window *>::iterator i = children.begin(), e = children.end();
-		while (i != e && !(*i)->raise()) ++i;
-		return (i != e);
+		--e;
+		while (i != e) {
+            if ((*i)->tabbable) {
+                if ((*i)->raise())
+                    break;
+            }
+            ++i;
+        }
+		return (i != e) || toplevel/*prevent TAB escape to another window*/;
 	}
 }
 
@@ -1005,7 +1066,7 @@ bool Input::keyDown(const Key &key)
 		} else executeAction(text);
 		break;
 	case Key::Tab:
-		if (multi) {
+		if (multi && enable_tab_input) {
 			if (start_sel != end_sel) clearSelection();
 			if (insert || pos >= text.size() ) text.insert(text.begin()+pos++,f->fromSpecial(Font::Tab));
 			else text[pos++] = f->fromSpecial(Font::Tab);
