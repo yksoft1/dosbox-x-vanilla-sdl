@@ -538,6 +538,12 @@ protected:
 	/** It receives all drag/up/click/doubleclick events until an up event is received */
 	Window  *mouseChild;
 
+    /// \c true if this window is transient (such as menu popus)
+    bool transient;
+
+    /// \c mouse is within the boundaries of the window
+    bool mouse_in_window;
+	 
 	/// Child windows.
 	/** Z ordering is done in list order. The first element is the lowermost
 	 *  window. This window's content is below all children. */
@@ -613,7 +619,7 @@ public:
 
 	/// Show or hide this window.
 	/** By default, most windows are shown when created. Hidden windows do not receive any events. */
-	virtual void setVisible(bool v) { visible = !!v; parent->setDirty(); }
+	virtual void setVisible(bool v) { visible = !!v; parent->setDirty(); if (!visible) mouse_in_window = false; }
 
 	/// Returns \c true if this window is visible.
 	virtual bool isVisible() const { return (!parent || parent->isVisible()) && visible; }
@@ -630,6 +636,8 @@ public:
 
 	/// Mouse was moved. Returns true if event was handled.
 	virtual bool mouseMoved(int x, int y);
+	/// Mouse was moved outside the window (when it was once inside the window)
+ 	virtual void mouseMovedOutside(void);	
 	/// Mouse was moved while a button was pressed. Returns true if event was handled.
 	virtual bool mouseDragged(int x, int y, MouseButton button);
 	/// Mouse was pressed. Returns true if event was handled.
@@ -641,7 +649,10 @@ public:
 	virtual bool mouseClicked(int x, int y, MouseButton button);
 	/// Mouse was double-clicked. Returns true if event was handled.
 	virtual bool mouseDoubleClicked(int x, int y, MouseButton button);
-
+	/// Mouse was pressed outside the bounds of the window, if this window has focus (for transient windows). Returns true if event was handled.
+    /// Transient windows by default should disappear.
+ 	virtual bool mouseDownOutside(MouseButton button);
+	
 	/// Key was pressed. Returns true if event was handled.
 	virtual bool keyDown(const Key &key);
 	/// Key was released. Returns true if event was handled.
@@ -701,6 +712,7 @@ class Screen : public Window {
 protected:
 	/// Screen buffer.
 	Drawable *const buffer;
+	bool buffer_i_alloc;
 
 	/// Clipboard.
 	String clipboard;
@@ -869,6 +881,7 @@ public:
 	 *  later on will not change the available area.
 	 */
 	ScreenSDL(SDL_Surface *surface);
+	virtual ~ScreenSDL();
 
 	/** Change current surface
 	 *
@@ -1728,6 +1741,7 @@ public:
 			last = p;
 			p = p->getParent();
 		}
+		transient = true;
 		dynamic_cast<ToplevelWindow *>(last2)->addCloseHandler(this);
 	}
 
@@ -1748,7 +1762,11 @@ public:
 	virtual int getY() const { return y-realparent->getScreenY(); }
 	virtual void setVisible(bool v) { if (v) raise(); Window::setVisible(v); }
 	virtual void windowMoved(Window *src, int x, int y) { move(relx,rely); }
-
+	virtual bool mouseDownOutside(MouseButton button) {
+        setVisible(false);
+        return true;
+    }
+	 
 	/// Put window on top of all other windows without changing their relative order
 	virtual bool raise() {
 		Window *last = parent->children.back();
@@ -1793,6 +1811,10 @@ protected:
 	virtual void selectItem(int x, int y) {
 		y -= 2;
 		selected = -1;
+
+        // mouse input should select nothing if outside the bounds of this menu
+        if (x < 0 || x >= width || y < 0 || y >= height) return;
+		 
 		const int height = Font::getFont("menu")->getHeight()+2;
 		std::vector<String>::iterator i;
 		for (i = items.begin(); i != items.end() && y > 0; ++i) {
@@ -1841,38 +1863,89 @@ public:
 
 	/// Highlight current item.
 	virtual bool mouseMoved(int x, int y)  {
-		selectItem(x,y);
-		return true;
+        if (visible) {
+			firstMouseUp = false;
+     		selectItem(x,y);
+ 	    	return true;
+        }
+
+        return false;
 	}
+
+	void mouseMovedOutside(void) {
+        if (visible && selected >= 0) {
+			firstMouseUp = false;
+            selected = -1;
+            setDirty();
+        }
+    }
 
 	/// Highlight current item.
 	virtual bool mouseDragged(int x, int y, MouseButton b)  {
-		selectItem(x,y);
-		return true;
+        if (visible) {
+            if (x >= 0 && x < width && y >= 0 && y < height)
+                firstMouseUp = false;
+				 
+            selectItem(x,y);
+            return true;
+        }
+
+        return false;
 	}
 
-	virtual bool mouseDown(int x, int y, MouseButton button)  { return true; }
+	virtual bool mouseDown(int x, int y, MouseButton button)  { 
+        if (visible)
+            return true;
 
+        return false;	
+	}
+
+	virtual bool mouseDownOutside(MouseButton button) {
+        if (visible) {
+            setVisible(false);
+            selected = -1;
+            return true;
+        }
+
+        return false;
+    }
+	
 	/// Possibly select item.
 	virtual bool mouseUp(int x, int y, MouseButton button)  {
-		selectItem(x,y);
-		if (firstMouseUp) firstMouseUp = false;
-		else setVisible(false);
-		execute();
-		return true;
+        if (visible) {
+            selectItem(x,y);
+            if (firstMouseUp) firstMouseUp = false;
+            else setVisible(false);
+            execute();
+            return true;
+        }
+
+        return false;
 	}
 
 	/// Handle keyboard input.
 	virtual bool keyDown(const Key &key) {
-		if (key.special == Key::Up) selected--;
-		else if (key.special == Key::Down) selected++;
-		else if (key.special == Key::Enter) { execute(); return true; }
-		else if (key.special == Key::Escape) { setVisible(false); return true; }
-		else return true;
-		if (items[selected].size() == 0 && items.size() > 1) return keyDown(key);
-		if (selected < 0) selected = (int)(items.size()-1);
-		if (selected >= (int)items.size()) selected = 0;
-		return true;
+		if (visible) {
+            if (key.special == Key::Up) {
+                if (selected == 0)
+                    selected = items.size() - 1;
+                else
+                    selected--;
+            }
+            else if (key.special == Key::Down) {
+                if ((size_t)(++selected) == items.size())
+                    selected = 0;
+            }
+			else if (key.special == Key::Enter) { execute(); return true; }
+			else if (key.special == Key::Escape) { setVisible(false); selected = -1; return true; }
+			else return true;
+			if (items[selected].size() == 0 && items.size() > 1) return keyDown(key);
+			if (selected < 0) selected = (int)(items.size()-1);
+			if (selected >= (int)items.size()) selected = 0;
+			return true;
+		}
+		
+		return false;
 	}
 
 
@@ -1892,19 +1965,39 @@ public:
 	}
 
 	virtual void setVisible(bool v) {
-		TransientWindow::setVisible(v);
+        if (!visible && v)
+             firstMouseUp = true;
+
+        TransientWindow::setVisible(v);
 		if (v) {
 			parent->mouseChild = this;
 			raise();
-			firstMouseUp = true;
 		}
+
+        // NTS: Do not set selected = -1 here on hide, other code in this C++
+        //      class relies on calling setVisible() then acting on selection.
+        //      Unless of course you want to hunt down random and sporadic
+        //      segfaults. --J.C.		 
 	}
 
 	/// Execute menu item.
 	void execute() {
 		if (selected >= 0) {
 			setVisible(false);
-			executeAction(items[selected]);
+            // FIXME: Some action callbacks including the "Close" command in
+            //        the system menu will delete this window object before
+            //        returning to this level in the call stack. Therefore,
+            //        copy selection index and clear it BEFORE calling the
+            //        callbacks.
+            unsigned int sel = (unsigned int)selected;
+            selected = -1;
+			
+			executeAction(items[sel]);
+
+            // WARNING: Do not access C++ class methods or variables here,
+            //          the "Close" callback may have deleted this window
+            //          out from under us! It may happen to work but
+            //          understand it becomes a use-after-free bug!			 
 		}
 	}
 };

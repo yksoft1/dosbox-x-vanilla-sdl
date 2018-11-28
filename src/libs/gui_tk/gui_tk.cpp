@@ -534,7 +534,9 @@ Window::Window(Window *parent, int x, int y, int w, int h) :
 	dirty(true),
 	visible(true),
 	parent(parent),
-	mouseChild(NULL)
+	mouseChild(NULL),
+	transient(false),
+	mouse_in_window(false)
 {
 	parent->addChild(this);
 }
@@ -630,6 +632,9 @@ bool Window::keyUp(const Key &key)
 	return (*children.rbegin())->keyUp(key);
 }
 
+void Window::mouseMovedOutside(void) {
+}
+ 
 bool Window::mouseMoved(int x, int y)
 {
 	std::list<Window *>::reverse_iterator i = children.rbegin();
@@ -640,7 +645,14 @@ bool Window::mouseMoved(int x, int y)
 		end = (i == children.rend());
 		if (w->visible && x >= w->x && x <= w->x+w->width
 			&& y >= w->y && y <= w->y+w->height
-			&& w->mouseMoved(x-w->x, y-w->y)) return true;
+			&& w->mouseMoved(x-w->x, y-w->y)) {
+            w->mouse_in_window = true;
+            return true;
+        }
+        else if (w->mouse_in_window) {
+            w->mouse_in_window = false;
+            w->mouseMovedOutside();
+        }
 	}
 	return false;
 }
@@ -651,27 +663,53 @@ bool Window::mouseDragged(int x, int y, MouseButton button)
 	return mouseChild->mouseDragged(x-mouseChild->x, y-mouseChild->y, button);
 }
 
+bool Window::mouseDownOutside(MouseButton button) {
+ 	std::list<Window *>::reverse_iterator i = children.rbegin();
+    bool handled = false;
+
+ 	while (i != children.rend()) {
+ 		Window *w = *i;
+
+ 		if (w->hasFocus()) {
+ 			if (w->mouseDownOutside(button))
+ 				handled = true;
+ 		}
+
+ 		i++;
+ 	}
+
+    return handled;
+}
+
 bool Window::mouseDown(int x, int y, MouseButton button)
 {
 	std::list<Window *>::reverse_iterator i = children.rbegin();
+	bool handled = false;
 	Window *last = NULL;
 
 	while (i != children.rend()) {
 		Window *w = *i;
 
-		if (w->visible && x >= w->x && x <= w->x+w->width && y >= w->y && y <= w->y+w->height) {
+		if (w->visible && x >= w->x && x < (w->x+w->width) && y >= w->y && y < (w->y+w->height)) {
+            if (handled) {
+                mouseChild = NULL;
+                return true;
+            }
 			mouseChild = last = w;
 			if (w->mouseDown(x-w->x, y-w->y, button) && w->raise()) {
 				return true;
 			}
 		}
-
+        else if (w->transient) {
+            handled |= w->mouseDownOutside(button);
+        }
+		 
 		i++;
 	}
 
 	mouseChild = NULL;
 	if (last != NULL) last->raise();
-	return false;
+	return handled;
 }
 
 bool Window::mouseUp(int x, int y, MouseButton button)
@@ -695,7 +733,7 @@ bool Window::mouseDoubleClicked(int x, int y, MouseButton button)
 bool BorderedWindow::mouseDown(int x, int y, MouseButton button)
 {
 	mouseChild = NULL;
-	if (x > width-border_right || y > width-border_bottom) return false;
+	if (x > width-border_right || y > height-border_bottom) return false;
 	x -= border_left; y -= border_top;
 	if (x < 0 || y < 0) return false;
 	return Window::mouseDown(x,y,button);
@@ -703,7 +741,7 @@ bool BorderedWindow::mouseDown(int x, int y, MouseButton button)
 
 bool BorderedWindow::mouseMoved(int x, int y)
 {
-	if (x > width-border_right || y > width-border_bottom) return false;
+	if (x > width-border_right || y > height-border_bottom) return false;
 	x -= border_left; y -= border_top;
 	if (x < 0 || y < 0) return false;
 	return Window::mouseMoved(x,y);
@@ -711,7 +749,7 @@ bool BorderedWindow::mouseMoved(int x, int y)
 
 bool BorderedWindow::mouseDragged(int x, int y, MouseButton button)
 {
-	if (x > width-border_right || y > width-border_bottom) return false;
+	if (x > width-border_right || y > height-border_bottom) return false;
 	x -= border_left; y -= border_top;
 	if (x < 0 || y < 0) return false;
 	return Window::mouseDragged(x,y,button);
@@ -755,7 +793,30 @@ void ToplevelWindow::paint(Drawable &d) const
 	d.drawLine(32,5,32,30);
 
     bool active = hasFocus();
-	
+
+    // FIX: "has focus" is defined as "being at the back of the child list".
+     //      Transient windows such as menus will steal focus, but we don't
+     //      want the title to flash inactive every time a menu comes up.
+     //      Avoid that by searching backwards past transient windows above
+     //      us to check if we'd be at the top anyway without the transient windows.
+    if (!active) {
+        std::list<Window *>::reverse_iterator i = parent->children.rbegin();
+        while (i != parent->children.rend()) {
+            Window *w = *i;
+
+            if (w->transient) {
+                i++;
+            }
+            else if (w == this) {
+                active = true;
+                break;
+            }
+            else {
+                break;
+            }
+        }
+    }
+	 
  	d.setColor(active ? Color::Titlebar : Color::TitlebarInactive);
 	d.fillRect(33,5,width-39,26);
 
@@ -1255,7 +1316,8 @@ Screen *Window::getScreen() { return (parent == NULL?dynamic_cast<Screen*>(this)
 
 Screen::Screen(unsigned int width, unsigned int height) :
 	Window(),
-	buffer(new Drawable(width, height))
+	buffer(new Drawable((int)width, (int)height)),
+    buffer_i_alloc(true)
 {
 	this->width = width;
 	this->height = height;
@@ -1263,7 +1325,8 @@ Screen::Screen(unsigned int width, unsigned int height) :
 
 Screen::Screen(Drawable *d) :
 	Window(),
-	buffer(d)
+	buffer(d),
+    buffer_i_alloc(true) /* our primary use is from ScreenSDL that calls new */
 {
 	this->width = d->getClipWidth();
 	this->height = d->getClipHeight();
@@ -1271,6 +1334,7 @@ Screen::Screen(Drawable *d) :
 
 Screen::~Screen()
 {
+	if (buffer_i_alloc) delete buffer;
 }
 
 void Screen::paint(Drawable &d) const
@@ -1491,6 +1555,9 @@ public:
 	}
 };
 
+ScreenSDL::~ScreenSDL() {
+}
+ 
 ScreenSDL::ScreenSDL(SDL_Surface *surface) : Screen(new SDL_Drawable(surface->w, surface->h)), surface(surface), downx(0), downy(0), lastclick(0), lastdown(0) {
 	current_abs_time = start_abs_time = SDL_GetTicks();
 	current_time = 0;

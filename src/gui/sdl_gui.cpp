@@ -522,7 +522,7 @@ public:
 			while ((p = sec->Get_prop(i++))) {
 				msg += std::string("\033[34m")+p->propname+":\033[0m "+p->Get_help()+"\n";
 			}
-			msg.replace(msg.end()-1,msg.end(),"");
+			if (!msg.empty()) msg.replace(msg.end()-1,msg.end(),"");
 			setText(msg);
 		} else {
 		std::string name = section->GetName();
@@ -848,12 +848,6 @@ public:
 			b->addActionHandler(this);
 			bar->addItem(1, name);
 			i++;
-		}
-
-		if (first_shell) {
-			(new GUI::Button(this, 12+(i/7)*110, 50+(i%7)*35, "Keyboard", 100))->addActionHandler(this);
-			bar->addItem(1, "");
-			bar->addItem(1, "Keyboard");
 		}
 	}
 
