@@ -8,7 +8,7 @@ RM		=	rm -f
 
 DBX_PATH	= ..
 
-DYNAMIC_X86 = 1
+DYNREC = 1
 
 CXXFLAGS = -O3  -DNDEBUG \
 			-std=gnu++98 -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-pointer  -mno-ms-bitfields  -I. \
@@ -23,13 +23,8 @@ CXXFLAGS = -O3  -DNDEBUG \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/x11 \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus 
 			
-ifeq ($(SVN_DYNREC), 1)
+ifeq ($(DYNREC), 1)
 	CXXFLAGS	+=  -DC_DYNREC=1
-	DYNAMIC_X86 = 0
-endif
-
-ifeq ($(DYNAMIC_X86), 1)
-	CXXFLAGS	+=  -DC_DYNAMIC_X86=32
 endif
 
 CXXFLAGS	+=	$(shell sdl2-config --cflags)
