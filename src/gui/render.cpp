@@ -118,6 +118,16 @@ void RENDER_SetPal(Bit8u entry,Bit8u red,Bit8u green,Bit8u blue) {
 static void RENDER_EmptyLineHandler(const void * src) {
 }
 
+/*HACK*/
+#if defined(__SSE__) && defined(_M_AMD64)
+# define sse2_available (1) /* SSE2 is always available on x86_64 */
+#else
+# ifdef __SSE__
+extern bool				sse2_available;
+# endif
+#endif
+/*END HACK*/
+
 static void RENDER_StartLineHandler(const void * s) {
 	if (s) {
 		const Bitu *src = (Bitu*)s;
