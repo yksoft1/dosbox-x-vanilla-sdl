@@ -239,7 +239,9 @@ void				PCSPEAKER_Init(Section*);
 void				TANDYSOUND_Init(Section*);
 void				DISNEY_Init(Section*);
 void				PS1SOUND_Init(Section*);
+#ifndef EMSCRIPTEN
 void				INNOVA_Init(Section*);
+#endif
 void				SERIAL_Init(Section*); 
 void				DONGLE_Init(Section*);
 #if C_IPX
@@ -2262,6 +2264,7 @@ void DOSBOX_SetupConfigSections(void) {
 		"the patch files for GUS playback. Patch sets used\n"
 		"with Timidity should work fine.");
 
+#ifndef EMSCRIPTEN
 	secprop = control->AddSection_prop("innova",&Null_Init,true);//done
 	Pbool = secprop->Add_bool("innova",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("Enable the Innovation SSI-2001 emulation.");
@@ -2274,6 +2277,7 @@ void DOSBOX_SetupConfigSections(void) {
 	Pint = secprop->Add_int("quality",Property::Changeable::WhenIdle,0);
 	Pint->Set_values(qualityno);
 	Pint->Set_help("Set SID emulation quality level (0 to 3).");
+#endif
 
 	secprop = control->AddSection_prop("speaker",&Null_Init,true);//done
 	Pbool = secprop->Add_bool("pcspeaker",Property::Changeable::WhenIdle,true);

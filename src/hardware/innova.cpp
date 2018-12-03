@@ -24,6 +24,7 @@
 #include "setup.h"
 #include "control.h"
 
+#ifndef EMSCRIPTEN
 #include "reSID/sid.h"
 
 #define SID_FREQ 894886
@@ -133,4 +134,4 @@ void INNOVA_Init() {
 	AddExitFunction(AddExitFunctionFuncPair(INNOVA_ShutDown),true);
 	AddVMEventFunction(VM_EVENT_RESET,AddVMEventFunctionFuncPair(INNOVA_OnReset));
 }
-
+#endif

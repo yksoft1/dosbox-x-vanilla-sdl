@@ -7253,7 +7253,9 @@ void DEBUG_Init();
 #endif
 void SBLASTER_Init();
 void GUS_Init();
+#ifndef EMSCRIPTEN
 void INNOVA_Init();
+#endif
 void PCSPEAKER_Init();
 void TANDYSOUND_Init();
 void DISNEY_Init();
@@ -8657,7 +8659,9 @@ int main(int argc, char* argv[]) {
 		DISNEY_Init();
 		GUS_Init();
 		IDE_Init();
+#ifndef EMSCRIPTEN
 		INNOVA_Init();
+#endif
 		BIOS_Init();
 		INT10_Init();
 		SERIAL_Init();
