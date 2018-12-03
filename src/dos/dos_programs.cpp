@@ -565,7 +565,6 @@ static void MOUNT_ProgramStart(Program * * make) {
 	*make=new MOUNT;
 }
 
-#if !defined(C_SDL2)
 void GUI_Run(bool pressed);
 
 class SHOWGUI : public Program {
@@ -578,7 +577,6 @@ public:
 static void SHOWGUI_ProgramStart(Program * * make) {
 	*make=new SHOWGUI;
 }
-#endif
 
 extern bool custom_bios;
 extern Bit32u floppytype;
@@ -795,6 +793,9 @@ public:
         bool swaponedrive = false;
 		bool force = false;
 		
+		//Hack To allow long commandlines
+		ChangeToLongCmd();
+		
         boot_debug_break = false;
         if (cmd->FindExist("-debug",true))
             boot_debug_break = true;
@@ -808,8 +809,6 @@ public:
 		if (cmd->FindString("-bios",bios,true))
 			bios_boot = true;
 
-		//Hack To allow long commandlines
-		ChangeToLongCmd();
 		/* In secure mode don't allow people to boot stuff. 
 		 * They might try to corrupt the data on it */
 		if(control->SecureMode()) {
@@ -1052,6 +1051,7 @@ public:
 
 				/* attach directly without using the swap list */
 				if (imageDiskList[drive-65] != NULL) {
+					imageDiskChange[drive-65] = true;
 					imageDiskList[drive-65]->Release();
 					imageDiskList[drive-65] = NULL;
 				}
@@ -1080,6 +1080,10 @@ public:
             return;
         }
 
+        /* clear the disk change flag.
+         * Most OSes don't expect the disk change error signal when they first boot up */
+        imageDiskChange[drive-65] = false;
+		 
 		bool has_read = false;
 		bool pc98_sect128 = false;
         unsigned int bootsize = imageDiskList[drive-65]->getSectSize();
@@ -1088,10 +1092,12 @@ public:
 			/* this may be one of those odd FDD images where track 0, head 0 is all 128-byte sectors
 			 * and the rest of the disk is 256-byte sectors. */
 			if (imageDiskList[drive - 65]->Read_Sector(0, 0, 1, (Bit8u *)&bootarea, 128) == 0 &&
-				imageDiskList[drive - 65]->Read_Sector(0, 0, 2, (Bit8u *)&bootarea + 128, 128) == 0) {
-				LOG_MSG("First sector is 128 byte/sector. Booting from first two sectors.");
+                imageDiskList[drive - 65]->Read_Sector(0, 0, 2, (Bit8u *)&bootarea + 128, 128) == 0 &&
+                imageDiskList[drive - 65]->Read_Sector(0, 0, 3, (Bit8u *)&bootarea + 256, 128) == 0 &&
+                imageDiskList[drive - 65]->Read_Sector(0, 0, 4, (Bit8u *)&bootarea + 384, 128) == 0) {
+                LOG_MSG("First sector is 128 byte/sector. Booting from first four sectors.");
 				has_read = true;
-				bootsize = 256; // 128 x 2
+				bootsize = 512; // 128 x 4
 				pc98_sect128 = true;
 			}
 		}
@@ -1449,16 +1455,16 @@ public:
 				mem_writeb(0x488,RDISK_EQUIP);
 				mem_writeb(0x493,F2HD_MODE);
 				mem_writeb(0x5CA,F2DD_MODE);
-				 
-				if ((ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) || pc98_sect128) {
+				
+				if (drive >= 'C') {
+                    /* hard drive */
+                    mem_writeb(0x584,0xA0/*type*/ + (drive - 'C')/*drive*/);
+                }
+				else if ((ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) || pc98_sect128) {
                     mem_writeb(0x584,0x90/*type*/ + (drive - 65)/*drive*/); /* 1.2MB 3-mode */
                 }
                 else if (ssize == 512 && heads == 2 && cyls == 80 && sects == 18) {
                     mem_writeb(0x584,0x30/*type*/ + (drive - 65)/*drive*/); /* 1.44MB */
-                }
-                else if (drive >= 'C') {
-                    /* hard drive */
-                    mem_writeb(0x584,0xA0/*type*/ + (drive - 'C')/*drive*/);
                 }
                 else {
                     // FIXME
@@ -2641,6 +2647,8 @@ bool FDC_UnassignINT13Disk(unsigned char drv);
 
 class IMGMOUNT : public Program {
 public:
+    std::vector<std::string> options;
+public:
 	void Run(void) {
 		//Hack To allow long commandlines
 		ChangeToLongCmd();
@@ -2694,6 +2702,14 @@ public:
 			WriteOut(MSG_Get("PROGRAM_IMGMOUNT_TYPE_UNSUPPORTED"), type.c_str());
 			return;
 		}
+
+        //look for -o options
+        {
+            std::string s;
+
+            while (cmd->FindString("-o", s, true))
+                options.push_back(s);
+        }
 
 		//look for -el-torito parameter and remove it from the command line
 		cmd->FindString("-el-torito",el_torito,true);
@@ -3096,6 +3112,7 @@ private:
 				if (index > 1) IDE_Hard_Disk_Detach(index);
 				imageDiskList[index]->Release();
 				imageDiskList[index] = NULL;
+				imageDiskChange[index] = true;
 				return true;
 			}
 			WriteOut("No drive loaded at specified point\n");
@@ -3284,7 +3301,7 @@ private:
 		imageDisk * newImage = new imageDiskElToritoFloppy(el_torito_cd_drive, el_torito_floppy_base, el_torito_floppy_type);
 		newImage->Addref();
 
-		DOS_Drive* newDrive = new fatDrive(newImage);
+		DOS_Drive* newDrive = new fatDrive(newImage, options);
 		newImage->Release(); //fatDrive calls Addref, and this will release newImage if fatDrive doesn't use it
 		if (!(dynamic_cast<fatDrive*>(newDrive))->created_successfully) {
 			WriteOut(MSG_Get("PROGRAM_IMGMOUNT_CANT_CREATE"));
@@ -3380,11 +3397,11 @@ private:
 			DOS_Drive* newDrive = NULL;
 			if (!errorMessage) {
 				if (vhdImage) {
-					newDrive = new fatDrive(vhdImage);
+					newDrive = new fatDrive(vhdImage, options);
 					vhdImage = NULL;
 				}
 				else {
-					newDrive = new fatDrive(paths[i].c_str(), sizes[0], sizes[1], sizes[2], sizes[3]);
+					newDrive = new fatDrive(paths[i].c_str(), sizes[0], sizes[1], sizes[2], sizes[3], options);
 				}
 				imgDisks.push_back(newDrive);
 				if (!(dynamic_cast<fatDrive*>(newDrive))->created_successfully) {
@@ -3506,7 +3523,7 @@ private:
 			return false;
 		}
 		dsk->Addref();
-		DOS_Drive* newDrive = new fatDrive(dsk);
+		DOS_Drive* newDrive = new fatDrive(dsk, options);
 		dsk->Release();
 		if (!(dynamic_cast<fatDrive*>(newDrive))->created_successfully) {
 			WriteOut(MSG_Get("PROGRAM_IMGMOUNT_CANT_CREATE"));
@@ -3531,6 +3548,7 @@ private:
 			imageDiskList[bios_drive_index]->Release();
 		}
 		imageDiskList[bios_drive_index] = image;
+		imageDiskChange[bios_drive_index] = true;
 		image->Addref();
 
 		// let FDC know if we mounted a floppy
@@ -3605,6 +3623,7 @@ private:
 				if (imageDiskList[index] == image) {
 					if (index > 1) IDE_Hard_Disk_Detach(index);
 					imageDiskList[index]->Release();
+					imageDiskChange[index] = true;
 					imageDiskList[index] = NULL;
 				}
 			}
@@ -4649,9 +4668,7 @@ void DOS_SetupPrograms(void) {
         PROGRAMS_MakeFile("MOUSE.COM", MOUSE_ProgramStart);
 
 	PROGRAMS_MakeFile("A20GATE.COM",A20GATE_ProgramStart);
-#if !defined(C_SDL2)
 	PROGRAMS_MakeFile("SHOWGUI.COM",SHOWGUI_ProgramStart);
-#endif
 	PROGRAMS_MakeFile("NMITEST.COM",NMITEST_ProgramStart);
     PROGRAMS_MakeFile("RE-DOS.COM",REDOS_ProgramStart);
 

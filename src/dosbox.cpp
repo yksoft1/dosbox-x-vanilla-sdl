@@ -789,6 +789,9 @@ void Init_VGABIOS() {
 	assert(section != NULL);
 
     if (IS_PC98_ARCH) {
+        // There IS no VGA BIOS, this is PC-98 mode!
+        VGA_BIOS_SEG = 0xC000;
+        VGA_BIOS_SEG_END = 0xC000; // Important: DOS kernel uses this to determine where to place the private area!		
         VGA_BIOS_Size = 0;
         return;
     }
@@ -1031,7 +1034,7 @@ void DOSBOX_SetupConfigSections(void) {
 	const char *vga_ac_mapping_settings[] = { "", "auto", "4x4", "4low", "first16", 0 };
 	
 	const char* irqhandler[] = {
-		"", "simple", "mask_isr", 0 };
+		"", "simple", "cooperative_2nd", 0 };
 		
 	/* Setup all the different modules making up DOSBox */
 	const char* machines[] = {
@@ -1051,7 +1054,7 @@ void DOSBOX_SetupConfigSections(void) {
 		0 };
 
 	const char* cores[] = { "auto",
-#if (C_DYNAMIC_X86)
+#if (C_DYNAMIC_X86) || (C_DYNREC)
 		"dynamic",
 #endif
 		"normal", 
@@ -1384,6 +1387,9 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool->Set_help("If set, PC-98 emulation will allow the DOS application to enable the 'scanline effect'\n"
                     "in 200-line graphics modes upconverted to 400-line raster display. When enabled, odd\n"
                     "numbered scanlines are blanked instead of doubled");
+					
+    Pbool = secprop->Add_bool("pc-98 bus mouse",Property::Changeable::WhenIdle,true);
+    Pbool->Set_help("Enable PC-98 bus mouse emulation. Disabling this option does not disable INT 33h emulation.");
 
 	Pstring = secprop->Add_string("pc-98 video mode",Property::Changeable::WhenIdle,"");
 	Pstring->Set_values(pc98videomodeopt);
@@ -1506,12 +1512,9 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool = secprop->Add_bool("dma page registers write-only",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("Normally (on AT hardware) the DMA page registers are read/write. Set this option if you want to emulate PC/XT hardware where the page registers are write-only.");
 
-	Pbool = secprop->Add_bool("pc-98 auto eoi master",Property::Changeable::WhenIdle,true);
-    Pbool->Set_help("If set, and running in PC-98 mode, the master PIC is programmed to run in auto EOI mode");
-
-    Pbool = secprop->Add_bool("pc-98 auto eoi slave",Property::Changeable::WhenIdle,true);
-    Pbool->Set_help("If set, and running in PC-98 mode, the slave PIC is programmed to run in auto EOI mode");
-	 
+	Pbool = secprop->Add_bool("cascade interrupt ignore in service",Property::Changeable::WhenIdle,false);
+	Pbool->Set_help("If set, PIC emulation will allow slave pic interrupts even if the cascade interrupt is still \"in service\". This is OFF by default. It is a hack for troublesome games.");
+						 
 	Pbool = secprop->Add_bool("enable slave pic",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Enable slave PIC (IRQ 8-15). Set this to 0 if you want to emulate a PC/XT type arrangement with IRQ 0-7 and no IRQ 2 cascade.");
 

@@ -238,6 +238,12 @@ extern RGB Titlebar;
 /// Title bar text color for windows. May be customized.
 extern RGB TitlebarText;
 
+/// Title bar color for windows. May be customized.
+extern RGB TitlebarInactive;
+
+/// Title bar text color for windows. May be customized.
+extern RGB TitlebarInactiveText;
+
 /// Convert separate r, g, b and a values (each 0-255) to an RGB value.
 static inline RGB rgba(int r, int g, int b, int a=0) {
 	return (((r&255)<<RedShift)|((g&255)<<GreenShift)|((b&255)<<BlueShift)|((a&255)<<AlphaShift));
@@ -349,6 +355,67 @@ template <typename STR> class NativeString<const STR*> : public NativeString<STR
 
 /// 'less-than' comparison between pointer addresses
 struct ltvoid { bool operator()(const void* s1, const void* s2) const { return s1 < s2; } };
+
+
+class Refcount {
+public:
+    /* NTS: Refcount starts at zero because there's so much of this damn code that expects to
+     *      create UI elements with just "new Window blah blah" and for the class to delete it.
+     *      This makes the transition to proper refcounting less painful and more gradual. */
+    Refcount() : _refcount(0) { }
+    virtual ~Refcount() {
+        if (_refcount != 0) fprintf(stderr,"WARNING: GUI_TK::Refcount object %p refcount is nonzero (%d) on destructor\n",(void*)this,_refcount);
+    }
+public:
+    int addref(void) {
+        return ++_refcount;
+    }
+    int release(void) {
+        int ref = --_refcount;
+         if (ref < 0) fprintf(stderr,"WARNING: GUI_TK::Refcount object %p refcount is negative (%d) after release\n",(void*)this,_refcount);
+        if (ref == 0) delete this;
+         return ref;
+    }
+private:
+    volatile int _refcount;
+};
+
+template <class C> class RefcountAuto : public Refcount{
+public:
+    RefcountAuto() : Refcount(), _ptr(NULL) { }
+    RefcountAuto(C * const np) : _ptr(np) { if (_ptr != NULL) _ptr->addref(); }
+    virtual ~RefcountAuto() { if (_ptr != NULL) _ptr->release(); }
+public:
+    C* operator=(C * const np) {
+        if (_ptr != np) {
+            C* _old = _ptr;
+            _ptr = np;
+            if (_ptr != NULL) _ptr->addref();
+            if (_old != NULL) _old->release();
+        }
+         return _ptr;
+    }
+    bool operator==(const C * const np) const {
+        return (_ptr == np);
+    }
+    bool operator!=(const C * const np) const {
+        return !(*this == np);
+    }
+    bool operator!() const { /* ex: if (!ptr) ... equiv. if (ptr == NULL) */
+        return (_ptr == NULL);
+    }
+    C* getptr(void) const {
+        return _ptr;
+    }
+    C& operator*(void) const {
+        return *_ptr;
+    }
+    C* operator->(void) const {
+        return _ptr;
+    }
+private:
+    C*              _ptr;
+};
 
 /** \brief Simple STL-based string class.
  *
@@ -504,7 +571,7 @@ public:
  *  \em not a GUI window with decorations like border and title bar. See ToplevelWindow
  *  for that.
  */
-class Window {
+class Window : public Refcount {
 protected:
 	friend class ToplevelWindow;
 	friend class TransientWindow;
@@ -525,6 +592,9 @@ protected:
 	/// \c true if this window should be visible on screen.
 	bool visible;
 
+    /// \c true if the user should be allowed to TAB to this window.
+    bool tabbable;
+
 	/// Parent window.
 	Window *const parent;
 
@@ -532,6 +602,15 @@ protected:
 	/** It receives all drag/up/click/doubleclick events until an up event is received */
 	Window  *mouseChild;
 
+    /// \c true if this window is transient (such as menu popus)
+    bool transient;
+
+    /// \c toplevel window
+    bool toplevel;
+	
+    /// \c mouse is within the boundaries of the window
+    bool mouse_in_window;
+	 
 	/// Child windows.
 	/** Z ordering is done in list order. The first element is the lowermost
 	 *  window. This window's content is below all children. */
@@ -607,7 +686,7 @@ public:
 
 	/// Show or hide this window.
 	/** By default, most windows are shown when created. Hidden windows do not receive any events. */
-	virtual void setVisible(bool v) { visible = !!v; parent->setDirty(); }
+	virtual void setVisible(bool v) { visible = !!v; parent->setDirty(); if (!visible) mouse_in_window = false; }
 
 	/// Returns \c true if this window is visible.
 	virtual bool isVisible() const { return (!parent || parent->isVisible()) && visible; }
@@ -624,6 +703,8 @@ public:
 
 	/// Mouse was moved. Returns true if event was handled.
 	virtual bool mouseMoved(int x, int y);
+	/// Mouse was moved outside the window (when it was once inside the window)
+ 	virtual void mouseMovedOutside(void);	
 	/// Mouse was moved while a button was pressed. Returns true if event was handled.
 	virtual bool mouseDragged(int x, int y, MouseButton button);
 	/// Mouse was pressed. Returns true if event was handled.
@@ -635,7 +716,10 @@ public:
 	virtual bool mouseClicked(int x, int y, MouseButton button);
 	/// Mouse was double-clicked. Returns true if event was handled.
 	virtual bool mouseDoubleClicked(int x, int y, MouseButton button);
-
+	/// Mouse was pressed outside the bounds of the window, if this window has focus (for transient windows). Returns true if event was handled.
+    /// Transient windows by default should disappear.
+ 	virtual bool mouseDownOutside(MouseButton button);
+	
 	/// Key was pressed. Returns true if event was handled.
 	virtual bool keyDown(const Key &key);
 	/// Key was released. Returns true if event was handled.
@@ -695,6 +779,7 @@ class Screen : public Window {
 protected:
 	/// Screen buffer.
 	Drawable *const buffer;
+	bool buffer_i_alloc;
 
 	/// Clipboard.
 	String clipboard;
@@ -863,6 +948,7 @@ public:
 	 *  later on will not change the available area.
 	 */
 	ScreenSDL(SDL_Surface *surface);
+	virtual ~ScreenSDL();
 
 	/** Change current surface
 	 *
@@ -1020,6 +1106,11 @@ public:
 	/// Draw a straight line from (\p x1,\p y1) to (\p x2,\p y2).
 	void drawLine(int x1, int y1, int x2, int y2) { gotoXY(x1,y1); drawLine(x2,y2); };
 
+	/// Draw a straight line from the current position to the given coordinates.
+	void drawDotLine(int x2, int y2);
+	/// Draw a straight line from (\p x1,\p y1) to (\p x2,\p y2).
+	void drawDotLine(int x1, int y1, int x2, int y2) { gotoXY(x1,y1); drawDotLine(x2,y2); };
+
 	/// Draw a circle centered at the current position with diameter \p d.
 	/** The current position is not changed. */
 	void drawCircle(int d);
@@ -1034,6 +1125,13 @@ public:
 	/** The current position is set to the top left corner. */
 	void drawRect(int x, int y, int w, int h) { gotoXY(x, y); drawRect(w, h); };
 
+	/// Draw a rectangle with top left at the current position and size \p w, \p h.
+	/** The current position is not changed. */
+	void drawDotRect(int w, int h);
+	/// Draw a rectangle with top left at the given coordinates and size \p w, \p h.
+	/** The current position is set to the top left corner. */
+	void drawDotRect(int x, int y, int w, int h) { gotoXY(x, y); drawDotRect(w, h); };
+	
 	/// Flood-fill an area at the current position.
 	/** A continuous area with the same RGB value as the selected pixel is
 	    changed to the current color. The current position is not changed. */
@@ -1397,7 +1495,7 @@ public:
 	/** If \p width is given, the resulting label is a word-wrapped multiline label */
 	template <typename STR> Label(Window *parent, int x, int y, const STR text, int width = 0, const Font *font = Font::getFont("default"), RGB color = Color::Text) :
 		Window(parent, x, y, (width?width:1), 1), font(font), color(color), text(text), interpret(width != 0)
-	{ resize(); }
+	{ resize(); tabbable = false; }
 
 	/// Set a new text. Size of the label is adjusted accordingly.
 	template <typename STR> void setText(const STR text) { this->text = text; resize(); }
@@ -1426,7 +1524,7 @@ public:
 	}
 
 	/// Paint label
-	virtual void paint(Drawable &d) const { d.setColor(color); d.drawText(0, font->getAscent(), text, interpret, 0); }
+	virtual void paint(Drawable &d) const { d.setColor(color); d.drawText(0, font->getAscent(), text, interpret, 0); if (hasFocus()) d.drawDotRect(0,0,width-1,height-1); }
 
 	virtual bool raise() { return false; }
 };
@@ -1465,6 +1563,9 @@ protected:
 	/// Horizontal scrolling offset.
 	int offset;
 
+    /// Allow user to type Tab into multiline
+    bool enable_tab_input;
+
 	/// Ensure that pos is visible.
 	void checkOffset() {
 		if (lastpos == pos) return;
@@ -1491,7 +1592,7 @@ public:
 	/// Create an input with given position and width. If not set, height is calculated from the font and input is single-line.
 	Input(Window *parent, int x, int y, int w, int h = 0) :
 		Window(parent,x,y,w,(h?h:Font::getFont("input")->getHeight()+10)), ActionEventSource("GUI::Input"),
-		text(""), pos(0), lastpos(0), posx(0), posy(0), start_sel(0), end_sel(0), blink(true), insert(true), multi(h != 0), offset(0)
+		text(""), pos(0), lastpos(0), posx(0), posy(0), start_sel(0), end_sel(0), blink(true), insert(true), multi(h != 0), offset(0), enable_tab_input(false)
 	{ Timer::add(this,30); }
 
 	~Input() {
@@ -1722,6 +1823,7 @@ public:
 			last = p;
 			p = p->getParent();
 		}
+		transient = true;
 		dynamic_cast<ToplevelWindow *>(last2)->addCloseHandler(this);
 	}
 
@@ -1742,7 +1844,11 @@ public:
 	virtual int getY() const { return y-realparent->getScreenY(); }
 	virtual void setVisible(bool v) { if (v) raise(); Window::setVisible(v); }
 	virtual void windowMoved(Window *src, int x, int y) { move(relx,rely); }
-
+	virtual bool mouseDownOutside(MouseButton button) {
+        setVisible(false);
+        return true;
+    }
+	 
 	/// Put window on top of all other windows without changing their relative order
 	virtual bool raise() {
 		Window *last = parent->children.back();
@@ -1787,6 +1893,10 @@ protected:
 	virtual void selectItem(int x, int y) {
 		y -= 2;
 		selected = -1;
+
+        // mouse input should select nothing if outside the bounds of this menu
+        if (x < 0 || x >= width || y < 0 || y >= height) return;
+		 
 		const int height = Font::getFont("menu")->getHeight()+2;
 		std::vector<String>::iterator i;
 		for (i = items.begin(); i != items.end() && y > 0; ++i) {
@@ -1824,7 +1934,7 @@ public:
 	 *  always the screen the logical parent resides on. */
 	template <typename STR> Menu(Window *parent, int x, int y, const STR name) :
 		TransientWindow(parent,x,y,4,4), ActionEventSource(name), selected(-1)
-		{ setVisible(false); }
+		{ setVisible(false); tabbable = false;}
 
 	~Menu() {
 		setVisible(false);
@@ -1835,38 +1945,89 @@ public:
 
 	/// Highlight current item.
 	virtual bool mouseMoved(int x, int y)  {
-		selectItem(x,y);
-		return true;
+        if (visible) {
+			firstMouseUp = false;
+     		selectItem(x,y);
+ 	    	return true;
+        }
+
+        return false;
 	}
+
+	void mouseMovedOutside(void) {
+        if (visible && selected >= 0) {
+			firstMouseUp = false;
+            selected = -1;
+            setDirty();
+        }
+    }
 
 	/// Highlight current item.
 	virtual bool mouseDragged(int x, int y, MouseButton b)  {
-		selectItem(x,y);
-		return true;
+        if (visible) {
+            if (x >= 0 && x < width && y >= 0 && y < height)
+                firstMouseUp = false;
+				 
+            selectItem(x,y);
+            return true;
+        }
+
+        return false;
 	}
 
-	virtual bool mouseDown(int x, int y, MouseButton button)  { return true; }
+	virtual bool mouseDown(int x, int y, MouseButton button)  { 
+        if (visible)
+            return true;
 
+        return false;	
+	}
+
+	virtual bool mouseDownOutside(MouseButton button) {
+        if (visible) {
+            setVisible(false);
+            selected = -1;
+            return true;
+        }
+
+        return false;
+    }
+	
 	/// Possibly select item.
 	virtual bool mouseUp(int x, int y, MouseButton button)  {
-		selectItem(x,y);
-		if (firstMouseUp) firstMouseUp = false;
-		else setVisible(false);
-		execute();
-		return true;
+        if (visible) {
+            selectItem(x,y);
+            if (firstMouseUp) firstMouseUp = false;
+            else setVisible(false);
+            execute();
+            return true;
+        }
+
+        return false;
 	}
 
 	/// Handle keyboard input.
 	virtual bool keyDown(const Key &key) {
-		if (key.special == Key::Up) selected--;
-		else if (key.special == Key::Down) selected++;
-		else if (key.special == Key::Enter) { execute(); return true; }
-		else if (key.special == Key::Escape) { setVisible(false); return true; }
-		else return true;
-		if (items[selected].size() == 0 && items.size() > 1) return keyDown(key);
-		if (selected < 0) selected = (int)(items.size()-1);
-		if (selected >= (int)items.size()) selected = 0;
-		return true;
+		if (visible) {
+            if (key.special == Key::Up) {
+                if (selected == 0)
+                    selected = items.size() - 1;
+                else
+                    selected--;
+            }
+            else if (key.special == Key::Down) {
+                if ((size_t)(++selected) == items.size())
+                    selected = 0;
+            }
+			else if (key.special == Key::Enter) { execute(); return true; }
+			else if (key.special == Key::Escape) { setVisible(false); selected = -1; return true; }
+			else return true;
+			if (items[selected].size() == 0 && items.size() > 1) return keyDown(key);
+			if (selected < 0) selected = (int)(items.size()-1);
+			if (selected >= (int)items.size()) selected = 0;
+			return true;
+		}
+		
+		return false;
 	}
 
 
@@ -1886,19 +2047,39 @@ public:
 	}
 
 	virtual void setVisible(bool v) {
-		TransientWindow::setVisible(v);
+        if (!visible && v)
+             firstMouseUp = true;
+
+        TransientWindow::setVisible(v);
 		if (v) {
 			parent->mouseChild = this;
 			raise();
-			firstMouseUp = true;
 		}
+
+        // NTS: Do not set selected = -1 here on hide, other code in this C++
+        //      class relies on calling setVisible() then acting on selection.
+        //      Unless of course you want to hunt down random and sporadic
+        //      segfaults. --J.C.		 
 	}
 
 	/// Execute menu item.
 	void execute() {
 		if (selected >= 0) {
 			setVisible(false);
-			executeAction(items[selected]);
+            // FIXME: Some action callbacks including the "Close" command in
+            //        the system menu will delete this window object before
+            //        returning to this level in the call stack. Therefore,
+            //        copy selection index and clear it BEFORE calling the
+            //        callbacks.
+            unsigned int sel = (unsigned int)selected;
+            selected = -1;
+			
+			executeAction(items[sel]);
+
+            // WARNING: Do not access C++ class methods or variables here,
+            //          the "Close" callback may have deleted this window
+            //          out from under us! It may happen to work but
+            //          understand it becomes a use-after-free bug!			 
 		}
 	}
 };
@@ -1979,7 +2160,7 @@ protected:
 public:
 	/// Create a menubar with given position and size
 	/** Height is autocalculated from font size */
-	Menubar(Window *parent, int x, int y, int w) : Window(parent,x,y,w,Font::getFont("menu")->getHeight()+5), ActionEventSource("GUI::Menubar"), selected(-1), lastx(0) {}
+	Menubar(Window *parent, int x, int y, int w) : Window(parent,x,y,w,Font::getFont("menu")->getHeight()+5), ActionEventSource("GUI::Menubar"), selected(-1), lastx(0) {tabbable = false;}
 
 	/// Add a Menu.
 	template <typename STR> void addMenu(const STR name) {
@@ -2176,6 +2357,9 @@ public:
 		close = new GUI::Button(this, width/2-40, 10, "Close", 70);
 		close->addActionHandler(this);
 		setText(text);
+
+		close->raise(); /* make sure keyboard focus is on the close button */
+		this->raise(); /* make sure THIS WINDOW has the keyboard focus */		
 	}
 
 	/// Set a new text. Size of the box is adjusted accordingly.
@@ -2201,6 +2385,7 @@ template <typename STR> ToplevelWindow::ToplevelWindow(Screen *parent, int x, in
 #endif
 	systemMenu->addItem("Close");
 	systemMenu->addActionHandler(this);
+	toplevel = true;
 }
 
 template <typename STR> Button::Button(Window *parent, int x, int y, const STR text, int w, int h) :

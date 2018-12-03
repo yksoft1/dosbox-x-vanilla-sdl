@@ -60,13 +60,14 @@ static int			cursor;
 static bool			running;
 static int			saved_bpp;
 static bool			shell_idle;
+#if !defined(C_SDL2)
 static int			old_unicode;
+#endif
 static bool			mousetoggle;
 static bool			shortcut=false;
 static SDL_Surface*		screenshot;
 static SDL_Surface*		background;
 
-#if !defined(C_SDL2)
 /* Prepare screen for UI */
 void GUI_LoadFonts(void) {
 	GUI::Font::addFont("default",new GUI::BitmapFont(int10_font_14,14,10));
@@ -112,6 +113,8 @@ static void getPixel(Bits x, Bits y, int &r, int &g, int &b, int shift)
 extern bool dos_kernel_disabled;
 extern Bitu currentWindowWidth, currentWindowHeight;
 
+void GFX_GetSizeAndPos(int &x,int &y,int &width, int &height, bool &fullscreen);
+
 static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
 	GFX_EndUpdate(0);
 	GFX_SetTitle(-1,-1,-1,true);
@@ -126,58 +129,80 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
 	// Comparable to the code of intro.com, but not the same! (the code of intro.com is called from within a com file)
 	shell_idle = !dos_kernel_disabled && first_shell && (DOS_PSP(dos.psp()).GetSegment() == DOS_PSP(dos.psp()).GetParent());
 
-	int w, h;
+	int sx, sy, sw, sh;
 	bool fs;
-	GFX_GetSize(w, h, fs);
-	if (w <= 400) {
-		w *=2; h *=2;
-	}
+	GFX_GetSizeAndPos(sx, sy, sw, sh, fs);
 
-    if (!fs) {
-        if (w < currentWindowWidth)
-            w = currentWindowWidth;
-        if (h < currentWindowHeight)
-            h = currentWindowHeight;
+    int dw,dh;
+#if defined(C_SDL2)
+    {
+        dw = 640; dh = 480;
+
+        SDL_Window* GFX_GetSDLWindow(void);
+        SDL_Window *w = GFX_GetSDLWindow();
+        SDL_GetWindowSize(w,&dw,&dh);
     }
+#else	
+    dw = (int)currentWindowWidth;
+    dh = (int)currentWindowHeight;
+#endif
 
+    if (dw < 640) dw = 640;
+    if (dh < 480) dh = 480;
+
+    assert(sx < dw);
+    assert(sy < dh);
+
+    int sw_draw = sw,sh_draw = sh;
+
+    if ((sx+sw_draw) > dw) sw_draw = dw-sx;
+    if ((sy+sh_draw) > dh) sh_draw = dh-sy;
+
+    assert((sx+sw_draw) <= dw);
+    assert((sy+sh_draw) <= dh);
+
+    assert(sw_draw > 0);
+    assert(sh_draw > 0);
+
+    assert(sw_draw <= sw);
+    assert(sh_draw <= sh);
+
+#if !defined(C_SDL2)
 	old_unicode = SDL_EnableUNICODE(1);
 	SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY,SDL_DEFAULT_REPEAT_INTERVAL);
-	screenshot = SDL_CreateRGBSurface(SDL_SWSURFACE, w, h, 32, GUI::Color::RedMask, GUI::Color::GreenMask, GUI::Color::BlueMask, 0);
+#endif
+	screenshot = SDL_CreateRGBSurface(SDL_SWSURFACE, dw, dh, 32, GUI::Color::RedMask, GUI::Color::GreenMask, GUI::Color::BlueMask, 0);
+    SDL_FillRect(screenshot,0,0);
 
 	// create screenshot for fade effect
-	int rs = screenshot->format->Rshift, gs = screenshot->format->Gshift, bs = screenshot->format->Bshift, am = GUI::Color::AlphaMask;
-	for (int y = 0; y < h; y++) {
-		Bit32u *bg = (Bit32u*)(y*screenshot->pitch + (char*)screenshot->pixels);
-		for (int x = 0; x < w; x++) {
+	unsigned int rs = screenshot->format->Rshift, gs = screenshot->format->Gshift, bs = screenshot->format->Bshift;
+	for (unsigned int y = 0; (int)y < sh_draw; y++) {
+		Bit32u *bg = (Bit32u*)((y+sy)*(unsigned int)screenshot->pitch + (char*)screenshot->pixels) + sx;
+		for (unsigned int x = 0; (int)x < sw_draw; x++) {
 			int r = 0, g = 0, b = 0;
-			getPixel(x    *(int)render.src.width/w, y    *(int)render.src.height/h, r, g, b, 0);
+			getPixel(x    *(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 0);
 			bg[x] = r << rs | g << gs | b << bs;
 		}
 	}
 
-	background = SDL_CreateRGBSurface(SDL_SWSURFACE, w, h, 32, GUI::Color::RedMask, GUI::Color::GreenMask, GUI::Color::BlueMask, GUI::Color::AlphaMask);
-	// use a blurred and sepia-toned screenshot as menu background
-	for (int y = 0; y < h; y++) {
-		Bit32u *bg = (Bit32u*)(y*background->pitch + (char*)background->pixels);
-		for (int x = 0; x < w; x++) {
+	background = SDL_CreateRGBSurface(SDL_SWSURFACE, dw, dh, 32, GUI::Color::RedMask, GUI::Color::GreenMask, GUI::Color::BlueMask, 0);
+    SDL_FillRect(background,0,0);
+	for (int y = 0; y < sh_draw; y++) {
+		Bit32u *bg = (Bit32u*)((y+sy)*(unsigned int)background->pitch + (char*)background->pixels) + sx;
+		for (int x = 0; x < sw_draw; x++) {
 			int r = 0, g = 0, b = 0;
-#ifdef WIN32
-			getPixel(x    *(int)render.src.width/w, y    *(int)render.src.height/h, r, g, b, 0);
-			bg[x] = r << rs | g << gs | b << bs | am;
-#else
-			getPixel(x    *(int)render.src.width/w, y    *(int)render.src.height/h, r, g, b, 3); 
-			getPixel((x-1)*(int)render.src.width/w, y    *(int)render.src.height/h, r, g, b, 3); 
-			getPixel(x    *(int)render.src.width/w, (y-1)*(int)render.src.height/h, r, g, b, 3); 
-			getPixel((x-1)*(int)render.src.width/w, (y-1)*(int)render.src.height/h, r, g, b, 3); 
-			getPixel((x+1)*(int)render.src.width/w, y    *(int)render.src.height/h, r, g, b, 3); 
-			getPixel(x    *(int)render.src.width/w, (y+1)*(int)render.src.height/h, r, g, b, 3); 
-			getPixel((x+1)*(int)render.src.width/w, (y+1)*(int)render.src.height/h, r, g, b, 3); 
-			getPixel((x-1)*(int)render.src.width/w, (y+1)*(int)render.src.height/h, r, g, b, 3); 
+			getPixel(x    *(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
+			getPixel((x-1)*(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
+			getPixel(x    *(int)render.src.width/sw, (y-1)*(int)render.src.height/sh, r, g, b, 3); 
+			getPixel((x-1)*(int)render.src.width/sw, (y-1)*(int)render.src.height/sh, r, g, b, 3); 
+			getPixel((x+1)*(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
+			getPixel(x    *(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
+			getPixel((x+1)*(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
+			getPixel((x-1)*(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
 			int r1 = (int)((r * 393 + g * 769 + b * 189) / 1351); // 1351 -- tweak colors 
 			int g1 = (int)((r * 349 + g * 686 + b * 168) / 1503); // 1203 -- for a nice 
 			int b1 = (int)((r * 272 + g * 534 + b * 131) / 2340); // 2140 -- golden hue 
-			bg[x] = r1 << rs | g1 << gs | b1 << bs | am; 
-#endif
+			bg[x] = r1 << rs | g1 << gs | b1 << bs; 
 		}
 	}
 
@@ -187,9 +212,38 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
 	mousetoggle = mouselocked;
 	if (mouselocked) GFX_CaptureMouse();
 
-	SDL_Surface* sdlscreen = SDL_SetVideoMode(w, h, 32, SDL_SWSURFACE|(fs?SDL_FULLSCREEN:0));
-	if (sdlscreen == NULL) E_Exit("Could not initialize video mode %ix%ix32 for UI: %s", w, h, SDL_GetError());
+#if defined(C_SDL2)
+    extern SDL_Window * GFX_SetSDLSurfaceWindow(Bit16u width, Bit16u height);
 
+    void GFX_SetResizeable(bool enable);
+    GFX_SetResizeable(false);
+	 
+    SDL_Window* window = GFX_SetSDLSurfaceWindow(dw, dh);
+    if (window == NULL) E_Exit("Could not initialize video mode for mapper: %s",SDL_GetError());
+    SDL_Surface* sdlscreen = SDL_GetWindowSurface(window);
+    if (sdlscreen == NULL) E_Exit("Could not initialize video mode for mapper: %s",SDL_GetError());
+
+	// fade out
+ 	// Jonathan C: do it FASTER!
+ 	SDL_Event event;
+    SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_BLEND);
+ 	for (int i = 0xff; i > 0; i -= 0x30) { 
+ 		SDL_SetSurfaceAlphaMod(screenshot, i); 
+ 		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
+ 		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
+        SDL_Window* GFX_GetSDLWindow(void);
+        SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+ 		while (SDL_PollEvent(&event)); 
+ 		SDL_Delay(40); 
+ 	} 
+    SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_NONE);
+
+    void GFX_SetResizeable(bool enable);
+    GFX_SetResizeable(true);	 
+#else	
+	SDL_Surface* sdlscreen = SDL_SetVideoMode(dw, dh, 32, SDL_SWSURFACE|(fs?SDL_FULLSCREEN:0));
+	if (sdlscreen == NULL) E_Exit("Could not initialize video mode %ix%ix32 for UI: %s", dw, dh, SDL_GetError());
+ 
 	// fade out
 	// Jonathan C: do it FASTER!
 	SDL_Event event; 
@@ -201,9 +255,14 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
 		while (SDL_PollEvent(&event)); 
 		SDL_Delay(40); 
 	} 
- 
+#endif
 	SDL_BlitSurface(background, NULL, sdlscreen, NULL);
+#if defined(C_SDL2)
+    SDL_Window* GFX_GetSDLWindow(void);
+    SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+#else		
 	SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
+#endif
 
 	if (screen) screen->setSurface(sdlscreen);
 	else screen = new GUI::ScreenSDL(sdlscreen);
@@ -219,6 +278,22 @@ static void UI_Shutdown(GUI::ScreenSDL *screen) {
 	SDL_Surface *sdlscreen = screen->getSurface();
 	render.src.bpp = saved_bpp;
 
+#if defined(C_SDL2)
+	// fade in
+ 	// Jonathan C: do it FASTER!
+ 	SDL_Event event;
+    SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_BLEND);
+ 	for (unsigned int i = 0x00; i < 0xff; i += 0x30) {
+ 		SDL_SetSurfaceAlphaMod(screenshot, i); 
+ 		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
+ 		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
+        SDL_Window* GFX_GetSDLWindow(void);
+        SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+ 		while (SDL_PollEvent(&event)); 
+ 		SDL_Delay(40); 
+ 	} 
+    SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_NONE);
+#else	
 	// fade in
 	// Jonathan C: do it FASTER!
 	SDL_Event event;
@@ -230,6 +305,7 @@ static void UI_Shutdown(GUI::ScreenSDL *screen) {
 		while (SDL_PollEvent(&event)) {};
 		SDL_Delay(40); 
 	}
+#endif
 
 	// clean up
 	if (mousetoggle) GFX_CaptureMouse();
@@ -250,8 +326,10 @@ static void UI_Shutdown(GUI::ScreenSDL *screen) {
 	GFX_ResetScreen();
 #endif
 #endif
+#if !defined(C_SDL2)
 	SDL_EnableUNICODE(old_unicode);
 	SDL_EnableKeyRepeat(0,0);
+#endif
 	GFX_SetTitle(-1,-1,-1,false);
 
 	void GFX_ForceRedrawScreen(void);
@@ -444,7 +522,7 @@ public:
 			while ((p = sec->Get_prop(i++))) {
 				msg += std::string("\033[34m")+p->propname+":\033[0m "+p->Get_help()+"\n";
 			}
-			msg.replace(msg.end()-1,msg.end(),"");
+			if (!msg.empty()) msg.replace(msg.end()-1,msg.end(),"");
 			setText(msg);
 		} else {
 		std::string name = section->GetName();
@@ -459,20 +537,59 @@ class SectionEditor : public GUI::ToplevelWindow {
 	Section_prop * section;
 public:
 	SectionEditor(GUI::Screen *parent, int x, int y, Section_prop *section) :
-		ToplevelWindow(parent, x, y, 510, 300, ""), section(section) {
+		ToplevelWindow(parent, x, y, 510, 442, ""), section(section) {
 		if (section == NULL) {
 			LOG_MSG("BUG: SectionEditor constructor called with section == NULL\n");
 			return;
 		}
+
+        int first_row_y = 40;
+        int row_height = 30;
+        int first_column_x = 5;
+        int column_width = 250;
+        int button_row_h = 26;
+        int button_row_padding_y = 5 + 5;
+
+        int num_prop = 0;
+		while (section->Get_prop(num_prop) != NULL) num_prop++;
+        int allowed_dialog_y = parent->getHeight() - 25 - (border_top + border_bottom);
+		
+        int items_per_col_max =
+            (allowed_dialog_y - (button_row_h + button_row_padding_y + row_height - 1)) / row_height;
+        if (items_per_col_max < 4) items_per_col_max = 4;
+        int items_per_col = 1;
+        int columns = 1;
+
+        /* HACK: The titlebar doesn't look very good if the dialog is one column wide
+         *       and the text spills over the nearby UI elements... */
+        if ((strlen(section->GetName())+18) > 26)
+            columns++;
+		
+        /* NTS: Notice assign from compute then compare */
+        while ((items_per_col=((num_prop+columns-1)/columns)) > items_per_col_max)
+            columns++;
+
+        int button_row_y = first_row_y + (items_per_col * row_height);
+        int button_w = 70;
+        int button_pad_w = 10;
+        int button_row_w = ((button_pad_w + button_w) * 3) - button_pad_w;
+        int button_row_cx = first_column_x + (((columns * column_width) + first_column_x - button_row_w) / 2);
+		
+        resize(first_column_x + (columns * column_width) + first_column_x + border_left + border_right,
+               button_row_y + button_row_h + button_row_padding_y + border_top + border_bottom);
+	
+        if ((this->y + this->getHeight()) > parent->getHeight())
+            move(this->x,parent->getHeight() - this->getHeight());
+		
 		std::string title(section->GetName());
 		title[0] = std::toupper(title[0]);
 		setTitle("Configuration for "+title);
 		new GUI::Label(this, 5, 10, "Settings:");
-		GUI::Button *b = new GUI::Button(this, 120, 220, "Cancel", 70);
+		GUI::Button *b = new GUI::Button(this, button_row_cx, button_row_y, "Cancel", button_w);
 		b->addActionHandler(this);
-		b = new GUI::Button(this, 200, 220, "Help", 70);
+		b = new GUI::Button(this, button_row_cx + (button_w + button_pad_w), button_row_y, "Help", button_w);
 		b->addActionHandler(this);
-		b = new GUI::Button(this, 280, 220, "OK", 70);
+		b = new GUI::Button(this, button_row_cx + (button_w + button_pad_w)*2, button_row_y, "OK", button_w);
 
 		int i = 0;
 		Property *prop;
@@ -486,13 +603,13 @@ public:
 			Prop_multival_remain* pmulti_remain = dynamic_cast<Prop_multival_remain*>(prop);
 
 			PropertyEditor *p;
-			if (pbool) p = new PropertyEditorBool(this, 5+250*(i/6), 40+(i%6)*30, section, prop);
-			else if (phex) p = new PropertyEditorHex(this, 5+250*(i/6), 40+(i%6)*30, section, prop);
-			else if (pint) p = new PropertyEditorInt(this, 5+250*(i/6), 40+(i%6)*30, section, prop);
-			else if (pdouble) p = new PropertyEditorFloat(this, 5+250*(i/6), 40+(i%6)*30, section, prop);
-			else if (pstring) p = new PropertyEditorString(this, 5+250*(i/6), 40+(i%6)*30, section, prop);
-			else if (pmulti) p = new PropertyEditorString(this, 5+250*(i/6), 40+(i%6)*30, section, prop);
-			else if (pmulti_remain) p = new PropertyEditorString(this, 5+250*(i/6), 40+(i%6)*30, section, prop);
+			if (pbool) p = new PropertyEditorBool(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
+			else if (phex) p = new PropertyEditorHex(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
+			else if (pint) p = new PropertyEditorInt(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
+			else if (pdouble) p = new PropertyEditorFloat(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
+			else if (pstring) p = new PropertyEditorString(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
+			else if (pmulti) p = new PropertyEditorString(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
+			else if (pmulti_remain) p = new PropertyEditorString(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
 			else { i++; continue; }
 			b->addActionHandler(p);
 			i++;
@@ -649,7 +766,6 @@ public:
 		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
 
 		name->raise(); /* make sure keyboard focus is on the text field, ready for the user */
-		this->raise(); /* make sure THIS WINDOW has the keyboard focus */
 
 		name->posToEnd(); /* position the cursor at the end where the user is most likely going to edit */
 	}
@@ -772,12 +888,6 @@ public:
 			bar->addItem(1, name);
 			i++;
 		}
-
-		if (first_shell) {
-			(new GUI::Button(this, 12+(i/7)*110, 50+(i%7)*35, "Keyboard", 100))->addActionHandler(this);
-			bar->addItem(1, "");
-			bar->addItem(1, "Keyboard");
-		}
 	}
 
 	~ConfigurationWindow() { running = false; }
@@ -794,12 +904,15 @@ public:
 			UI_Startup(dynamic_cast<GUI::ScreenSDL*>(getScreen()));
 		} else if (sname == "autoexec") {
 			Section_line *section = static_cast<Section_line *>(control->GetSection((const char *)sname));
-			new AutoexecEditor(getScreen(), 50, 30, section);
+			AutoexecEditor *np = new AutoexecEditor(getScreen(), 50, 30, section);
+            np->raise();
 		} else if ((sec = control->GetSection((const char *)sname))) {
 			Section_prop *section = static_cast<Section_prop *>(sec);
-			new SectionEditor(getScreen(), 50, 30, section);
+			SectionEditor *np = new SectionEditor(getScreen(), 50, 30, section);
+            np->raise();
 		} else if (arg == "About") {
-			new GUI::MessageBox2(getScreen(), 200, 150, 280, "About DOSBox", "\nDOSBox-X\nAn emulator for old DOS Games\n\nCopyright 2002-2014\nThe DOSBox Team");
+            const char *msg = PACKAGE_STRING " (C) 2002-2018 The DOSBox Team\nA fork of DOSBox 0.74 by TheGreatCodeholio\nFor more info visit http://dosbox-x.com\nBased on DOSBox (http://dosbox.com)\n\n";
+			new GUI::MessageBox2(getScreen(), 100, 150, 480, "About DOSBox-X", msg);
 		} else if (arg == "Introduction") {
 			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO"));
 		} else if (arg == "Getting Started") {
@@ -834,7 +947,8 @@ static void UI_Execute(GUI::ScreenSDL *screen) {
 	SDL_Event event;
 
 	sdlscreen = screen->getSurface();
-	new ConfigurationWindow(screen, 30, 30, "DOSBox Configuration");
+	ConfigurationWindow *cfg_wnd = new ConfigurationWindow(screen, 30, 30, "DOSBox Configuration");
+    cfg_wnd->raise();
 
 	// event loop
 	while (running) {
@@ -849,7 +963,13 @@ static void UI_Execute(GUI::ScreenSDL *screen) {
 		sdlscreen = screen->getSurface();
 		SDL_BlitSurface(background, NULL, sdlscreen, NULL);
 		screen->update(screen->getTime());
+		
+#if defined(C_SDL2)
+        SDL_Window* GFX_GetSDLWindow(void);
+        SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+#else		
 		SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
+#endif
 
 		SDL_Delay(40);
 	}
@@ -871,10 +991,12 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 		case 1:
 			new SaveDialog(screen, 90, 100, "Save Configuration...");
 			break;
-		case 2:
+		case 2: {
 			sec = control->GetSection("sdl");
 			section=static_cast<Section_prop *>(sec); 
-			new SectionEditor(screen,50,30,section);
+			SectionEditor *p = new SectionEditor(screen,50,30,section);
+            p->raise();
+		}
 			break;
 		case 3:
 			sec = control->GetSection("dosbox");
@@ -908,8 +1030,10 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 		case 9:
 			new SaveLangDialog(screen, 90, 100, "Save Language File...");
 			break;
-		case 10:
-			new ConfigurationWindow(screen, 30, 30, "DOSBox Configuration");
+		case 10: {
+			ConfigurationWindow *np = new ConfigurationWindow(screen, 30, 30, "DOSBox Configuration");
+            np->raise();
+		}
 			break;
 		case 11:
 			sec = control->GetSection("parallel");
@@ -936,15 +1060,18 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 			section=static_cast<Section_prop *>(sec);
 			new SectionEditor(screen,50,30,section);
 			break;
-		case 16:
-			new SetCycles(screen, 90, 100, "Set CPU Cycles...");
-			break;
-		case 17:
-			new SetVsyncrate(screen, 90, 100, "Set vertical syncrate...");
-			break;
-		case 18:
-			new SetLocalSize(screen, 90, 100, "Set Default Local Freesize...");
-			break;
+		case 16: {
+			SetCycles *np1 = new SetCycles(screen, 90, 100, "Set CPU Cycles...");
+            np1->raise();
+            } break;
+		case 17: {
+			SetVsyncrate *np2 = new SetVsyncrate(screen, 90, 100, "Set vertical syncrate...");
+            np2->raise();
+            } break;
+		case 18: {
+			SetLocalSize *np3 = new SetLocalSize(screen, 90, 100, "Set Default Local Freesize...");
+            np3->raise();
+            } break;
 		default:
 			break;
 	}
@@ -958,13 +1085,18 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 		}
 		SDL_BlitSurface(background, NULL, sdlscreen, NULL);
 		screen->update(4);
-		SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
+#if defined(C_SDL2)
+        SDL_Window* GFX_GetSDLWindow(void);
+        SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+#else	
+        SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
+#endif
 		SDL_Delay(20);
 	}
 }
 
 void GUI_Shortcut(int select) {
-	if(running) return;
+	if(!select || running) return;
 
     bool GFX_GetPreventFullscreen(void);
 
@@ -976,7 +1108,9 @@ void GUI_Shortcut(int select) {
     }
 
 #ifdef WIN32
+#if !defined(C_SDL2) && !defined(C_HX_DOS)
 	if(menu.maxwindow) ShowWindow(GetHWND(), SW_RESTORE);
+#endif
 #endif
 
 	shortcut=true;
@@ -1004,4 +1138,3 @@ void GUI_Run(bool pressed) {
 	UI_Shutdown(screen);
 	delete screen;
 }
-#endif /* !defined(C_SDL2) */

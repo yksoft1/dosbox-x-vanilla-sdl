@@ -3062,7 +3062,8 @@ void PC98_BIOS_FDC_CALL_GEO_UNPACK(unsigned int &fdc_cyl,unsigned int &fdc_head,
 void PC98_Interval_Timer_Continue(void);
 
 void FDC_WAIT_TIMER_HACK(void) {
-    unsigned int v;
+    unsigned int v,pv;
+    unsigned int c=0;
 
     // Explanation:
     //
@@ -3083,12 +3084,21 @@ void FDC_WAIT_TIMER_HACK(void) {
     //       to break out of the loop if this runs for more than 1 second, since that
     //       is a sign the timer is in an odd state that will never terminate this loop.
 
+	v = ~0U;
+    c = 10;
     do {
         void CALLBACK_Idle(void);
         CALLBACK_Idle();
+		
+		pv = v;
 
         v  = IO_ReadB(0x71);
         v |= IO_ReadB(0x71) << 8;
+		
+        if (v > pv) {
+            /* if the timer rolled around, we might have missed the narrow window we're watching for */
+            if (--c == 0) break;
+        }				
     } while (v >= 0x60);
 }
  
@@ -3811,6 +3821,25 @@ static Bitu INTF2_PC98_Handler(void) {
         SegValue(es));
 
     return CBRET_NONE;
+}
+
+static Bitu PC98_BIOS_LIO(void) {
+    /* on entry, AL (from our BIOS code) is set to the call number that lead here */
+    LOG_MSG("PC-98 BIOS LIO graphics call 0x%02x with AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
+        reg_al,
+        reg_ax,
+        reg_bx,
+        reg_cx,
+        reg_dx,
+        reg_si,
+        reg_di,
+        SegValue(ds),
+        SegValue(es));
+
+    // from yksoft1's patch
+    reg_ah = 0;
+
+	return CBRET_NONE;
 }
 
 static Bitu INT11_Handler(void) {
@@ -5373,6 +5402,7 @@ static Bitu adapter_scan_start;
 static CALLBACK_HandlerObject int4b_callback;
 static CALLBACK_HandlerObject callback[20]; /* <- fixme: this is stupid. just declare one per interrupt. */
 static CALLBACK_HandlerObject cb_bios_post;
+static CALLBACK_HandlerObject callback_pc98_lio;
 
 Bitu call_pnp_r = ~0UL;
 Bitu call_pnp_rp = 0;
@@ -5458,29 +5488,28 @@ void gdc_16color_enable_update_vars(void) {
 	}
 }
 
-void Default_IRQ_Handler_Mask_ISR(void) {
-	/* loosely adapted from em-dosbox */
-	IO_WriteB(IS_PC98_ARCH ? 0x00 : 0x20,0x0B); // ask the PIC for the ISR register
-	Bit8u master_isr = IO_ReadB(IS_PC98_ARCH ? 0x00 : 0x20);
-	if (master_isr) {	
-        IO_WriteB(IS_PC98_ARCH ? 0x08 : 0xA0,0x0B); // ask the PIC for the ISR register
-		Bit8u slave_isr = IO_ReadB(IS_PC98_ARCH ? 0x08 : 0xA0);
-		if (slave_isr) {
-			IO_WriteB(IS_PC98_ARCH ? 0x0A : 0xA1,IO_ReadB(IS_PC98_ARCH ? 0x0A : 0xA1)|slave_isr);
-			IO_WriteB(IS_PC98_ARCH ? 0x08 : 0xA0,0x20);//ACK
-		}
-		else {
-			IO_WriteB(IS_PC98_ARCH ? 0x02 : 0x21,IO_ReadB(IS_PC98_ARCH ? 0x02 : 0x21)|(master_isr&(~4)));
-		}
-		IO_WriteB(IS_PC98_ARCH ? 0x00 : 0x20,0x20);//ACK
-
-		LOG_MSG("Unhandled IRQ, ISR master=0x%02x slave=0x%02x",master_isr,slave_isr);
-	}
-}
-
-static Bitu Default_IRQ_Handler(void) {
-	if (unhandled_irq_method == UNHANDLED_IRQ_MASK_ISR)
-		Default_IRQ_Handler_Mask_ISR();
+/* NTS: Remember the 8259 is non-sentient, and the term "slave" is used in a computer programming context */
+ static Bitu Default_IRQ_Handler_Cooperative_Slave_Pic(void) {
+     /* PC-98 style IRQ 8-15 handling.
+      *
+      * This mimics the recommended procedure [https://www.webtech.co.jp/company/doc/undocumented_mem/io_pic.txt]
+      *
+      *  mov al,20h      ;Send EOI to SLAVE
+      *  out 0008h,al
+      *  jmp $+2         ;I/O WAIT
+      *  mov al,0Bh      ;ISR read mode set(slave)
+      *  out 0008h,al
+      *  jmp $+2         ;I/O WAIT
+      *  in  al,0008h    ;ISR read(slave)
+      *  cmp al,00h      ;slave pic in-service ?
+      *  jne EoiEnd
+      *  mov al,20h      ;Send EOI to MASTER
+      *  out 0000h,al
+      */
+     IO_WriteB(IS_PC98_ARCH ? 0x08 : 0xA0,0x20); // send EOI to slave
+     IO_WriteB(IS_PC98_ARCH ? 0x08 : 0xA0,0x0B); // ISR read mode set
+     if (IO_ReadB(IS_PC98_ARCH ? 0x08 : 0xA0) == 0) // if slave pic in service..
+         IO_WriteB(IS_PC98_ARCH ? 0x00 : 0x20,0x20); // then EOI the master
 
 	return CBRET_NONE;
 }
@@ -5560,6 +5589,27 @@ private:
              * bit[1:1] = 98 NOTE prohibit transition to power saving mode
              * bit[0:0] = 98 NOTE coprocessor function available */
             mem_writeb(0x45C,(enable_pc98_egc ? 0x40/*Extended Graphics*/ : 0x00));
+
+            /* Keyboard type */
+            /* bit[7:7] = ?
+             * bit[6:6] = keyboard type bit 1
+             * bit[5:5] = EMS page frame at B0000h 1=present 0=none
+             * bit[4:4] = EMS page frame at B0000h 1=page frame 0=G-VRAM
+             * bit[3:3] = keyboard type bit 0
+             * bit[2:2] = High resolution memory window available
+             * bit[1:1] = ?
+             * bit[0:0] = ?
+             *
+             * keyboard bits[1:0] from bit 6 as bit 1 and bit 3 as bit 0 combined:
+             * 11 = new keyboard (NUM key, DIP switch 2-7 OFF)
+             * 10 = new keyboard (without NUM key)
+             * 01 = new keyboard (NUM key, DIP switch 2-7 ON)
+             * 00 = old keyboard
+             *
+             * The old keyboard is documented not to support software control of CAPS and KANA states */
+            /* TODO: Make this a dosbox.conf option. Default is new keyboard without NUM key because that is what
+             *       keyboard emulation currently acts like anyway. */
+            mem_writeb(0x481,0x40/*bit 6=1 bit 3=0 new keyboard without NUM key*/);
 
             /* BIOS flags */
             /* bit[7:7] = Startup            1=hot start    0=cold start
@@ -5781,16 +5831,20 @@ private:
                 RealSetVec(ct,BIOS_DEFAULT_IRQ07_DEF_LOCATION);
         }
 
+        if (unhandled_irq_method == UNHANDLED_IRQ_COOPERATIVE_2ND) {
+            // PC-98 style: Master PIC ack with 0x20 for IRQ 0-7.
+            //              For the slave PIC, ack with 0x20 on the slave, then only ack the master (cascade interrupt)
+            //              if the ISR register on the slave indicates none are in service.
+            CALLBACK_Setup(call_irq07default,NULL,CB_IRET_EOI_PIC1,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
+            CALLBACK_Setup(call_irq815default,Default_IRQ_Handler_Cooperative_Slave_Pic,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
+        }
+        else {
+            // IBM PC style: Master PIC ack with 0x20, slave PIC ack with 0x20, no checking
+            CALLBACK_Setup(call_irq07default,NULL,CB_IRET_EOI_PIC1,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
+            CALLBACK_Setup(call_irq815default,NULL,CB_IRET_EOI_PIC2,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
+        }
+		 
         if (IS_PC98_ARCH) {
-			if (unhandled_irq_method == UNHANDLED_IRQ_MASK_ISR) {
-				CALLBACK_Setup(call_irq07default,Default_IRQ_Handler,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
-				CALLBACK_Setup(call_irq815default,Default_IRQ_Handler,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
-			}
-			else {
-				CALLBACK_Setup(call_irq07default,NULL,CB_IRET_EOI_PIC1,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
-				CALLBACK_Setup(call_irq815default,NULL,CB_IRET_EOI_PIC2,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
-			}
-			
             BIOS_UnsetupKeyboard();
             BIOS_UnsetupDisks();
 
@@ -5825,6 +5879,8 @@ private:
 
             void INT10_EnterPC98(Section *sec);
             INT10_EnterPC98(NULL); /* INT 10h */
+			
+			callback_pc98_lio.Uninstall();
 
             callback[1].Uninstall(); /* INT 11h */
             callback[2].Uninstall(); /* INT 12h */
@@ -5947,6 +6003,46 @@ private:
             // default handler for IRQ 8-15
             for (Bit16u ct=0;ct < 8;ct++)
                 RealSetVec(ct+(IS_PC98_ARCH ? 0x10 : 0x70),BIOS_DEFAULT_IRQ815_DEF_LOCATION);
+
+            // LIO graphics interface (number of entry points, unknown WORD value and offset into the segment).
+            {
+                callback_pc98_lio.Install(&PC98_BIOS_LIO,CB_IRET,"LIO graphics library");
+
+                Bitu ofs = 0xF990u << 4u; // F990:0000...
+                unsigned int entrypoints = 0x11;
+                Bitu final_addr = callback_pc98_lio.Get_RealPointer();
+
+                /* NTS: Based on GAME/MAZE 999 behavior, these numbers are interrupt vector numbers.
+                 *      The entry point marked 0xA0 is copied by the game to interrupt vector A0 and
+                 *      then called with INT A0h even though it blindly assumes the numbers are
+                 *      sequential from 0xA0-0xAF. */
+                unsigned char entrypoint_indexes[0x11] = {
+                    0xA0,   0xA1,   0xA2,   0xA3,       // +0x00
+                    0xA4,   0xA5,   0xA6,   0xA7,       // +0x04
+                    0xA8,   0xA9,   0xAA,   0xAB,       // +0x08
+                    0xAC,   0xAD,   0xAE,   0xAF,       // +0x0C
+                    0xCE                                // +0x10
+                };
+
+                assert(((entrypoints * 4) + 4) <= 0x50);
+                assert((50 + (entrypoints * 7)) <= 0x100); // a 256-byte region is set aside for this!
+
+                phys_writed(ofs+0,entrypoints);
+                for (unsigned int ent=0;ent < entrypoints;ent++) {
+                    /* each entry point is "MOV AL,<entrypoint> ; JMP FAR <callback>" */
+                    /* yksoft1's patch suggests a segment offset of 0x50 which I'm OK with */
+                    unsigned int ins_ofs = ofs + 0x50 + (ent * 7);
+
+                    phys_writew(ofs+4+(ent*4)+0,entrypoint_indexes[ent]);
+                    phys_writew(ofs+4+(ent*4)+2,ins_ofs - ofs);
+
+                    phys_writeb(ins_ofs+0,0xB0);                        // MOV AL,(entrypoint index)
+                    phys_writeb(ins_ofs+1,entrypoint_indexes[ent]);
+                    phys_writeb(ins_ofs+2,0xEA);                        // JMP FAR <callback>
+                    phys_writed(ins_ofs+3,final_addr);
+                    // total:   ins_ofs+7
+                }
+            }
         }
 
 		// setup a few interrupt handlers that point to bios IRETs by default
@@ -6953,8 +7049,11 @@ public:
 
 				if (s == "simple")
 					unhandled_irq_method = UNHANDLED_IRQ_SIMPLE;
-				else if (s == "mask_isr")
-					unhandled_irq_method = UNHANDLED_IRQ_MASK_ISR;
+                else if (s == "cooperative_2nd")
+                     unhandled_irq_method = UNHANDLED_IRQ_COOPERATIVE_2ND;
+                // pick default
+                else if (IS_PC98_ARCH)
+                     unhandled_irq_method = UNHANDLED_IRQ_COOPERATIVE_2ND;
 				else
 					unhandled_irq_method = UNHANDLED_IRQ_SIMPLE;
 			}
@@ -7096,18 +7195,10 @@ public:
 
 		/* Irq 2-7 */
 		call_irq07default=CALLBACK_Allocate();
-		if (unhandled_irq_method == UNHANDLED_IRQ_MASK_ISR)
-			CALLBACK_Setup(call_irq07default,Default_IRQ_Handler,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
-		else
-			CALLBACK_Setup(call_irq07default,NULL,CB_IRET_EOI_PIC1,Real2Phys(BIOS_DEFAULT_IRQ07_DEF_LOCATION),"bios irq 0-7 default handler");
- 
+
 		/* Irq 8-15 */
 		call_irq815default=CALLBACK_Allocate();
-		if (unhandled_irq_method == UNHANDLED_IRQ_MASK_ISR)
-			CALLBACK_Setup(call_irq815default,Default_IRQ_Handler,CB_IRET,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
-		else
-			CALLBACK_Setup(call_irq815default,NULL,CB_IRET_EOI_PIC2,Real2Phys(BIOS_DEFAULT_IRQ815_DEF_LOCATION),"bios irq 8-15 default handler");
- 
+
 		/* BIOS boot stages */
 		cb_bios_post.Install(&cb_bios_post__func,CB_RETF,"BIOS POST");
 		cb_bios_scan_video_bios.Install(&cb_bios_scan_video_bios__func,CB_RETF,"BIOS Scan Video BIOS");
@@ -7562,6 +7653,13 @@ void ROMBIOS_Init() {
     if (IS_PC98_ARCH) {
         if (ROMBIOS_GetMemory(128,"PC-98 INT vector stub segment 0xFD80",1,0xFD800) == 0) {
             LOG_MSG("WARNING: Was not able to mark off 0xFD800 off-limits for PC-98 int vector stubs");
+        }
+    }
+
+    /* PC-98 BIOSes have a LIO interface at segment F990 with graphic subroutines for Microsoft BASIC */
+    if (IS_PC98_ARCH) {
+        if (ROMBIOS_GetMemory(256,"PC-98 LIO graphic ROM BIOS library",1,0xF9900) == 0) {
+            LOG_MSG("WARNING: Was not able to mark off 0xF9900 off-limits for PC-98 LIO graphics library");
         }
     }
 	 

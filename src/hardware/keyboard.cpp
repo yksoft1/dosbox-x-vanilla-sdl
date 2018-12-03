@@ -44,6 +44,8 @@ void KEYBOARD_AddBuffer(Bit16u data);
 static void KEYBOARD_Add8042Response(Bit8u data);
 void KEYBOARD_SetLEDs(Bit8u bits);
 
+bool enable_pc98_bus_mouse = true;
+
 static unsigned int aux_warning = 0;
 
 enum AuxCommands {
@@ -2102,9 +2104,64 @@ void pc98_mouse_movement_apply(int x,int y) {
 
 void MOUSE_DummyEvent(void);
 
-bool p7fd8_8255_mouse_irq_signal = false;
+unsigned int pc98_mouse_rate_hz = 120;
+
+static double pc98_mouse_tick_interval_ms(void) {
+    return 1000.0/*ms*/ / pc98_mouse_rate_hz;
+}
+
+static double pc98_mouse_tick_time_ms(void) {
+    return fmod(PIC_FullIndex(),pc98_mouse_tick_interval_ms());
+}
+
+static double pc98_mouse_time_to_next_tick_ms(void) {
+    const double x = pc98_mouse_tick_interval_ms();
+    return x - fmod(PIC_FullIndex(),x);
+}
+
+static bool pc98_mouse_tick_signal(void) {
+    /* TODO: How is the 120Hz signal generated? If it's a square wave, what is the duty cycle? */
+    /*       At what point in the cycle is the interrupt generated? Beginning, or end? */
+    return pc98_mouse_tick_time_ms() < 0.1; /* GUESS: 100us = 0.1ms */
+}
 
 extern uint8_t MOUSE_IRQ;
+
+static bool pc98_mouse_tick_scheduled = false;
+
+static void pc98_mouse_tick_event(Bitu val) {
+    (void)val;
+
+    /* Generate interrupt */
+    if (p7fd8_8255_mouse_int_enable)
+        PIC_ActivateIRQ(MOUSE_IRQ);
+
+    /* keep the periodic interrupt going */
+    if (p7fd8_8255_mouse_int_enable)
+        PIC_AddEvent(pc98_mouse_tick_event,pc98_mouse_tick_interval_ms());
+    else
+        pc98_mouse_tick_scheduled = false;
+}
+
+static void pc98_mouse_tick_unschedule(void) {
+    if (pc98_mouse_tick_scheduled) {
+        pc98_mouse_tick_scheduled = false;
+        PIC_RemoveEvents(pc98_mouse_tick_event);
+    }
+}
+
+static void pc98_mouse_tick_schedule(void) {
+    if (p7fd8_8255_mouse_int_enable) {
+        if (!pc98_mouse_tick_scheduled) {
+            pc98_mouse_tick_scheduled = true;
+            PIC_AddEvent(pc98_mouse_tick_event,pc98_mouse_time_to_next_tick_ms());
+        }
+    }
+    else {
+        /* Don't unschedule the event, the game may un-inhibit the interrupt later.
+         * The PIC event will not reschedule itself if inhibited at the time of the signal. */
+    }
+}
 
 class PC98_Mouse_8255 : public Intel8255 {
 public:
@@ -2188,6 +2245,9 @@ public:
     }
     /* port C is output (both halves) */
     virtual void outPortC(const uint8_t mask) {
+        if (!enable_pc98_bus_mouse)
+            return;
+
         if (mask & 0x80) { /* bit 7 */
             /* changing from 0 to 1 latches counters and clears them */
             if ((latchOutPortC & 0x80) && !p7fd9_8255_mouse_latch) { // change from 0 to 1 latches counters and clears them
@@ -2198,7 +2258,6 @@ public:
             }
 
             p7fd9_8255_mouse_latch = (latchOutPortC >> 7) & 1;
-            p7fd8_8255_mouse_irq_signal = false;//This is a GUESS
         }
         if (mask & 0x60) { /* bits 6-5 */
             p7fd9_8255_mouse_sel = (latchOutPortC >> 5) & 3;
@@ -2208,19 +2267,22 @@ public:
 
             p7fd8_8255_mouse_int_enable = ((latchOutPortC >> 4) & 1) ^ 1; // bit 4 is interrupt MASK
 
-            if (mode == 0x90 && mask == 0xFF) {
-                /* Metal Force (PC-98) likes to use the bus mouse as a periodic interrupt source
-                 * by setting mode byte 0x90 and re-sending that mode byte once per interrupt.
-                 * Does real hardware do this?? */
-                if (p7fd8_8255_mouse_int_enable)
-                    MOUSE_DummyEvent();
-            }
-            else if (p != p7fd8_8255_mouse_int_enable) {
-                /* FIXME: If a mouse interrupt is pending but not yet read this should re-signal the IRQ */
-                if (p7fd8_8255_mouse_int_enable && p7fd8_8255_mouse_irq_signal)
-                    PIC_ActivateIRQ(MOUSE_IRQ);
-                else
-                    PIC_DeActivateIRQ(MOUSE_IRQ);
+            /* Some games use the mouse interrupt as a periodic source by writing this from the interrupt handler.
+             *
+             * Does that work on real hardware?? Is this what real hardware does?
+             *
+             * Games that need this:
+             * - Metal Force
+             * - Amaranth
+             */
+            if (p != p7fd8_8255_mouse_int_enable) {
+                /* NTS: I'm guessing that if the mouse interrupt has fired, inhibiting the interrupt
+                 *      does not remove the IRQ signal already sent.
+                 *
+                 *      Amaranth's mouse driver appears to rapidly toggle this bit. If we re-fire
+                 *      and inhibit the interrupt in reaction the game will get an interrupt rate
+                 *      far higher than normal and animation will run way too fast. */
+                pc98_mouse_tick_schedule();
             }
         }
     }
@@ -2238,11 +2300,28 @@ static Bitu read_p7fd9_mouse(Bitu port,Bitu /*iolen*/) {
     /* 0x7FD9-0x7FDF odd */
     return pc98_mouse_8255.readByPort((port - 0x7FD9) >> 1U);
 }
+
+static void write_pbfdb_mouse(Bitu port,Bitu val,Bitu /*iolen*/) {
+    (void)port;
+    /* bits [7:2] = ??
+     * bits [1:0] = 120hz clock divider
+     *              00 = 120hz (at reset)
+     *              01 = 60hz
+     *              10 = 30hz
+     *              11 = 15hz */
+    pc98_mouse_rate_hz = 120u >> (val & 3u);
+    LOG(LOG_MISC,LOG_DEBUG)("PC-98 mouse interrupt rate: %u",pc98_mouse_rate_hz);
+}
 //////////
 
 void KEYBOARD_OnEnterPC98(Section *sec) {
     unsigned int i;
 
+    {
+        Section_prop *section=static_cast<Section_prop *>(control->GetSection("dosbox"));
+        enable_pc98_bus_mouse = section->Get_bool("pc-98 bus mouse");
+    }
+	
     /* TODO: Keyboard interface change, layout change. */
 
     /* PC-98 uses the 8255 programmable peripheral interface. Install that here.
@@ -2261,7 +2340,7 @@ void KEYBOARD_OnEnterPC98(Section *sec) {
 		Section_prop *section=static_cast<Section_prop *>(control->GetSection("dosbox"));
 		pc98_force_ibm_layout = section->Get_bool("pc-98 force ibm keyboard layout");
 		if(pc98_force_ibm_layout)
-			LOG_MSG("Forcing PC-98 keyboard to use IBM US-English like default layout");
+			LOG_MSG("Forcing PC-98 keyboard to use IBM US-English like default layout");	
     }
 
     if (!IS_PC98_ARCH) {
@@ -2335,11 +2414,16 @@ void KEYBOARD_OnEnterPC98_phase2(Section *sec) {
     Reset_PC98.Install(0xF0,pc98_reset_write,IO_MB);
 
     /* Mouse */
-    for (i=0;i < 4;i++) {
-        IO_RegisterWriteHandler(0x7FD9+(i*2),write_p7fd9_mouse,IO_MB);
-        IO_RegisterReadHandler(0x7FD9+(i*2),read_p7fd9_mouse,IO_MB);
-    }
+	if (enable_pc98_bus_mouse) {
+		for (i=0;i < 4;i++) {
+			IO_RegisterWriteHandler(0x7FD9+(i*2),write_p7fd9_mouse,IO_MB);
+			IO_RegisterReadHandler(0x7FD9+(i*2),read_p7fd9_mouse,IO_MB);
+		}
 
+		/* Mouse control port at BFDB (which can be used to reduce the interrupt rate of the mouse) */
+		IO_RegisterWriteHandler(0xBFDB,write_pbfdb_mouse,IO_MB);
+	}
+	
     /* Port A = input
      * Port B = input
      * Port C = output */
@@ -2351,7 +2435,7 @@ void KEYBOARD_OnEnterPC98_phase2(Section *sec) {
      * bit[1:1] =  1 = port B input
      * bit[0:0] =  1 = port C lower input */
     pc98_mouse_8255.writeControl(0x93);
-    pc98_mouse_8255.writePortC(0x00);
+	pc98_mouse_8255.writePortC(0x10); /* start with interrupt inhibited. INT 33h emulation will enable it later */
 }
 
 extern bool enable_slave_pic;

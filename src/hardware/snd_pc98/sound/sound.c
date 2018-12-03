@@ -440,10 +440,12 @@ BRESULT pcmmix_regfile(PMIXDAT *dat, const OEMCHAR *fname, UINT rate) {
 	r = FAILURE;
 	fh = file_open_rb(fname);
 	if (fh == FILEH_INVALID) {
+		_TRACEOUT("file_open_rb %s error", fname);
 		goto pmrf_err1;
 	}
 	size = file_getsize(fh);
 	if (size == 0) {
+		_TRACEOUT("file_getsize %s error", fname);
 		goto pmrf_err2;
 	}
 	ptr = (UINT8 *)_MALLOC(size, fname);

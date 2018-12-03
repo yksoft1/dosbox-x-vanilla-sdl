@@ -610,6 +610,15 @@ Property* Section_prop::Get_prop(int index){
 	return NULL;
 }
 
+Property* Section_prop::Get_prop(string const& _propname){
+    for(it tel=properties.begin();tel!=properties.end();tel++){
+        if((*tel)->propname==_propname) {
+            return (*tel);
+        }
+    }
+    return NULL;
+}
+
 const char* Section_prop::Get_string(string const& _propname) const {
 	for(const_it tel=properties.begin();tel!=properties.end();tel++){
 		if((*tel)->propname==_propname){

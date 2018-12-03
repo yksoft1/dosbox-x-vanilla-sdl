@@ -60,6 +60,7 @@ static bool swapping_requested;
 void CMOS_SetRegister(Bitu regNr, Bit8u val); //For setting equipment word
 
 /* 2 floppys and 2 harddrives, max */
+bool imageDiskChange[MAX_DISK_IMAGES]={false};
 imageDisk *imageDiskList[MAX_DISK_IMAGES]={NULL};
 imageDisk *diskSwap[MAX_SWAPPABLE_DISKS]={NULL};
 Bits swapPosition;
@@ -171,6 +172,8 @@ void swapInDisks(void) {
 			imageDiskList[diskswapdrive] = diskSwap[swapPos];
 			imageDiskList[diskswapdrive]->Addref();
 
+			imageDiskChange[diskswapdrive] = true;
+			
 			diskcount++;
             diskswapdrive++;
 		}
@@ -801,7 +804,32 @@ static Bitu INT13_DiskHandler(void) {
 			CALLBACK_SCF(true);
 			return CBRET_NONE;
 		}
+		
+        /* INT 13h is limited to 512 bytes/sector (as far as I know).
+         * The sector buffer in this function is limited to 512 bytes/sector,
+         * so this is also a protection against overruning the stack if you
+         * mount a PC-98 disk image (1024 bytes/sector) and try to read it with INT 13h. */
+        if (imageDiskList[drivenum]->sector_size > sizeof(sectbuf)) {
+            LOG(LOG_MISC,LOG_DEBUG)("INT 13h: Read failed because disk bytes/sector on drive %c is too large",(char)drivenum+'A');
 
+            imageDiskChange[drivenum] = false;
+
+            reg_ah = 0x80; /* timeout */
+            CALLBACK_SCF(true);
+            return CBRET_NONE;
+        }
+		 
+        /* If the disk changed, the first INT 13h read will signal an error and set AH = 0x06 to indicate disk change */
+        if (drivenum < 2 && imageDiskChange[drivenum]) {
+            LOG(LOG_MISC,LOG_DEBUG)("INT 13h: Failing first read of drive %c to indicate disk change",(char)drivenum+'A');
+
+            imageDiskChange[drivenum] = false;
+
+            reg_ah = 0x06; /* diskette changed or removed */
+            CALLBACK_SCF(true);
+            return CBRET_NONE;
+        }
+		 
 		segat = SegValue(es);
 		bufptr = reg_bx;
 		for(i=0;i<reg_al;i++) {
@@ -833,7 +861,20 @@ static Bitu INT13_DiskHandler(void) {
 			return CBRET_NONE;
         }                     
 
+        /* INT 13h is limited to 512 bytes/sector (as far as I know).
+         * The sector buffer in this function is limited to 512 bytes/sector,
+         * so this is also a protection against overruning the stack if you
+         * mount a PC-98 disk image (1024 bytes/sector) and try to read it with INT 13h. */
+        if (imageDiskList[drivenum]->sector_size > sizeof(sectbuf)) {
+            LOG(LOG_MISC,LOG_DEBUG)("INT 13h: Write failed because disk bytes/sector on drive %c is too large",(char)drivenum+'A');
 
+            imageDiskChange[drivenum] = false;
+
+            reg_ah = 0x80; /* timeout */
+            CALLBACK_SCF(true);
+            return CBRET_NONE;
+        }
+		 
 		bufptr = reg_bx;
 		for(i=0;i<reg_al;i++) {
 			for(t=0;t<imageDiskList[drivenum]->getSectSize();t++) {

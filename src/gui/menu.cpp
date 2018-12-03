@@ -731,9 +731,7 @@ static const char *def_menu_cpu[] = {
     "--",
     "mapper_cycleup",
     "mapper_cycledown",
-#if !defined(C_SDL2)
 	"mapper_editcycles",
-#endif
     "--",
     "CpuCoreMenu",
     "CpuTypeMenu",
@@ -830,11 +828,9 @@ static const char *def_menu_video_pc98[] = {
 
 /* video menu ("VideoMenu") */
 static const char *def_menu_video[] = {
-#if !defined(C_SDL2)
 	"mapper_aspratio",
 	"--",
-#endif
-#if !defined(C_SDL2)
+#if !defined(HX_DOS)
 	"mapper_fullscr",
 	"--",
 #endif
@@ -847,11 +843,11 @@ static const char *def_menu_video[] = {
 #endif
 #ifndef MACOSX
     "mapper_togmenu",
-# if !defined(C_SDL2) && !defined(HX_DOS)
+# if !defined(HX_DOS)
 	"--",
 # endif
 #endif
-#if !defined(C_SDL2) && !defined(HX_DOS)
+#if !defined(HX_DOS)
 	"mapper_resetsize",
 #endif
 	"--",
@@ -881,10 +877,8 @@ static const char *def_menu_dos[] = {
 static const char *def_menu_dos_mouse[] = {
 	"dos_mouse_enable_int33",
 	"dos_mouse_y_axis_reverse",
-#if !defined(C_SDL2)
 	"--",
 	"dos_mouse_sensitivity",
-#endif
 	NULL
 };
 
@@ -1087,6 +1081,14 @@ void RENDER_CallBack( GFX_CallBackFunctions_t function );
 void SetScaleForced(bool forced)
 {
 	render.scale.forced = forced;
+	
+	Section_prop * section=static_cast<Section_prop *>(control->GetSection("render"));
+    Prop_multival* prop = section->Get_multival("scaler");
+	std::string scaler = prop->GetSection()->Get_string("type");
+
+ 	std::string value = scaler + (render.scale.forced ? " forced" : "");
+	SetVal("render", "scaler", value);
+	
 	RENDER_CallBack(GFX_CallBackReset);
 	mainMenu.get_item("scaler_forced").check(render.scale.forced).refresh_item(mainMenu);
 }
@@ -1597,6 +1599,7 @@ void Mount_Img_Floppy(char drive, std::string realpath) {
 	std::string label;
 	std::string temp_line = realpath;
 	std::vector<std::string> paths;
+	std::vector<std::string> options;
 	std::string umount;
 	//std::string type="hdd";
 	std::string fstype="fat";
@@ -1638,7 +1641,7 @@ void Mount_Img_Floppy(char drive, std::string realpath) {
 				std::vector<DOS_Drive*>::size_type ct;
 				
 				for (i = 0; i < paths.size(); i++) {
-					DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3]);
+					DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3], options);
 					imgDisks.push_back(newDrive);
 					if(!(dynamic_cast<fatDrive*>(newDrive))->created_successfully) {
 						LOG_MSG("Can't create drive from file.");
@@ -1708,6 +1711,7 @@ void Mount_Img_HDD(char drive, std::string realpath) {
 	std::string label;
 	std::string temp_line = realpath;
 	std::vector<std::string> paths;
+	std::vector<std::string> options;
 	std::string umount;
 	std::string fstype="fat";
 	Bit8u mediaid;
@@ -1819,7 +1823,7 @@ void Mount_Img_HDD(char drive, std::string realpath) {
 	std::vector<DOS_Drive*>::size_type ct;
 				
 	for (i = 0; i < paths.size(); i++) {
-		DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3]);
+		DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3], options);
 		imgDisks.push_back(newDrive);
 		if(!(dynamic_cast<fatDrive*>(newDrive))->created_successfully) {
 			LOG_MSG("Can't create drive from file.");
@@ -3110,7 +3114,7 @@ void MSG_WM_COMMAND_handle(SDL_SysWMmsg &Message) {
 		if (strcasecmp(core_mode, "normal") == 0) break;
 		SetVal("cpu", "core", "normal");
 		break;
-#if (C_DYNAMIC_X86)
+#if defined(C_DYNAMIC_X86) || defined(C_DYNREC)
 	case ID_DYNAMIC: if (strcmp(core_mode, "dynamic") != 0) SetVal("cpu", "core", "dynamic"); break;
 #endif
 #ifndef EMSCRIPTEN
@@ -3908,21 +3912,21 @@ void MSG_WM_COMMAND_handle(SDL_SysWMmsg &Message) {
 	}
 	case ID_PC98_4MHZ_TIMER:
 	{
-		void TIMER_OnEnterPC98_Phase2(Section*);
+		void TIMER_OnPowerOn(Section*);
 		void TIMER_OnEnterPC98_Phase2_UpdateBDA(void);
 		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 		dosbox_section->HandleInputline("pc-98 timer master frequency=4");
-		TIMER_OnEnterPC98_Phase2(NULL);
+		TIMER_OnPowerOn(NULL);
 		TIMER_OnEnterPC98_Phase2_UpdateBDA();
 		break;
 	}
 	case ID_PC98_5MHZ_TIMER:
 	{
-		void TIMER_OnEnterPC98_Phase2(Section*);
+		void TIMER_OnPowerOn(Section*);
 		void TIMER_OnEnterPC98_Phase2_UpdateBDA(void);
 		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 		dosbox_section->HandleInputline("pc-98 timer master frequency=5");
-		TIMER_OnEnterPC98_Phase2(NULL);
+		TIMER_OnPowerOn(NULL);
 		TIMER_OnEnterPC98_Phase2_UpdateBDA();
 		break;
 	}

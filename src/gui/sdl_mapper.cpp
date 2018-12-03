@@ -2192,6 +2192,9 @@ public:
 		case MK_kpminus:
 			key=SDL_SCANCODE_KP_MINUS;
 			break;
+        case MK_kpplus:
+             key=SDL_SCANCODE_KP_PLUS;
+             break;			
         case MK_minus:
             key=SDL_SCANCODE_MINUS;
             break;
@@ -3315,15 +3318,9 @@ void Mapper_FingerInputEvent(SDL_Event &event) {
     memset(&ev,0,sizeof(ev));
     ev.type = SDL_MOUSEBUTTONUP;
 
-#if defined(WIN32)
 	/* NTS: Windows versions of SDL2 do normalize the coordinates */
 	ev.button.x = (Sint32)(event.tfinger.x * mapper.surface->w);
 	ev.button.y = (Sint32)(event.tfinger.y * mapper.surface->h);
-#else
-	/* NTS: Linux versions of SDL2 don't normalize the coordinates? */
-    ev.button.x = event.tfinger.x;     /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-    ev.button.y = event.tfinger.y;     /* Contrary to SDL_events.h the x/y coordinates are NOT normalized to 0...1 */
-#endif
 
     Mapper_MouseInputEvent(ev);
 }
@@ -3610,7 +3607,7 @@ void MAPPER_RunInternal() {
         return;
     }
 
-#if defined(__WIN32__) && !defined(C_SDL2)
+#if defined(__WIN32__) && !defined(C_SDL2) && !defined(C_HX_DOS)
 	if(menu.maxwindow) ShowWindow(GetHWND(), SW_RESTORE);
 #endif
 	int cursor = SDL_ShowCursor(SDL_QUERY);
@@ -3624,6 +3621,8 @@ void MAPPER_RunInternal() {
 	/* Be sure that there is no update in progress */
 	GFX_EndUpdate( 0 );
 #if defined(C_SDL2)
+    void GFX_SetResizeable(bool enable);
+    GFX_SetResizeable(false);
     mapper.window=GFX_SetSDLSurfaceWindow(640,480);
     if (mapper.window == NULL) E_Exit("Could not initialize video mode for mapper: %s",SDL_GetError());
     mapper.surface=SDL_GetWindowSurface(mapper.window);
@@ -3674,15 +3673,13 @@ void MAPPER_RunInternal() {
     SDL_FreeSurface(mapper.draw_surface);
     SDL_FreeSurface(mapper.draw_surface_nonpaletted);
     SDL_FreePalette(sdl2_map_pal_ptr);
+	GFX_SetResizeable(true);
 #endif
 #if defined (REDUCE_JOYSTICK_POLLING)
 	SDL_JoystickEventState(SDL_DISABLE);
 #endif
 	if((mousetoggle && !mouselocked) || (!mousetoggle && mouselocked)) GFX_CaptureMouse();
 	SDL_ShowCursor(cursor);
-#if defined(__WIN32__) && !defined(C_SDL2)
-	GUI_Shortcut(0);
-#endif
 #if !defined(C_SDL2)
 	DOSBox_RefreshMenu();
 #endif

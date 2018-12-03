@@ -669,7 +669,7 @@ struct _PC98RawPartition {
 };
 #pragma pack(pop)
 
-fatDrive::fatDrive(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders) : loadedDisk(NULL) {
+fatDrive::fatDrive(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders, std::vector<std::string> &options) : loadedDisk(NULL) {
 	created_successfully = true;
 	FILE *diskfile;
 	Bit32u filesize;
@@ -733,10 +733,10 @@ fatDrive::fatDrive(const char *sysFilename, Bit32u bytesector, Bit32u cylsector,
         }
 	}
 
-    fatDriveInit(sysFilename, bytesector, cylsector, headscyl, cylinders, filesize);
+    fatDriveInit(sysFilename, bytesector, cylsector, headscyl, cylinders, filesize, options);
 }
 
-fatDrive::fatDrive(imageDisk *sourceLoadedDisk) : loadedDisk(NULL) {
+fatDrive::fatDrive(imageDisk *sourceLoadedDisk, std::vector<std::string> &options) : loadedDisk(NULL) {
 	if (sourceLoadedDisk == 0) {
 		created_successfully = false;
 		return;
@@ -751,7 +751,7 @@ fatDrive::fatDrive(imageDisk *sourceLoadedDisk) : loadedDisk(NULL) {
 
     loadedDisk = sourceLoadedDisk;
 
-    fatDriveInit("", loadedDisk->sector_size, loadedDisk->sectors, loadedDisk->heads, loadedDisk->cylinders, loadedDisk->diskSizeK);
+    fatDriveInit("", loadedDisk->sector_size, loadedDisk->sectors, loadedDisk->heads, loadedDisk->cylinders, loadedDisk->diskSizeK, options);
 }
 
 Bit8u fatDrive::Read_AbsoluteSector(Bit32u sectnum, void * data) {
@@ -804,9 +804,10 @@ Bit32u fatDrive::getSectSize(void) {
     return sector_size;
 }
 
-void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders, Bit64u filesize) {
+void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders, Bit64u filesize, std::vector<std::string> &options) {
 	Bit32u startSector;
 	bool pc98_512_to_1024_allow = false;
+	int opt_partition_index = -1;
 	struct partTable mbrData;
 
 	if(!loadedDisk) {
@@ -814,6 +815,32 @@ void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u c
 		return;
 	}
 
+    //for (const auto &opt : options) {
+	for (std::vector<std::string>::iterator i=options.begin();i!=options.end();i++) {
+		std::string opt = *i;
+        size_t equ = opt.find_first_of('=');
+        std::string name,value;
+
+        if (equ != std::string::npos) {
+            name = opt.substr(0,equ);
+            value = opt.substr(equ+1);
+        }
+        else {
+            name = opt;
+            value.clear();
+        }
+
+        if (name == "partidx") {
+            if (!value.empty())
+                opt_partition_index = (int)atol(value.c_str());
+        }
+        else {
+            LOG(LOG_MISC,LOG_DEBUG)("FAT: option '%s' = '%s' ignored, unknown",name.c_str(),value.c_str());
+        }
+		 
+//        LOG_MSG("'%s' = '%s'",name.c_str(),value.c_str());
+    }
+	 
 	loadedDisk->Addref();
 
     if (loadedDisk->getSectSize() > sizeof(bootbuffer)) {
@@ -855,42 +882,76 @@ void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u c
             memset(ipltable,0,sizeof(ipltable));
             loadedDisk->Read_Sector(0,0,2,ipltable);
 
-            for (i=0;i < max_entries;i++) {
+            if (opt_partition_index >= 0) {
+                 /* user knows best! */
+                 if ((unsigned int)opt_partition_index >= max_entries) {
+                     LOG_MSG("Partition index out of range");
+                     created_successfully = false;
+                     return;
+                 }
+
+                 i = opt_partition_index;
                 _PC98RawPartition *pe = (_PC98RawPartition*)(ipltable+(i * 32));
 
-                if (pe->mid == 0 && pe->sid == 0 &&
-                    pe->ipl_sect == 0 && pe->ipl_head == 0 && pe->ipl_cyl == 0 &&
-                    pe->sector == 0 && pe->head == 0 && pe->cyl == 0 &&
-                    pe->end_sector == 0 && pe->end_head == 0 && pe->end_cyl == 0)
-                    continue; /* unused */
+                /* unfortunately start and end are in C/H/S geometry, so we have to translate.
+                 * this is why it matters so much to read the geometry from the HDI header.
+                 *
+                 * NOTE: C/H/S values in the IPL1 table are similar to IBM PC except that sectors are counted from 0, not 1 */
+                startSector =
+                    (pe->cyl * loadedDisk->sectors * loadedDisk->heads) +
+                    (pe->head * loadedDisk->sectors) +
+                    pe->sector;
 
-                /* We're looking for MS-DOS partitions.
-                 * I've heard that some other OSes were once ported to PC-98, including Windows NT and OS/2,
-                 * so I would rather not mistake NTFS or HPFS as FAT and cause damage. --J.C.
-                 * FIXME: Is there a better way? */
-                if (!strncasecmp(pe->name,"MS-DOS",6) ||
-                    !strncasecmp(pe->name,"MSDOS",5) ||
-                    !strncasecmp(pe->name,"Windows",7)) {
-                    /* unfortunately start and end are in C/H/S geometry, so we have to translate.
-                     * this is why it matters so much to read the geometry from the HDI header.
-                     *
-                     * NOTE: C/H/S values in the IPL1 table are similar to IBM PC except that sectors are counted from 0, not 1 */
-                    startSector =
-                        (pe->cyl * loadedDisk->sectors * loadedDisk->heads) +
-                        (pe->head * loadedDisk->sectors) +
-                         pe->sector;
+                /* Many HDI images I've encountered so far indicate 512 bytes/sector,
+                 * but then the FAT filesystem itself indicates 1024 bytes per sector. */
+                pc98_512_to_1024_allow = true;
 
-                    /* Many HDI images I've encountered so far indicate 512 bytes/sector,
-                     * but then the FAT filesystem itself indicates 1024 bytes per sector. */
-                    pc98_512_to_1024_allow = true;
+                {
+                    /* FIXME: What if the label contains SHIFT-JIS? */
+                    std::string name = std::string(pe->name,sizeof(pe->name));
 
-                    {
-                        /* FIXME: What if the label contains SHIFT-JIS? */
-                        std::string name = std::string(pe->name,sizeof(pe->name));
+                    LOG_MSG("Using IPL1 entry %u name '%s' which starts at sector %lu",
+                        i,name.c_str(),(unsigned long)startSector);
+                }
+            }
+            else {
+                for (i=0;i < max_entries;i++) {
+                    _PC98RawPartition *pe = (_PC98RawPartition*)(ipltable+(i * 32));
 
-                        LOG_MSG("Using IPL1 entry %u name '%s' which starts at sector %lu",
-                            i,name.c_str(),(unsigned long)startSector);
-                        break;
+                    if (pe->mid == 0 && pe->sid == 0 &&
+                            pe->ipl_sect == 0 && pe->ipl_head == 0 && pe->ipl_cyl == 0 &&
+                            pe->sector == 0 && pe->head == 0 && pe->cyl == 0 &&
+                            pe->end_sector == 0 && pe->end_head == 0 && pe->end_cyl == 0)
+                        continue; /* unused */
+
+                    /* We're looking for MS-DOS partitions.
+                     * I've heard that some other OSes were once ported to PC-98, including Windows NT and OS/2,
+                     * so I would rather not mistake NTFS or HPFS as FAT and cause damage. --J.C.
+                     * FIXME: Is there a better way? */
+                    if (!strncasecmp(pe->name,"MS-DOS",6) ||
+                        !strncasecmp(pe->name,"MSDOS",5) ||
+                        !strncasecmp(pe->name,"Windows",7)) {
+                        /* unfortunately start and end are in C/H/S geometry, so we have to translate.
+                         * this is why it matters so much to read the geometry from the HDI header.
+                         *
+                         * NOTE: C/H/S values in the IPL1 table are similar to IBM PC except that sectors are counted from 0, not 1 */
+                        startSector =
+                            (pe->cyl * loadedDisk->sectors * loadedDisk->heads) +
+                            (pe->head * loadedDisk->sectors) +
+                            pe->sector;
+
+                        /* Many HDI images I've encountered so far indicate 512 bytes/sector,
+                         * but then the FAT filesystem itself indicates 1024 bytes per sector. */
+                        pc98_512_to_1024_allow = true;
+
+                        {
+                            /* FIXME: What if the label contains SHIFT-JIS? */
+                            std::string name = std::string(pe->name,sizeof(pe->name));
+
+                            LOG_MSG("Using IPL1 entry %u name '%s' which starts at sector %lu",
+                                i,name.c_str(),(unsigned long)startSector);
+                            break;
+                        }
                     }
                 }
             }
@@ -900,17 +961,29 @@ void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u c
         }
         else {
             /* IBM PC master boot record search */
-            int m;
-            for(m=0;m<4;m++) {
-                /* Pick the first available partition */
-                if(mbrData.pentry[m].partSize != 0x00 &&
-                        (mbrData.pentry[m].parttype == 0x01 || mbrData.pentry[m].parttype == 0x04 ||
-                         mbrData.pentry[m].parttype == 0x06 || mbrData.pentry[m].parttype == 0x0B ||
-                         mbrData.pentry[m].parttype == 0x0C || mbrData.pentry[m].parttype == 0x0D ||
-                         mbrData.pentry[m].parttype == 0x0E || mbrData.pentry[m].parttype == 0x0F)) {
-                    LOG_MSG("Using partition %d on drive (type 0x%02x); skipping %d sectors", m, mbrData.pentry[m].parttype, mbrData.pentry[m].absSectStart);
-                    startSector = mbrData.pentry[m].absSectStart;
-                    break;
+			int m;
+            if (opt_partition_index >= 0) {
+                /* user knows best! */
+                if (opt_partition_index >= 4) {
+                    LOG_MSG("Partition index out of range");
+                    created_successfully = false;
+                    return;
+                }
+
+                startSector = mbrData.pentry[m=opt_partition_index].absSectStart;
+            }
+            else {
+                for(m=0;m<4;m++) {
+                    /* Pick the first available partition */
+                    if(mbrData.pentry[m].partSize != 0x00 &&
+                            (mbrData.pentry[m].parttype == 0x01 || mbrData.pentry[m].parttype == 0x04 ||
+                             mbrData.pentry[m].parttype == 0x06 || mbrData.pentry[m].parttype == 0x0B ||
+                             mbrData.pentry[m].parttype == 0x0C || mbrData.pentry[m].parttype == 0x0D ||
+                             mbrData.pentry[m].parttype == 0x0E || mbrData.pentry[m].parttype == 0x0F)) {
+                        LOG_MSG("Using partition %d on drive (type 0x%02x); skipping %d sectors", m, mbrData.pentry[m].parttype, mbrData.pentry[m].absSectStart);
+                        startSector = mbrData.pentry[m].absSectStart;
+                        break;
+                    }
                 }
             }
 
