@@ -40,6 +40,9 @@
 
 #include "SDL_syswm.h"
 
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#endif
 /* helper class for command execution */
 class VirtualBatch : public BatchFile {
 public:
@@ -122,7 +125,11 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
 		KEYBOARD_ClrBuffer();//Clear buffer
 	}
 	GFX_LosingFocus();//Release any keys pressed (buffer gets filled again). (could be in above if, but clearing the mapper input when exiting the mapper is sensible as well
+#ifndef EMTERPRETER_SYNC
 	SDL_Delay(20);
+#else
+	emscripten_sleep_with_yield(20);
+#endif
 
 	LoadMessageFile(static_cast<Section_prop*>(control->GetSection("dosbox"))->Get_string("language"));
 
@@ -233,8 +240,15 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
  		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
         SDL_Window* GFX_GetSDLWindow(void);
         SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+#ifndef EMTERPRETER_SYNC
  		while (SDL_PollEvent(&event)); 
  		SDL_Delay(40); 
+#else
+ 		while (SDL_PollEvent(&event)){
+			emscripten_sleep_with_yield(0);
+		}
+ 		emscripten_sleep_with_yield(40); 
+#endif
  	} 
     SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_NONE);
 
@@ -252,8 +266,15 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
 		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
 		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL); 
 		SDL_UpdateRect(sdlscreen, 0, 0, 0, 0); 
-		while (SDL_PollEvent(&event)); 
-		SDL_Delay(40); 
+#ifndef EMTERPRETER_SYNC
+ 		while (SDL_PollEvent(&event)); 
+ 		SDL_Delay(40); 
+#else
+ 		while (SDL_PollEvent(&event)){
+			emscripten_sleep_with_yield(0);
+		}
+ 		emscripten_sleep_with_yield(40); 
+#endif
 	} 
 #endif
 	SDL_BlitSurface(background, NULL, sdlscreen, NULL);
@@ -289,8 +310,15 @@ static void UI_Shutdown(GUI::ScreenSDL *screen) {
  		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
         SDL_Window* GFX_GetSDLWindow(void);
         SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+#ifndef EMTERPRETER_SYNC
  		while (SDL_PollEvent(&event)); 
  		SDL_Delay(40); 
+#else
+ 		while (SDL_PollEvent(&event)){
+			emscripten_sleep_with_yield(0);
+		}
+ 		emscripten_sleep_with_yield(40); 
+#endif
  	} 
     SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_NONE);
 #else	
@@ -302,8 +330,15 @@ static void UI_Shutdown(GUI::ScreenSDL *screen) {
 		SDL_BlitSurface(background, NULL, sdlscreen, NULL);
 		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
 		SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
-		while (SDL_PollEvent(&event)) {};
-		SDL_Delay(40); 
+#ifndef EMTERPRETER_SYNC
+ 		while (SDL_PollEvent(&event)); 
+ 		SDL_Delay(40); 
+#else
+ 		while (SDL_PollEvent(&event)){
+			emscripten_sleep_with_yield(0);
+		}
+ 		emscripten_sleep_with_yield(40); 
+#endif
 	}
 #endif
 
@@ -971,7 +1006,11 @@ static void UI_Execute(GUI::ScreenSDL *screen) {
 		SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
 #endif
 
+#ifndef EMTERPRETER_SYNC
 		SDL_Delay(40);
+#else
+		emscripten_sleep_with_yield(40);
+#endif
 	}
 }
 
@@ -1091,7 +1130,11 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 #else	
         SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
 #endif
+#ifndef EMTERPRETER_SYNC
 		SDL_Delay(20);
+#else
+		emscripten_sleep_with_yield(20);
+#endif
 	}
 }
 

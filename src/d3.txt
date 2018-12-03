@@ -35,5 +35,9 @@
 "__ZN9DOS_Shell7CMD_DIREPc",
 "__ZN6CONFIG3RunEv",
 "__ZL29BIOS_Int10RightJustifiedPrintiRiPKc",
-"__ZN4BIOS28cb_bios_startup_screen__funcEv"
+"__ZN4BIOS28cb_bios_startup_screen__funcEv",
+"__ZN7SHOWGUI3RunEv",
+"__Z7GUI_Runb",
+"__ZL10UI_StartupPN3GUI9ScreenSDLE",
+"__ZL11UI_ShutdownPN3GUI9ScreenSDLE"
 ]
