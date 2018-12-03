@@ -697,7 +697,7 @@ static const char *def_menu_cpu_core[] = {
     "mapper_normal",
     "mapper_full",
     "mapper_simple",
-#if (C_DYNAMIC_X86)
+#if (C_DYNAMIC_X86) || (C_DYNREC)
     "mapper_dynamic",
 #endif
     NULL
@@ -3110,7 +3110,7 @@ void MSG_WM_COMMAND_handle(SDL_SysWMmsg &Message) {
 		if (strcasecmp(core_mode, "normal") == 0) break;
 		SetVal("cpu", "core", "normal");
 		break;
-#if (C_DYNAMIC_X86)
+#if defined(C_DYNAMIC_X86) || defined(C_DYNREC)
 	case ID_DYNAMIC: if (strcmp(core_mode, "dynamic") != 0) SetVal("cpu", "core", "dynamic"); break;
 #endif
 	case ID_FULL: if (strcmp(core_mode, "full") != 0) SetVal("cpu", "core", "full"); break;

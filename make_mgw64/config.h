@@ -114,7 +114,7 @@
 #define C_SSHOT 1
 
 /* The type of cpu this target has */
-#define C_TARGETCPU X86
+#define C_TARGETCPU X86_64
 
 /* Define to 1 to use a unaligned memory access */
 #define C_UNALIGNED_MEMORY 1
@@ -210,7 +210,7 @@
 #define PACKAGE_VERSION "0.82.7"
 
 /* The size of `int *', as computed by sizeof. */
-#define SIZEOF_INT_P 4
+#define SIZEOF_INT_P 8
 
 /* The size of `unsigned char', as computed by sizeof. */
 #define SIZEOF_UNSIGNED_CHAR 1
