@@ -40,6 +40,10 @@
 
 #include <map>
 
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#endif
+
 std::map<std::string,std::string> pending_string_binds;
 
 void MAPPER_CheckKeyboardLayout();
@@ -3667,7 +3671,11 @@ void MAPPER_RunInternal() {
 #endif
         }
 		BIND_MappingEvents();
+#ifndef EMTERPRETER_SYNC
 		SDL_Delay(1);
+#else
+		emscripten_sleep_with_yield(1);
+#endif
 	}
 #if defined(C_SDL2)
     SDL_FreeSurface(mapper.draw_surface);
