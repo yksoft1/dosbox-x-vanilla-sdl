@@ -911,7 +911,14 @@ public:
 			SectionEditor *np = new SectionEditor(getScreen(), 50, 30, section);
             np->raise();
 		} else if (arg == "About") {
-            const char *msg = PACKAGE_STRING " (C) 2002-2018 The DOSBox Team\nA fork of DOSBox 0.74 by TheGreatCodeholio\nFor more info visit http://dosbox-x.com\nBased on DOSBox (http://dosbox.com)\n\n";
+            const char *msg = PACKAGE_STRING " (C) 2002-2018 The DOSBox Team\nA fork of DOSBox 0.74 by TheGreatCodeholio\nFor more info visit http://dosbox-x.com\nBased on DOSBox (http://dosbox.com)\n"
+#ifdef __VERSION__
+								"\nThis build is for use of YKSOFT Systems only. Built with GCC " __VERSION__ "\n"
+#endif
+#ifdef EMTERPRETER_SYNC
+								"Built for Emscripten with Emterpretify\n"
+#endif
+								;
 			new GUI::MessageBox2(getScreen(), 100, 150, 480, "About DOSBox-X", msg);
 		} else if (arg == "Introduction") {
 			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO"));
