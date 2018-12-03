@@ -3039,11 +3039,7 @@ public:
 		MAPPER_AddHandler(CPU_ToggleSimpleCore,MK_nothing,0,"simple","SimpleCore", &item);
 		item->set_text("Simple core");
 #endif
-#if (C_DYNAMIC_X86)
-		MAPPER_AddHandler(CPU_ToggleDynamicCore,MK_nothing,0,"dynamic","DynCore",&item);
-		item->set_text("Dynamic core");
-#endif
-
+#if (C_DYNAMIC_X86) || (C_DYNREC)
 		MAPPER_AddHandler(CPU_ToggleDynamicCore,MK_nothing,0,"dynamic","DynCore",&item);
 		item->set_text("Dynamic core");
 #endif
