@@ -1108,7 +1108,7 @@ void GUI_Shortcut(int select) {
     }
 
 #ifdef WIN32
-#if !defined(C_SDL2)
+#if !defined(C_SDL2) && !defined(C_HX_DOS)
 	if(menu.maxwindow) ShowWindow(GetHWND(), SW_RESTORE);
 #endif
 #endif
