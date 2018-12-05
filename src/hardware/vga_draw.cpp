@@ -2264,7 +2264,7 @@ void VGA_CheckScanLength(void) {
 	case M_CGA4:
 	case M_CGA16:
 	case M_AMSTRAD:	// Next line.
-		if (IS_EGAVGA_ARCH || IS_PC98_ARCH)
+		if (IS_EGAVGA_ARCH)
 			vga.draw.address_add=vga.config.scan_len*(2<<vga.config.addr_shift);
 		else
 			vga.draw.address_add=vga.draw.blocks;
@@ -2925,7 +2925,7 @@ void VGA_SetupDrawing(Bitu /*val*/) {
             VGA_DrawLine=EGA_Draw_1BPP_Line_as_EGA;
             bpp = 8;
         }
-        else if (IS_EGAVGA_ARCH || IS_PC98_ARCH) {
+        else if (IS_EGAVGA_ARCH) {
 			vga.draw.blocks=width;
 			VGA_DrawLine=VGA_Draw_1BPP_Line_as_VGA;
 			bpp = 32;
