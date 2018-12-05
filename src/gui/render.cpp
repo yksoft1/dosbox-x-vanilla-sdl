@@ -693,6 +693,12 @@ void RENDER_SetSize(Bitu width,Bitu height,Bitu bpp,float fps,double scrn_ratio)
 	RENDER_Reset( );
 }
 
+void BlankDisplay(void);
+static void BlankTestRefresh(bool pressed) {
+    (void)pressed;
+    BlankDisplay();
+}
+ 
 //extern void GFX_SetTitle(Bit32s cycles, Bits frameskip, Bits timing, bool paused);
 static void IncreaseFrameSkip(bool pressed) {
 	if (!pressed)
@@ -912,6 +918,9 @@ void RENDER_Init() {
 
 	MAPPER_AddHandler(DecreaseFrameSkip,MK_nothing,0,"decfskip","Dec Fskip");
 	MAPPER_AddHandler(IncreaseFrameSkip,MK_nothing,0,"incfskip","Inc Fskip");
+
+    // DEBUG option
+    MAPPER_AddHandler(BlankTestRefresh,MK_nothing,0,"blankrefreshtest","RefrshTest");
 
 	GFX_SetTitle(-1,render.frameskip.max,-1,false);
 	

@@ -720,6 +720,20 @@ static void KillSwitch(bool pressed) {
 	throw 1;
 }
 
+void BlankDisplay(void) {
+    if (OpenGL_using()) {
+        LOG_MSG("FIXME: BlankDisplay() not implemented for OpenGL mode");
+    }
+    else {
+        SDL_FillRect(sdl.surface,0,0);
+#if defined(C_SDL2)
+        SDL_UpdateWindowSurface(sdl.window);
+#else
+        SDL_Flip(sdl.surface);
+#endif
+    }
+}
+ 
 static void SDL_Overscan(void) {
     sdl.overscan_color=0;
 	if (sdl.overscan_width) {
@@ -7849,6 +7863,19 @@ void toggle_always_on_top(void) {
 #endif
 }
 
+void BlankDisplay(void);
+
+bool refreshtest_menu_callback(DOSBoxMenu * const xmenu, DOSBoxMenu::item * const menuitem) {
+    BlankDisplay();
+	
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+    mainMenu.setRedraw();
+    GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+#endif
+ 
+    return true;
+}
+ 
 bool showdetails_menu_callback(DOSBoxMenu * const xmenu, DOSBoxMenu::item * const menuitem) {
 	menu.hidecycles = !menu.hidecycles;
 	GFX_SetTitle(CPU_CycleMax, -1, -1, false);
@@ -8480,6 +8507,10 @@ int main(int argc, char* argv[]) {
 				set_callback_function(vid_pc98_graphics_menu_callback);
 		}
         {
+                DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"VideoDebugMenu");
+                item.set_text("Debug");
+        }
+        {
             DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"SoundMenu");
             item.set_text("Sound");
 			
@@ -8689,6 +8720,8 @@ int main(int argc, char* argv[]) {
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"doublebuf").set_text("Double Buffering (Fullscreen)").set_callback_function(doublebuf_menu_callback).check(!!GetSetSDLValue(1, "desktop.doublebuf", 0));
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"alwaysontop").set_text("Always on top").set_callback_function(alwaysontop_menu_callback).check(is_always_on_top());
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"showdetails").set_text("Show details").set_callback_function(showdetails_menu_callback).check(!menu.hidecycles);
+
+		mainMenu.get_item("mapper_blankrefreshtest").set_text("Refresh test (blank display)").set_callback_function(refreshtest_menu_callback).refresh_item(mainMenu);		
 		
 		bool MENU_get_swapstereo(void);
 		mainMenu.get_item("mixer_swapstereo").check(MENU_get_swapstereo()).refresh_item(mainMenu);
