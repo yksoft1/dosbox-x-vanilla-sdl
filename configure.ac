@@ -493,11 +493,6 @@ AH_TEMPLATE(C_MT32,[Define to 1 to enable MT32 emulation (x86/x86_64 only)])
 AC_ARG_ENABLE(mt32,AC_HELP_STRING([--disable-mt32],[Disable MT32 emulation]),,enable_mt32=yes)
 AC_MSG_CHECKING(whether MT32 emulation will be enabled) 
 
-# HACK: Don't enable MT32 on SDL2
-if test -n "$SDL2_LIBS"; then
-    enable_mt32=no
-fi
-
 # test
 # Note that MT32 (MUNT) requires the SSE extensions
 if test x$enable_mt32 = xyes ; then 
@@ -505,12 +500,10 @@ if test x$enable_mt32 = xyes ; then
     x86_64 | amd64)
       AC_MSG_RESULT(yes)
       AC_DEFINE(C_MT32,1)
-      CXXFLAGS="$CXXFLAGS -mmmx -msse -msse2"
       ;;
     i?86)
       AC_MSG_RESULT(yes)
       AC_DEFINE(C_MT32,1)
-      CXXFLAGS="$CXXFLAGS -mmmx -msse -msse2"
       ;;
     *)
       enable_mt32=no
