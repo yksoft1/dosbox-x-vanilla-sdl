@@ -134,9 +134,9 @@ public:
 			call setPartialLimit() with the (often lower) number we wanted, then
 			a memory leak will occur because the PartialManager() will only free
 			the new lower limit and leave the rest in memory. */
-		numPartials = section->Get_int("mt32.partials");
+		/*numPartials = section->Get_int("mt32.partials");
 		if(numPartials>MT32EMU_MAX_PARTIALS) numPartials=MT32EMU_MAX_PARTIALS;
-		synth->setPartialLimit(numPartials);
+		synth->setPartialLimit(numPartials);*/ //mt32emu 2.3 no longer have setPartialLimit
 
 		if (!synth->open(*controlROMImage, *pcmROMImage)) {
 			LOG(LOG_MISC,LOG_WARN)("MT32: Error initialising emulation");
