@@ -115,9 +115,9 @@ clean:
 html: $(TARGET)
 ifeq ($(PRELOAD), 1)
 	$(CC) -O3 -s USE_SDL=2 -s WASM=$(WASM) -s TOTAL_MEMORY=$(EMSCRIPTEN_TOTAL_MEMORY)  \
-	$(TARGET) \
+	-s BINARYEN_TRAP_MODE="js" $(TARGET) \
 	--preload-file $(PREFILE) -o $(basename $(TARGET)).html 
 else
 	$(CC) -O3 -s USE_SDL=2 -s WASM=$(WASM) -s TOTAL_MEMORY=$(EMSCRIPTEN_TOTAL_MEMORY)  \
-	$(TARGET) -o $(basename $(TARGET)).html 
+	-s BINARYEN_TRAP_MODE="js" $(TARGET) -o $(basename $(TARGET)).html 
 endif
