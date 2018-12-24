@@ -2134,8 +2134,6 @@ void MSG_WM_COMMAND_handle(SDL_SysWMmsg &Message) {
 	if (Message.msg != WM_COMMAND) return;
     if (mainMenu.mainMenuWM_COMMAND(Message.wParam)) return;
 
-=======
->>>>>>> master
 	Reflect_Menu();
 #endif
 }
