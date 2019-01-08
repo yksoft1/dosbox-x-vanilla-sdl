@@ -426,31 +426,68 @@ static void write_p43(Bitu /*port*/,Bitu val,Bitu /*iolen*/) {
 	}
 }
 
+// FIXME: I am assuming that the "buzzer inhibit" on PC-98 controls the "trigger" pin
+//        that either enables the PIT to count or stops it and resets the counter.
+//        Verify this on real hardware (DOSLIB TPCRAPI6.EXE)
+//
+//        This is the picture I have of the hardware:
+//
+//        IBM PC:
+//
+//        Port 61h
+//        - bit 0 PIT 2 counter gate (write)
+//        - bit 1 PIT 2 counter output gate (write)
+//        - bit 5 PIT 2 counter output (read). The connection point lies BEFORE the AND gate.
+//            You will see the output toggle even if the speaker was muted by clearing the output gate bit.
+//
+//        PC-98:
+//
+//        Port 35h (Intel 8255 PPI Port C)
+//        - bit 3 PIT 1 counter gate (there is no output gate). Setting the bit inhibits the counter (and therefore PC speaker)
+//
+//        IBM PC:
+//
+//        counter output readback <- --------+
+//                                           |
+//                        +------+           |        +----------+
+//        counter gate -> | 8254 | -> PIT 2 output -> | AND GATE | -> PC speaker
+//                        +------+                    +----------+
+//                                                         |
+//        counter output gate -> --------------------------+
+//
+//        PC-98:
+//
+//                        +------+
+//        counter gate -> | 8254 | -> PC speaker
+//                        +------+
+	
 void TIMER_SetGate2(bool in) {
+	unsigned int speaker_pit = IS_PC98_ARCH ? 1 : 2;
+
 	//No changes if gate doesn't change
 	if(gate2 == in) return;
-	Bit8u & mode=pit[2].mode;
+	Bit8u & mode=pit[speaker_pit].mode;
 	switch(mode) {
 	case 0:
-		if(in) pit[2].start = PIC_FullIndex();
+		if(in) pit[speaker_pit].start = PIC_FullIndex();
 		else {
 			//Fill readlatch and store it.
-			counter_latch(2);
-			pit[2].cntr = pit[2].read_latch;
+			counter_latch(speaker_pit);
+			pit[speaker_pit].cntr = pit[speaker_pit].read_latch;
 		}
 		break;
 	case 1:
 		// gate 1 on: reload counter; off: nothing
 		if(in) {
-			pit[2].counting = true;
-			pit[2].start = PIC_FullIndex();
+			pit[speaker_pit].counting = true;
+			pit[speaker_pit].start = PIC_FullIndex();
 		}
 		break;
 	case 2:
 	case 3:
 		//If gate is enabled restart counting. If disable store the current read_latch
-		if(in) pit[2].start = PIC_FullIndex();
-		else counter_latch(2);
+		if(in) pit[speaker_pit].start = PIC_FullIndex();
+		else counter_latch(speaker_pit);
 		break;
 	case 4:
 	case 5:
@@ -461,7 +498,9 @@ void TIMER_SetGate2(bool in) {
 }
 
 bool TIMER_GetOutput2() {
-	return counter_output(2);
+    unsigned int speaker_pit = IS_PC98_ARCH ? 1 : 2;//NTS: For completion sake, even though there is no readback bit on PC-98
+	
+	return counter_output(speaker_pit);
 }
 
 #include "programs.h"
