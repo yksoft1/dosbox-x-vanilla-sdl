@@ -40,14 +40,13 @@ static INLINE void BCD2BIN(Bit16u& val) {
 
 struct PIT_Block {
 	Bitu cntr;
-	float delay;
+	double delay;
 	double start;
 
 	Bit16u read_latch;
 	Bit16u write_latch;
 
 	Bit8u mode;
-	Bit8u latch_mode;
 	Bit8u read_state;
 	Bit8u write_state;
 
@@ -57,6 +56,9 @@ struct PIT_Block {
 	bool counterstatus_set;
 	bool counting;
 	bool update_count;
+	
+	bool gate;       /* gate signal (IN) */
+	bool output;     /* output signal (OUT) */	
 };
 
 static PIT_Block pit[3];
@@ -494,6 +496,7 @@ void TIMER_SetGate2(bool in) {
 		LOG(LOG_MISC,LOG_WARN)("unsupported gate 2 mode %x",mode);
 		break;
 	}
+	pit[speaker_pit].gate = in;
 	gate2 = in; //Set it here so the counter_latch above works
 }
 
@@ -747,6 +750,9 @@ void TIMER_Init() {
 		pit[i].counterstatus_set = false;
 		pit[i].update_count = false;
 		pit[i].delay = (1000.0f/((float)PIT_TICK_RATE/(float)pit[i].cntr));
+		
+		pit[i].gate = true;
+		pit[i].output = true;
 	}
 
 	AddExitFunction(AddExitFunctionFuncPair(TIMER_Destroy));
