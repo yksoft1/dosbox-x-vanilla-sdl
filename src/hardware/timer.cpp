@@ -40,6 +40,7 @@ static INLINE void BCD2BIN(Bit16u& val) {
 
 struct PIT_Block {
 	Bitu cntr;
+	Bitu cntr_cur;
 	double delay;
 	double start;
 
@@ -59,6 +60,19 @@ struct PIT_Block {
 	
 	bool gate;       /* gate signal (IN) */
 	bool output;     /* output signal (OUT) */	
+	
+    void set_next_counter(Bitu new_cntr) {
+        cntr = new_cntr;
+    }
+    void set_active_counter(Bitu new_cntr) {
+        assert(new_cntr != 0);
+
+        cntr_cur = new_cntr;
+        delay = ((double)(1000ul * cntr_cur)) / PIT_TICK_RATE;
+    }
+    void latch_next_counter(void) {
+        set_active_counter(cntr);
+    }	
 };
 
 static PIT_Block pit[3];
@@ -77,7 +91,7 @@ static void PIT0_Event(Bitu /*val*/) {
 		pit[0].start += pit[0].delay;
 
 		if (GCC_UNLIKELY(pit[0].update_count)) {
-			pit[0].delay=(1000.0f/((float)PIT_TICK_RATE/(float)pit[0].cntr));
+			pit[0].latch_next_counter();
 			pit[0].update_count=false;
 		}
 		PIC_AddEvent(PIT0_Event,pit[0].delay);
@@ -259,29 +273,60 @@ static void write_latch(Bitu port,Bitu val,Bitu /*iolen*/) {
 	}
 	if (p->bcd==true) BCD2BIN(p->write_latch);
    	if (p->write_state != 0) {
-		if (p->write_latch == 0) {
+        Bitu old_cntr = p->cntr;
+
+        if (p->write_latch == 0) {
 			if (p->bcd == false) p->cntr = 0x10000;
 			else p->cntr=9999;
 		} else p->cntr = p->write_latch;
 
-		if ((!p->new_mode) && (p->mode == 2) && (counter == 0)) {
-			// In mode 2 writing another value has no direct effect on the count
-			// until the old one has run out. This might apply to other modes too.
-			// This is not fixed for PIT2 yet!!
-			p->update_count=true;
-			return;
+        if (!p->new_mode) {
+            if ((p->mode == 2/*common IBM PC mode*/ || p->mode == 3/*common PC-98 mode*/) && (counter == 0)) {
+                // In mode 2 writing another value has no direct effect on the count
+                // until the old one has run out. This might apply to other modes too.
+                // This is not fixed for PIT2 yet!!
+                p->update_count=true;
+                return;
+            }
+            else if ((p->mode == 3) && (counter == (IS_PC98_ARCH ? 1 : 2))) {
+                void PCSPEAKER_SetCounter_NoNewMode(Bitu cntr);
+
+                // PC speaker
+                PCSPEAKER_SetCounter_NoNewMode(p->cntr);
+                p->update_count=true;
+                return;
+            }
+			
+            if (counter == 0 && p->mode == 0) {
+                /* TODO: remove this when implemented properly so running DoWhackaDo doesn't result in a lot of log spam */
+            }
+            else {
+                // this debug message will help development trace down cases where writing without a new mode
+                // would incorrectly restart the counter instead of letting the current count complete before
+                // writing a new one.
+                LOG(LOG_PIT,LOG_NORMAL)("WARNING: Writing counter %u in mode %u without writing port 43h not yet supported, will be handled as if new mode and reset of the cycle",(int)counter,(int)p->mode);
+            }
 		}
-		p->start=PIC_FullIndex();
-		p->delay=(1000.0f/((float)PIT_TICK_RATE/(float)p->cntr));
+
+        p->start=PIC_FullIndex();
+		p->latch_next_counter();
 
 		switch (counter) {
 		case 0x00:			/* Timer hooked to IRQ 0 */
-			if (p->new_mode || p->mode == 0 ) {
-				if(p->mode==0) PIC_RemoveEvents(PIT0_Event); // DoWhackaDo demo
-				PIC_AddEvent(PIT0_Event,p->delay);
-			} else LOG(LOG_PIT,LOG_NORMAL)("PIT 0 Timer set without new control word");
-			LOG(LOG_PIT,LOG_NORMAL)("PIT 0 Timer at %.4f Hz mode %d",1000.0/p->delay,p->mode);
-			break;
+            PIC_RemoveEvents(PIT0_Event);
+            PIC_AddEvent(PIT0_Event,p->delay);
+
+#if 0//change to #if 1 if you want to debug Mode 0 one-shot events
+            if (p->mode == 0)
+                LOG(LOG_PIT,LOG_NORMAL)("PIT 0 Timer one-shot event %.3fms",p->delay);
+#endif
+
+            //please do not spam the log and console if a game is writing the SAME counter value constantly,
+            //and do not spam the console if Mode 0 is used because events are not consistent.
+            if (p->cntr != old_cntr && p->mode != 0)
+                LOG(LOG_PIT,LOG_NORMAL)("PIT 0 Timer at %.4f Hz mode %d",1000.0/p->delay,p->mode);
+
+            break;
         case 0x01:          /* Timer hooked to PC-Speaker (NEC-PC98) */
             if (IS_PC98_ARCH)
                 PCSPEAKER_SetCounter(p->cntr,p->mode);
@@ -294,6 +339,20 @@ static void write_latch(Bitu port,Bitu val,Bitu /*iolen*/) {
 			LOG(LOG_PIT,LOG_ERROR)("PIT:Illegal timer selected for writing");
 		}
 		p->new_mode=false;
+    }
+    else { /* write state == 0 */
+        /* If a new count is written to the Counter, it will be
+         * loaded on the next CLK pulse and counting will con-
+         * tinue from the new count. If a two-byte count is writ-
+         * ten, the following happens:
+         * 1) Writing the first byte disables counting. OUT is set
+         * low immediately (no clock pulse required)
+         * 2) Writing the second byte allows the new count to
+         * be loaded on the next CLK pulse. */
+        if (p->mode == 0) {
+            PIC_RemoveEvents(PIT0_Event);
+            p->update_count = false;
+        }
     }
 }
 
@@ -593,9 +652,9 @@ void TIMER_BIOS_INIT_Configure() {
 	    pit[pcspeaker_pit].start = PIC_FullIndex();
 	}
 
-	pit[0].delay=(1000.0f/((float)PIT_TICK_RATE/(float)pit[0].cntr));
-	pit[1].delay=(1000.0f/((float)PIT_TICK_RATE/(float)pit[1].cntr));
-	pit[2].delay=(1000.0f/((float)PIT_TICK_RATE/(float)pit[2].cntr));
+	pit[0].latch_next_counter();
+	pit[1].latch_next_counter();
+	pit[2].latch_next_counter();
 
 	PCSPEAKER_SetCounter(pit[pcspeaker_pit].cntr,pit[pcspeaker_pit].mode);
 	PIC_AddEvent(PIT0_Event,pit[0].delay);
@@ -749,7 +808,7 @@ void TIMER_Init() {
 		pit[i].go_read_latch = false;
 		pit[i].counterstatus_set = false;
 		pit[i].update_count = false;
-		pit[i].delay = (1000.0f/((float)PIT_TICK_RATE/(float)pit[i].cntr));
+		pit[i].latch_next_counter();
 		
 		pit[i].gate = true;
 		pit[i].output = true;
