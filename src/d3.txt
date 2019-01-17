@@ -43,5 +43,8 @@
 "__Z15MAPPER_RunEventj",
 "__Z18MAPPER_RunInternalv",
 "__ZN5MOUNT3RunEv",
-"__ZN9DOS_Shell10ShowPromptEv"
+"__ZN9DOS_Shell10ShowPromptEv",
+"__ZN7Program18WriteOut_NoParsingEPKc",
+"__ZN8IMGMOUNT3RunEv",
+"__ZN8IMGMOUNT8MountFatEPjcbRKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEERKNS1_6vectorIS7_NS5_IS7_EEEEab"
 ]
