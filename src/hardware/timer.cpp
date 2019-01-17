@@ -131,6 +131,8 @@ struct PIT_Block {
         }
 
         //assert(start <= now);
+		if(start > now)
+			start=now;
 	}
     double reltime(void) const {
         return now - start;
