@@ -130,7 +130,7 @@ struct PIT_Block {
             }
         }
 
-        assert(start <= now);
+        //assert(start <= now);
 	}
     double reltime(void) const {
         return now - start;
@@ -222,7 +222,7 @@ struct PIT_Block {
 				
         const double index = reltime();
         read_counter_result ret;
-		ret.counter=0xffffu;
+		//ret.counter=0xffffu;
 		ret.cycle=0;
 
         switch (mode) {
@@ -922,12 +922,6 @@ void TIMER_Init() {
 		pit[i].counterstatus_set = false;
 		pit[i].update_count = false;
 		pit[i].latch_next_counter();
-		
-//		pit[i].gate = true;
-//		pit[i].output = true;
-		
-//		pit[i].last_counter.counter = 0xFFFFu;
-//		pit[i].last_counter.cycle = 0;
 	}
 
 	AddExitFunction(AddExitFunctionFuncPair(TIMER_Destroy));
