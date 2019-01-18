@@ -56,6 +56,7 @@ struct PIT_Block {
 	Bit8u mode;
 	Bit8u read_state;
 	Bit8u write_state;
+	Bit8u cycle_base;
 
 	bool bcd;
 	bool go_read_latch;
@@ -75,6 +76,7 @@ struct PIT_Block {
 		output = true;
 		last_counter.counter=0xFFFFu;
 		last_counter.cycle=0;
+		cycle_base=0;
 	}
 	
     void set_output(bool on) {
@@ -99,6 +101,7 @@ struct PIT_Block {
     }
 	void reset_count_at(double t) {
         start = now = t;
+		cycle_base = 0;
 	}
 	void restart_counter_at(double t,Bit16u counter) {
         double c_delay;
@@ -116,7 +119,26 @@ struct PIT_Block {
         /* Mode 0 will always reset the count whether "new mode" or not.
          * Mode 1 will count down and stop. TODO: Writing a new counter without "new mode" starts another countdown? */
         /* if any periodic mode (Mode 2, 3, 4, 5), then process fully. */
-        if (mode >= 2) {
+        if (mode == 3) {
+           const double half = delay / 2;
+
+            if (now >= (start+half)) {
+                cycle_base = (cycle_base + 1u) & 1u;
+                start += half;
+
+                if (update_count) {
+                    latch_next_counter();
+                    update_count = false;
+                }
+
+                if (now >= (start+half)) {
+                    unsigned int cnt = (unsigned int)floor((now - start) / half);
+                    cycle_base = (cycle_base + cnt) & 1u;
+                    start += cnt * half;
+                }
+            }
+        }
+        else if (mode >= 2) {
             if (now >= (start+delay)) {
                 start += delay;
 
@@ -266,10 +288,11 @@ struct PIT_Block {
                         fprintf(stderr,"tmp %.9f index %.9f delay %.9f now %.3f start %.3f\n",tmp,index,delay,now,start);
                         abort();
                     }
-						
+		
+					ret.cycle = cycle_base;
                     if (tmp >= delay) {
                         tmp -= delay;
-                        ret.cycle = 1;
+                        ret.cycle = (ret.cycle + 1u) & 1u;
                     }
 
                     ret.counter = ((Bit16u)(cntr_cur - ((tmp * cntr_cur) / delay))) & 0xFFFEu; /* always even value */
@@ -303,8 +326,10 @@ static void PIT0_Event(Bitu /*val*/) {
         if (err >= (pit[0].delay/2))
             err -=  pit[0].delay;
 
+#if 0 //in PC-98 Legend of Heroes IV this causes many messages...
         if (fabs(err) >= (0.5 / CPU_CycleMax))
             LOG_MSG("PIT0_Event timing error %.6fms",err);
+#endif
 
         PIC_AddEvent(PIT0_Event,pit[0].delay - (err * 0.05));
 	}
@@ -368,6 +393,16 @@ void TIMER_IRQ0Poll(void) {
      counter_latch(0, false/*do not latch*/);
 }
 
+double speaker_pit_delta(void) {
+    unsigned int speaker_pit = IS_PC98_ARCH ? 1 : 2;
+    return fmod(pit[speaker_pit].now - pit[speaker_pit].start, pit[speaker_pit].delay);
+}
+	
+void speaker_pit_update(void) {
+    unsigned int speaker_pit = IS_PC98_ARCH ? 1 : 2;
+    pit[speaker_pit].track_time(PIC_FullIndex());
+}
+	
 static void write_latch(Bitu port,Bitu val,Bitu /*iolen*/) {
 //LOG(LOG_PIT,LOG_ERROR)("port %X write:%X state:%X",port,val,pit[port-0x40].write_state);
 
