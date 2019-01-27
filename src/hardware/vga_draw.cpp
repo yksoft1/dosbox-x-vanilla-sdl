@@ -2188,7 +2188,27 @@ void VGA_CheckScanLength(void) {
 		}
 		else {
 			/* the rest (SVGA modes) can be rendered with sanity */
-			vga.draw.address_add=vga.config.scan_len*(2<<vga.config.addr_shift);
+            if (svgaCard == SVGA_TsengET3K || svgaCard == SVGA_TsengET4K || svgaCard == SVGA_S3Trio) {
+                // Real hardware testing (Tseng ET4000) shows that in SVGA modes the
+                // standard VGA byte/word/dword mode bits have no effect.
+                //
+                // This was verified by using TMOTSENG.EXE on real hardware, setting
+                // mode 0x2F (640x400 256-color mode) and then playing with the
+                // word/dword/byte mode bits.
+                //
+                // Also noted is that the "count memory clock by 4" bit is set. If
+                // you clear it, the hardware acts as if it completes the scanline
+                // early and 3/4ths of the screen is the last 4-pixel block repeated.
+                //
+                // S3 Trio: Testing on a real S3 Virge PCI card shows that the
+                //          byte/word/dword bits have no effect on SVGA modes other
+                //          than the 16-color 800x600 SVGA mode.
+                vga.draw.address_add=vga.config.scan_len*(unsigned int)(2u<<2u);
+            }
+            else {
+                // Other cards (?)
+                vga.draw.address_add=vga.config.scan_len*(unsigned int)(2u<<vga.config.addr_shift);
+            }
 		}
 		break;
     case M_PC98:
