@@ -591,7 +591,7 @@ extern bool pc98_force_ibm_layout;
  * NFER         0x5100      0xA100      0xB100  0x5100  0x5100  0xA100
  * GRPH         --          --          --      --      --      --
  * TAB          0x0F09      0x0F09      0x0F09  0x0F09  0x0F09  0x0F09
- * - / 口       --          --          --      --      0x33DB  0x33DB      Kana+CTRL = 0x331F
+ * - / 口       --          0x335F      0x331F     --   0x33DB  0x33DB      Kana+CTRL = 0x331F
  */
 static Bitu IRQ1_Handler_PC98(void) {
     unsigned char sc_8251,status;
@@ -1142,6 +1142,14 @@ static Bitu IRQ1_Handler_PC98(void) {
                         add_key(scan_add + '/');
                 }
                 break;
+            case 0x33: //  _ / Ro
+                if (pressed) {
+                    if (modflags & 1) /* shift */
+                        add_key(scan_add + '_');
+                    else
+                        { /*nothing*/ }
+                }
+                break;				
             case 0x34: // <space>
                 if (pressed) {
                     add_key(scan_add + ' ');
