@@ -1538,7 +1538,14 @@ void MenuDrawTextChar(int x,int y,unsigned char c,Bitu color) {
         unsigned char *scan;
 
         assert(sdl.surface->pixels != NULL);
-
+		
+        if (x < 0 || y < 0)
+            return;
+        if ((x + 8) > sdl.surface->w)
+            return;
+        if ((y + (int)fontHeight) > sdl.surface->h)
+            return;
+			
         scan  = (unsigned char*)sdl.surface->pixels;
         scan += y * sdl.surface->pitch;
         scan += x * ((sdl.surface->format->BitsPerPixel+7)/8);
@@ -1597,6 +1604,13 @@ void MenuDrawTextChar2x(int x,int y,unsigned char c,Bitu color) {
 
         assert(sdl.surface->pixels != NULL);
 
+        if (x < 0 || y < 0)
+            return;
+        if ((x + 8) > sdl.surface->w)
+            return;
+        if ((y + (int)fontHeight) > sdl.surface->h)
+            return;
+			
         scan  = (unsigned char*)sdl.surface->pixels;
         scan += y * sdl.surface->pitch;
         scan += x * ((sdl.surface->format->BitsPerPixel+7)/8);
