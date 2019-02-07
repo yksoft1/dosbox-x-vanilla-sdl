@@ -1195,7 +1195,7 @@ static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) 
 	Bit16u windowWidth;
 	Bit16u windowHeight;
 
-
+retry:
     int Voodoo_OGL_GetWidth();
     int Voodoo_OGL_GetHeight();
     bool Voodoo_OGL_Active();
@@ -1295,6 +1295,14 @@ static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) 
 #endif
 
 	sdl.surface=SDL_SetVideoMode(windowWidth,windowHeight,bpp,sdl_flags);
+    if (sdl.surface == NULL && sdl.desktop.fullscreen) {
+        LOG_MSG("Fullscreen not supported: %s", SDL_GetError());
+        sdl.desktop.fullscreen = false;
+        sdl_flags &= ~SDL_FULLSCREEN;
+        GFX_CaptureMouse();
+        goto retry;
+    }
+	
 	sdl.deferred_resize = false;
 	sdl.must_redraw_all = true;
 
