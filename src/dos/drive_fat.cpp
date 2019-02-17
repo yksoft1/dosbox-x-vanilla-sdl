@@ -61,6 +61,7 @@ public:
 	Bit32u dirCluster;
 	Bit32u dirIndex;
 
+	bool modified;
 	bool loadedSector;
 	fatDrive *myDrive;
 private:
@@ -68,6 +69,17 @@ private:
 	Bit16u info;
 };
 
+void time_t_to_DOS_DateTime(Bit16u &t,Bit16u &d,time_t unix_time) {
+    struct tm *tm = localtime(&unix_time);
+    if (tm == NULL) return;
+
+    /* NTS: tm->tm_year = years since 1900,
+     *      tm->tm_mon = months since January therefore January == 0
+     *      tm->tm_mday = day of the month, starting with 1 */
+
+    t = (tm->tm_hour << 11u) + (tm->tm_min << 5u) + (tm->tm_sec >> 1u);
+    d = ((tm->tm_year - 80u) << 9u) + ((tm->tm_mon + 1u) << 5) + tm->tm_mday;
+}
 
 /* IN - char * filename: Name in regular filename format, e.g. bob.txt */
 /* OUT - char * filearray: Name in DOS directory format, eleven char, e.g. bob     txt */
@@ -92,6 +104,7 @@ fatFile::fatFile(const char* /*name*/, Bit32u startCluster, Bit32u fileLen, fatD
 	firstCluster = startCluster;
 	myDrive = useDrive;
 	filelength = fileLen;
+	modified = false;
 	open = true;
 	loadedSector = false;
 	curSectOff = 0;
@@ -222,6 +235,8 @@ bool fatFile::Write(Bit8u * data, Bit16u *size) {
 
 			loadedSector = true;
 		}
+		newtime = false; // Guess: Writing the file supercedes any call to set DOS time, right?
+		modified = true;
 		--sizedec;
 	}
 	if(curSectOff>0 && loadedSector) myDrive->Write_AbsoluteSector(currentSector, sectorBuffer);
@@ -272,6 +287,27 @@ bool fatFile::Close() {
 	/* Flush buffer */
 	if (loadedSector) myDrive->Write_AbsoluteSector(currentSector, sectorBuffer);
 
+	if (modified || newtime) {
+		direntry tmpentry;
+
+		myDrive->directoryBrowse(dirCluster, &tmpentry, (Bit32s)dirIndex);
+
+        if (newtime) {
+            tmpentry.modTime = time;
+            tmpentry.modDate = date;
+        }
+        else {
+            Bit16u ct,cd;
+
+            time_t_to_DOS_DateTime(/*&*/ct,/*&*/cd,::time(NULL));
+
+            tmpentry.modTime = ct;
+            tmpentry.modDate = cd;
+        }
+
+		myDrive->directoryChange(dirCluster, &tmpentry, (Bit32s)dirIndex);
+	}
+	
 	return false;
 }
 
@@ -1247,6 +1283,12 @@ bool fatDrive::FileCreate(DOS_File **file, const char *name, Bit16u attributes) 
 		if(!getDirClustNum(name, &dirClust, true)) return false;
 		memset(&fileEntry, 0, sizeof(direntry));
 		memcpy(&fileEntry.entryname, &pathName[0], 11);
+		{
+			Bit16u ct,cd;
+			time_t_to_DOS_DateTime(/*&*/ct,/*&*/cd,time(NULL));
+			fileEntry.modTime = ct;
+			fileEntry.modDate = cd;
+		}		
 		fileEntry.attrib = (Bit8u)(attributes & 0xff);
 		addDirectoryEntry(dirClust, fileEntry);
 
@@ -1261,8 +1303,8 @@ bool fatDrive::FileCreate(DOS_File **file, const char *name, Bit16u attributes) 
 	((fatFile *)(*file))->dirCluster = dirClust;
 	((fatFile *)(*file))->dirIndex = subEntry;
 	/* Maybe modTime and date should be used ? (crt matches findnext) */
-	((fatFile *)(*file))->time = fileEntry.crtTime;
-	((fatFile *)(*file))->date = fileEntry.crtDate;
+	((fatFile *)(*file))->time = fileEntry.modTime;
+	((fatFile *)(*file))->date = fileEntry.modDate;
 
 	dos.errorcode=save_errorcode;
 	return true;
@@ -1285,8 +1327,8 @@ bool fatDrive::FileOpen(DOS_File **file, const char *name, Bit32u flags) {
 	((fatFile *)(*file))->dirCluster = dirClust;
 	((fatFile *)(*file))->dirIndex = subEntry;
 	/* Maybe modTime and date should be used ? (crt matches findnext) */
-	((fatFile *)(*file))->time = fileEntry.crtTime;
-	((fatFile *)(*file))->date = fileEntry.crtDate;
+	((fatFile *)(*file))->time = fileEntry.modTime;
+	((fatFile *)(*file))->date = fileEntry.modDate;
 	return true;
 }
 
