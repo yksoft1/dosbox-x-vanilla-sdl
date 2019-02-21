@@ -17,6 +17,8 @@ emcc -O1 -s USE_SDL=2  -s TOTAL_MEMORY=104857600  -s EMTERPRETIFY=1 -s EMTERPRET
 (The crash was fixed in binaryen pull request #1681, but more problems may appear using -O3.)
 (The Emterpretify whitelist d3.txt is incomplete. If you want to investigate for functions needed to be Emterpretified, link to HTML/JS/WASM using --profiling-funcs and see the call stack at assertion faults in Firefox.) 
 
+(add emcc option -s BINARYEN_TRAP_MODE="js" if you found that FPU emulation is incorrect by default.)
+
 Note: Without Emterpreter, .BAT files are not supported. use BAT2EXEC.COM to compile game .BAT to executable file.
 for Emscripten SDL1: keyboard input is not working. Why? It worked in regular Dosbox.
 Use SDL2 for now..
