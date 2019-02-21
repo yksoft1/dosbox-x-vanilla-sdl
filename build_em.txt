@@ -1,15 +1,20 @@
-Remember to use Emscripten's sdl2-config.
+Remember to use Emscripten's sdl2-config instead of system sdl2-config. 
+I didn't figure out how to set the path of sdl2-config manually in that Autoconf mess.
 
-My build command: (for my MSYS1+emsdk 1.38.12 Frankenstein environment)
+Please fix all paths mentioned in the commands below if you use them in your environment.
+
+My build commands: (for my MSYS1+emsdk 1.38.12 Frankenstein environment)
 CC="emcc --sysroot=c:/emsdk/emscripten/1.38.12/system" CXX="em++ --sysroot=c:/emsdk/emscripten/1.38.12/system" LD="emcc" LD_CXX="em++" ./configure   --host=i386-linux --disable-dynamic-x86 --disable-dynrec --enable-sdl2 --with-sdl-prefix=c:/emsdk/emscripten/1.38.12/system --disable-opengl --disable-mt32
+mv src/dosbox-x dosbox-x.bc
 emcc -O3 -s USE_SDL=2  -s TOTAL_MEMORY=134217728 -s FORCE_FILESYSTEM=1 -s DISABLE_EXCEPTION_CATCHING=0 dosbox-x.bc --memory-init-file 0 -o dosbox-x.html --preload-file d:/tmpp/th@/
 (replace --preload-file for your dosbox.conf, PC-98 font and YM2608 sample files and your game.)
 
 build with Emterpreter:
 CC="emcc --sysroot=c:/emsdk/emscripten/1.38.12/system" CXX="em++ --sysroot=c:/emsdk/emscripten/1.38.12/system" LD="emcc" LD_CXX="em++" CFLAGS="-DEMTERPRETER_SYNC" CXXFLAGS="-DEMTERPRETER_SYNC" ./configure   --host=i386-linux --disable-dynamic-x86 --disable-dynrec --enable-sdl2 --with-sdl-prefix=c:/emsdk/emscripten/1.38.12/system --disable-opengl --disable-mt32
-emcc -O1 -s USE_SDL=2  -s TOTAL_MEMORY=104857600  -s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1 -s EMTERPRETIFY_WHITELIST=@d3.txt  dosbox-x.bc --memory-init-file 0 -o th5e.html --preload-file d:/tmpp/th5x@/
+mv src/dosbox-x dosbox-x.bc
+emcc -O1 -s USE_SDL=2  -s TOTAL_MEMORY=104857600  -s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1 -s EMTERPRETIFY_WHITELIST=@src/d3.txt  dosbox-x.bc --memory-init-file 0 -o th5e.html --preload-file d:/tmpp/th5x@/
 (Note: -O2 or -O3 may crash asm2wasm.) 
-(The crash was fixed in binaryen pull request #1681, but more problems appear use -O3.)
+(The crash was fixed in binaryen pull request #1681, but more problems may appear using -O3.)
 (The Emterpretify whitelist d3.txt is incomplete. If you want to investigate for functions needed to be Emterpretified, link to HTML/JS/WASM using --profiling-funcs and see the call stack at assertion faults in Firefox.) 
 
 Note: Without Emterpreter, .BAT files are not supported. use BAT2EXEC.COM to compile game .BAT to executable file.
