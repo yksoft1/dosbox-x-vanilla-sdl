@@ -9,6 +9,10 @@ Some of other programs rely on features removed from DosBox-X's in-tree SDL to w
 I'll try to cherry-pick most PC-98 related features from joncampbell123's as I mainly use DosBox-X as a PC-98 emulator.
 
 # About Emscripten branch
+This port is VERY experimental and there are lots of unusable and disabled features.
+
+It's only tested against some PC-98 games and a few selected IBM PC games, thus it's not ready to replace em-dosbox or other Emscripten DOSBox ports at all.
+
 Please refer to build_em.txt for instructions using Autoconf to build.
 
 Or use makefiles located in make_em and make_em-sdl1 directories. Remember to use "html" target to compile .bc file to HTML, JS and WASM files.
