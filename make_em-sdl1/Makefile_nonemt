@@ -110,7 +110,7 @@ $(TARGET):	$(OBJS)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS)  $(basename $(TARGET)).html $(basename $(TARGET)).js.orig.js  $(basename $(TARGET)).js $(basename $(TARGET)).wasm $(basename $(TARGET)).data
 
 html: $(TARGET)
 ifeq ($(PRELOAD), 1)

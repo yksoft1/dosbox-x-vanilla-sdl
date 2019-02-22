@@ -22,7 +22,7 @@ SDL_LIBS := -s USE_SDL=2
 
 DBX_PATH	= ..
 
-CFLAGS	=	-O3 -DNDEBUG -Wstrict-overflow=0 -Wstrict-aliasing=0 -I. \
+CFLAGS	=	-O3 -DNDEBUG -DEMTERPRETER_SYNC -Wstrict-overflow=0 -Wstrict-aliasing=0 -I. \
 			-I$(DBX_PATH) \
 			-I$(DBX_PATH)/include \
 			-I$(DBX_PATH)/src \
@@ -36,7 +36,7 @@ CFLAGS	=	-O3 -DNDEBUG -Wstrict-overflow=0 -Wstrict-aliasing=0 -I. \
 			
 CFLAGS	+=	$(SDL_CFLAGS)
 
-CXXFLAGS = -O3 -DNDEBUG -std=gnu++98  -Wstrict-overflow=0 -Wstrict-aliasing=0 -I. \
+CXXFLAGS = -O3 -DNDEBUG -DEMTERPRETER_SYNC -std=gnu++98  -Wstrict-overflow=0 -Wstrict-aliasing=0 -I. \
 			-I$(DBX_PATH) \
 			-I$(DBX_PATH)/include \
 			-I$(DBX_PATH)/src \
@@ -114,10 +114,10 @@ clean:
 
 html: $(TARGET)
 ifeq ($(PRELOAD), 1)
-	$(CC) -O3 -s USE_SDL=2 -s WASM=$(WASM) -s TOTAL_MEMORY=$(EMSCRIPTEN_TOTAL_MEMORY)  \
-	-s BINARYEN_TRAP_MODE="js" $(TARGET) \
+	$(CC) -O3 -s USE_SDL=2 -s WASM=$(WASM) -s TOTAL_MEMORY=$(EMSCRIPTEN_TOTAL_MEMORY)  -s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1 \
+	-s EMTERPRETIFY_WHITELIST=@$(DBX_PATH)/src/d3.txt --profiling-funcs -s BINARYEN_TRAP_MODE="js" $(TARGET) \
 	--preload-file $(PREFILE) -o $(basename $(TARGET)).html 
 else
-	$(CC) -O3 -s USE_SDL=2 -s WASM=$(WASM) -s TOTAL_MEMORY=$(EMSCRIPTEN_TOTAL_MEMORY)  \
-	-s BINARYEN_TRAP_MODE="js" $(TARGET) -o $(basename $(TARGET)).html 
+	$(CC) -O3 -s USE_SDL=2 -s WASM=$(WASM) -s TOTAL_MEMORY=$(EMSCRIPTEN_TOTAL_MEMORY)  -s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1 \
+	-s EMTERPRETIFY_WHITELIST=@$(DBX_PATH)/src/d3.txt --profiling-funcs -s BINARYEN_TRAP_MODE="js" $(TARGET) -o $(basename $(TARGET)).html 
 endif
