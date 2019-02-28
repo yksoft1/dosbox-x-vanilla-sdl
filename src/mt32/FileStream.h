@@ -33,6 +33,7 @@ public:
 	MT32EMU_EXPORT size_t getSize();
 	MT32EMU_EXPORT const Bit8u *getData();
 	MT32EMU_EXPORT bool open(const char *filename);
+	MT32EMU_EXPORT bool open(const std::string filename);
 	MT32EMU_EXPORT void close();
 
 private:
