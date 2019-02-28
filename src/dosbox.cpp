@@ -1817,6 +1817,9 @@ void DOSBOX_SetupConfigSections(void) {
 	Pint->SetMinMax(0,256);
 	Pint->Set_help("MT-32 max partials allowed (0-256)");
 
+	Pstring = secprop->Add_string("mt32.rompath",Property::Changeable::WhenIdle,"");
+	Pstring->Set_help("Path of MT-32 ROM files, defaults to DOSBox-X working directory");
+	
 	secprop=control->AddSection_prop("debug",&Null_Init);
 
 	secprop=control->AddSection_prop("sblaster",&Null_Init,true);//done

@@ -36,6 +36,7 @@ public:
 	virtual const unsigned char* getData();
 
 	bool open(const char *filename);
+	bool open(const std::string filename);
 	void close();
 };
 
