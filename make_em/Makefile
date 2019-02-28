@@ -106,7 +106,7 @@ LIBS = -lm  $(SDL_LIBS)
 ifeq ($(MT32),1)
 	CPPSRCS += $(CPPSRCS_MT32)
 	CXXFLAGS += $(CXXFLAGS_MT32)
-	OBJS += $(OBJS_MT32)
+#	OBJS += $(OBJS_MT32)
 endif
 
 .SUFFIXES: .c.o
