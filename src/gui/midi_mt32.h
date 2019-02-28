@@ -109,19 +109,29 @@ public:
 		Section_prop *section = static_cast<Section_prop *>(control->GetSection("midi"));
 		std::string mt32_rom_path = section->Get_string("mt32.rompath");
 
-		LOG_MSG("MT-32 rom path: %s", mt32_rom_path.c_str());
+		LOG(LOG_MISC,LOG_WARN)("MT-32 rom path: %s", mt32_rom_path.c_str());
 		if (!controlROMFile.open(mt32_rom_path + "CM32L_CONTROL.ROM")) {
 			if (!controlROMFile.open(mt32_rom_path + "MT32_CONTROL.ROM")) {
-				LOG(LOG_MISC,LOG_WARN)("MT32: Control ROM file not found");
-                user_romhelp();
-				return false;
+				LOG(LOG_MISC,LOG_WARN)("MT-32 Control ROM: Falling back to working directory");
+				if (!controlROMFile.open("CM32L_CONTROL.ROM")) {
+					if (!controlROMFile.open("MT32_CONTROL.ROM")) {			
+						LOG(LOG_MISC,LOG_WARN)("MT32: Control ROM file not found");
+						user_romhelp();
+						return false;
+					}
+				}
 			}
 		}
 		if (!pcmROMFile.open(mt32_rom_path + "CM32L_PCM.ROM")) {
 			if (!pcmROMFile.open(mt32_rom_path + "MT32_PCM.ROM")) {
-				LOG(LOG_MISC,LOG_WARN)("MT32: PCM ROM file not found");
-                user_romhelp();
-				return false;
+				LOG(LOG_MISC,LOG_WARN)("MT-32 PCM ROM: Falling back to working directory");
+				if (!pcmROMFile.open("CM32L_PCM.ROM")) {
+					if (!pcmROMFile.open("MT32_PCM.ROM")) {			
+						LOG(LOG_MISC,LOG_WARN)("MT32: PCM ROM file not found");
+						user_romhelp();
+						return false;
+					}
+				}
 			}
 		}
 
