@@ -58,6 +58,10 @@ void GFX_OpenGLRedrawScreen(void);
 # include <signal.h>
 # include <sys/stat.h>
 # include <process.h>
+# if !defined(__MINGW32__) /* MinGW does not have these headers */
+#  include <shcore.h>
+#  include <shellscalingapi.h>
+# endif
 #endif
 
 #include "cross.h"
@@ -83,6 +87,14 @@ void GFX_OpenGLRedrawScreen(void);
 extern bool useRAF;
 #endif
 #include "mapper.h"
+
+#if defined(WIN32) && defined(__MINGW32__) /* MinGW does not have this */
+typedef enum PROCESS_DPI_AWARENESS {
+    PROCESS_DPI_UNAWARE             = 0,
+    PROCESS_SYSTEM_DPI_AWARE        = 1,
+    PROCESS_PER_MONITOR_DPI_AWARE   = 2
+} PROCESS_DPI_AWARENESS;
+#endif
 
 #include "../src/libs/gui_tk/gui_tk.h"
 
@@ -412,14 +424,6 @@ void SDL1_hax_SetMenu(HMENU menu); //now in menu.cpp
 
 #ifdef WIN32
 # include <windows.h>
-#endif
-
-#if (HAVE_DDRAW_H)
-# include <ddraw.h>
-struct private_hwdata {
-	LPDIRECTDRAWSURFACE3			dd_surface;
-	LPDIRECTDRAWSURFACE3			dd_writebuf;
-};
 #endif
 
 #if (HAVE_D3D9_H)
@@ -874,6 +878,7 @@ void PauseDOSBox(bool pressed) {
 }
 
 #if defined(C_SDL2)
+extern bool dpi_aware_enable;
 static bool SDL2_resize_enable = false;
 
 SDL_Window* GFX_GetSDLWindow(void) {
@@ -936,7 +941,8 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
                                       width, height,
                                       (GFX_IsFullscreen() ? (sdl.desktop.full.display_res ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN) : 0)
                                       | ((screenType == SCREEN_OPENGL) ? SDL_WINDOW_OPENGL : 0) | SDL_WINDOW_SHOWN
-                                      | (SDL2_resize_enable ? SDL_WINDOW_RESIZABLE : 0));
+                                      | (SDL2_resize_enable ? SDL_WINDOW_RESIZABLE : 0)
+									  | (dpi_aware_enable ? SDL_WINDOW_ALLOW_HIGHDPI : 0));
         if (sdl.window) {
             GFX_SetTitle(-1, -1, -1, false); //refresh title.
         }
@@ -1193,7 +1199,7 @@ static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) 
 	Bit16u windowWidth;
 	Bit16u windowHeight;
 
-
+retry:
     int Voodoo_OGL_GetWidth();
     int Voodoo_OGL_GetHeight();
     bool Voodoo_OGL_Active();
@@ -1293,6 +1299,14 @@ static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) 
 #endif
 
 	sdl.surface=SDL_SetVideoMode(windowWidth,windowHeight,bpp,sdl_flags);
+    if (sdl.surface == NULL && sdl.desktop.fullscreen) {
+        LOG_MSG("Fullscreen not supported: %s", SDL_GetError());
+        sdl.desktop.fullscreen = false;
+        sdl_flags &= ~SDL_FULLSCREEN;
+        GFX_CaptureMouse();
+        goto retry;
+    }
+	
 	sdl.deferred_resize = false;
 	sdl.must_redraw_all = true;
 
@@ -1536,7 +1550,14 @@ void MenuDrawTextChar(int x,int y,unsigned char c,Bitu color) {
         unsigned char *scan;
 
         assert(sdl.surface->pixels != NULL);
-
+		
+        if (x < 0 || y < 0)
+            return;
+        if ((x + 8) > sdl.surface->w)
+            return;
+        if ((y + (int)fontHeight) > sdl.surface->h)
+            return;
+			
         scan  = (unsigned char*)sdl.surface->pixels;
         scan += y * sdl.surface->pitch;
         scan += x * ((sdl.surface->format->BitsPerPixel+7)/8);
@@ -1595,6 +1616,13 @@ void MenuDrawTextChar2x(int x,int y,unsigned char c,Bitu color) {
 
         assert(sdl.surface->pixels != NULL);
 
+        if (x < 0 || y < 0)
+            return;
+        if ((x + 8) > sdl.surface->w)
+            return;
+        if ((y + (int)fontHeight) > sdl.surface->h)
+            return;
+			
         scan  = (unsigned char*)sdl.surface->pixels;
         scan += y * sdl.surface->pitch;
         scan += x * ((sdl.surface->format->BitsPerPixel+7)/8);
@@ -5165,460 +5193,6 @@ bool GFX_IsFullscreen(void) {
 	return sdl.desktop.fullscreen;
 }
 
-#if defined(__WIN32__) && !defined(C_SDL2)
-void OpenFileDialog( char * path_arg ) {
-#if !defined(HX_DOS)
-	if(control->SecureMode()) {
-		LOG_MSG(MSG_Get("PROGRAM_CONFIG_SECURE_DISALLOW"));
-		return;
-	}
-	DOS_MCB mcb(dos.psp()-1);
-	static char pcname[9];
-	mcb.GetFileName(pcname);
-	if(strlen(pcname)) return;
-
-	OPENFILENAME OpenFileName;
-	char szFile[MAX_PATH];
-	char CurrentDir[MAX_PATH];
-	const char * Temp_CurrentDir = CurrentDir;
-
-	if (Drives['C'-'A']) {
-		if (MessageBox(GetHWND(),
-			"Quick launch automatically mounts drive C in DOSBox.\nDrive C has already been mounted. Do you want to continue?",
-			"Warning",MB_YESNO)==IDNO) return;
-	}
-
-	if(path_arg) goto search;
-	szFile[0] = 0;
-
-	GetCurrentDirectory( MAX_PATH, CurrentDir );
-
-	OpenFileName.lStructSize = sizeof( OPENFILENAME );
-	OpenFileName.hwndOwner = NULL;
-	if(DOSBox_Kor())
-		OpenFileName.lpstrFilter = "실행 파일(*.com, *.exe, *.bat)\0*.com;*.exe;*.bat\0모든 파일(*.*)\0*.*\0";
-	else
-		OpenFileName.lpstrFilter = "Executable files(*.com, *.exe, *.bat)\0*.com;*.exe;*.bat\0All files(*.*)\0*.*\0";
-	OpenFileName.lpstrCustomFilter = NULL;
-	OpenFileName.nMaxCustFilter = 0;
-	OpenFileName.nFilterIndex = 0;
-	OpenFileName.lpstrFile = szFile;
-	OpenFileName.nMaxFile = sizeof( szFile );
-	OpenFileName.lpstrFileTitle = NULL;
-	OpenFileName.nMaxFileTitle = 0;
-	OpenFileName.lpstrInitialDir = CurrentDir;
-	OpenFileName.lpstrTitle = "Select an executable";
-	OpenFileName.nFileOffset = 0;
-	OpenFileName.nFileExtension = 0;
-	OpenFileName.lpstrDefExt = NULL;
-	OpenFileName.lCustData = 0;
-	OpenFileName.lpfnHook = NULL;
-	OpenFileName.lpTemplateName = NULL;
-	OpenFileName.Flags = OFN_EXPLORER;
-
-search:
-	if(GetOpenFileName( &OpenFileName ) || path_arg) {
-		WIN32_FIND_DATA FindFileData;
-		HANDLE hFind;
-		char drive	[_MAX_DRIVE]; 
-		char dir	[_MAX_DIR]; 
-		char fname	[_MAX_FNAME]; 
-		char ext	[_MAX_EXT]; 
-		char * path = 0;
-		if(path_arg) {
-			szFile[0] = 0;
-			sprintf(szFile,path_arg);
-		}
-		path = szFile;
-		_splitpath (path, drive, dir, fname, ext);
-		char ext_temp [_MAX_EXT]; ext_temp[0] = 0; sprintf(ext_temp,ext);
-
-		hFind = FindFirstFile(szFile, &FindFileData);
-		if (hFind == INVALID_HANDLE_VALUE) {
-			if(strcasecmp(ext,"")) goto search;
-			szFile[0] = 0;
-			ext[0] = 0; sprintf(ext,".com");
-			sprintf(szFile,"%s%s%s%s",drive,dir,fname,".com");
-			hFind = FindFirstFile(szFile, &FindFileData);
-			if (hFind == INVALID_HANDLE_VALUE) {
-				szFile[0] = 0;
-				ext[0] = 0; sprintf(ext,".exe");
-				sprintf(szFile,"%s%s%s%s",drive,dir,fname,".exe");
-				hFind = FindFirstFile(szFile, &FindFileData);
-				if (hFind == INVALID_HANDLE_VALUE) {
-					szFile[0] = 0;
-					ext[0] = 0; sprintf(ext,".bat");
-					sprintf(szFile,"%s%s%s%s",drive,dir,fname,".bat");
-					hFind = FindFirstFile(szFile, &FindFileData);
-					if (hFind == INVALID_HANDLE_VALUE) {
-						szFile[0] = 0;
-						ext[0]=0;
-						goto search;
-					}
-				}
-			}
-		}
-
-		if((!strcmp(ext,".com")) || (!strcmp(ext,".exe")) || (!strcmp(ext,".bat"))) {
-			char pathname[DOS_PATHLENGTH];
-			sprintf(pathname,"%s%s",drive,dir);
-			MountDrive_2('C',pathname,"LOCAL");
-			DOS_SetDrive(toupper('C') - 'A');
-		} else {
-			LOG_MSG("GUI: Unsupported filename extension.");
-			goto godefault;
-		}
-
-		#define DOSNAMEBUF 256
-		char name1[DOSNAMEBUF+1];
-		sprintf(name1,"%s%s",fname,ext);
-		Bit16u n=1; Bit8u c='\n';
-		DOS_WriteFile(STDOUT,&c,&n);
-
-		DOS_Shell shell;
-		DOS_MCB mcb(dos.psp()-1);
-		static char name[9];
-		mcb.GetFileName(name);
-
-		SetCurrentDirectory( Temp_CurrentDir );
-		do {
-			shell.Execute(name1," ");
-			if(!strcmp(ext,".bat")) shell.RunInternal();
-			if (!strlen(name)) break;
-		} while (1);
-
-		if(strcmp(ext,".bat")) DOS_WriteFile(STDOUT,&c,&n);
-		shell.ShowPrompt();
-	}
-
-godefault:
-	SetCurrentDirectory( Temp_CurrentDir );
-	return;
-#endif
-}
-
-void Go_Boot(const char boot_drive[_MAX_DRIVE]) {
-#if !defined(HX_DOS)
-		if(control->SecureMode()) {
-			LOG_MSG(MSG_Get("PROGRAM_CONFIG_SECURE_DISALLOW"));
-			return;
-		}
-
-	OPENFILENAME OpenFileName;
-	char szFile[MAX_PATH];
-	char CurrentDir[MAX_PATH];
-	const char * Temp_CurrentDir = CurrentDir;
-	szFile[0] = 0;
-	GetCurrentDirectory( MAX_PATH, CurrentDir );
-
-	OpenFileName.lStructSize = sizeof( OPENFILENAME );
-	OpenFileName.hwndOwner = NULL;
-
-	if(DOSBox_Kor())
-		OpenFileName.lpstrFilter = "이미지 파일(*.img, *.ima, *.pcjr, *.jrc)\0*.pcjr;*.img;*.ima;*.jrc\0모든 파일(*.*)\0*.*\0";
-	else
-		OpenFileName.lpstrFilter = "Image files(*.img, *.ima, *.pcjr, *.jrc)\0*.pcjr;*.img;*.ima;*.jrc\0All files(*.*)\0*.*\0";
-
-	OpenFileName.lpstrCustomFilter = NULL;
-	OpenFileName.nMaxCustFilter = 0;
-	OpenFileName.nFilterIndex = 0;
-	OpenFileName.lpstrFile = szFile;
-	OpenFileName.nMaxFile = sizeof( szFile );
-	OpenFileName.lpstrFileTitle = NULL;
-	OpenFileName.nMaxFileTitle = 0;
-	OpenFileName.lpstrInitialDir = CurrentDir;
-	OpenFileName.lpstrTitle = "Select an image file";
-	OpenFileName.nFileOffset = 0;
-	OpenFileName.nFileExtension = 0;
-	OpenFileName.lpstrDefExt = NULL;
-	OpenFileName.lCustData = 0;
-	OpenFileName.lpfnHook = NULL;
-	OpenFileName.lpTemplateName = NULL;
-	OpenFileName.Flags = OFN_EXPLORER;
-search:
-	if(GetOpenFileName( &OpenFileName )) {
-		WIN32_FIND_DATA FindFileData;
-		HANDLE hFind;
-		char drive	[_MAX_DRIVE]; 
-		char dir	[_MAX_DIR]; 
-		char fname	[_MAX_FNAME]; 
-		char ext	[_MAX_EXT]; 
-		char * path = 0;
-		path = szFile;
-		_splitpath (path, drive, dir, fname, ext);
-		char ext_temp [_MAX_EXT]; ext_temp[0] = 0; sprintf(ext_temp,ext);
-
-		hFind = FindFirstFile(szFile, &FindFileData);
-		if (hFind == INVALID_HANDLE_VALUE) goto search;
-
-		if((!strcmp(ext,".img")) || (!strcmp(ext,".pcjr")) || (!strcmp(ext,".jrc")) || (!strcmp(ext,".ima"))) {
-			extern Bitu ZDRIVE_NUM;
-			char root[4] = {'A'+ZDRIVE_NUM,':','\\',0};
-			char cmd[20];
-			DOS_Shell shell;
-			Bit16u n=1; Bit8u c='\n';
-			if(strcmp(boot_drive,"a")) {
-				char szFile_pre[MAX_PATH];
-				szFile_pre[0] = 0;
-				strcpy(szFile_pre,boot_drive);
-				strcat(szFile_pre," -t hdd "); 
-				strcat(szFile_pre,szFile);
-				DOS_WriteFile(STDOUT,&c,&n);
-				cmd[0] = 0;
-				strcpy(cmd,root);
-				strcat(cmd,"imgmount.com");
-				shell.Execute(cmd,szFile_pre);
-				shell.RunInternal();
-			}
-			DOS_WriteFile(STDOUT,&c,&n);
-			strcat(szFile," -l ");
-			strcat(szFile,boot_drive);
-			cmd[0] = 0;
-			strcpy(cmd,root);
-			strcat(cmd,"boot.com");
-			shell.Execute(cmd,szFile);
-			shell.RunInternal();
-			DOS_WriteFile(STDOUT,&c,&n);
-			shell.ShowPrompt(); // if failed
-		} else {
-			LOG_MSG("GUI: Unsupported filename extension.");
-			goto godefault;
-		}
-	}
-
-godefault:
-	SetCurrentDirectory( Temp_CurrentDir );
-	return;
-#endif
-}
-
-void Go_Boot2(const char boot_drive[_MAX_DRIVE]) {
-#if !defined(HX_DOS)
-	Bit16u n=1; Bit8u c='\n';
-	DOS_WriteFile(STDOUT,&c,&n);
-	char temp[7];
-	extern Bitu ZDRIVE_NUM;
-	char root[4] = {'A'+ZDRIVE_NUM,':','\\',0};
-	char cmd[20];
-	temp[0] = 0;
-	cmd[0] = 0;
-	strcpy(cmd,root);
-	strcat(cmd,"boot.com");
-	strcpy(temp,"-l ");
-	strcat(temp,boot_drive);
-	DOS_Shell shell;
-	shell.Execute(cmd,temp);
-	shell.RunInternal();
-	DOS_WriteFile(STDOUT,&c,&n);
-	shell.ShowPrompt(); // if failed
-#endif
-}
-
-/* FIXME: Unused */
-void Drag_Drop( char * path_arg ) {
-#if !defined(HX_DOS)
-	if(control->SecureMode()) {
-		LOG_MSG(MSG_Get("PROGRAM_CONFIG_SECURE_DISALLOW"));
-		return;
-	}
-	DOS_MCB mcb(dos.psp()-1);
-	static char name[9];
-	mcb.GetFileName(name);
-	if((!path_arg) || (strlen(name)))  return;
-	WIN32_FIND_DATA FindFileData;
-	HANDLE hFind;
-	char drive	[_MAX_DRIVE]; 
-	char dir	[_MAX_DIR]; 
-	char fname	[_MAX_FNAME]; 
-	char ext	[_MAX_EXT]; 
-	char szFile[MAX_PATH];
-
-	szFile[0] = 0;
-	sprintf(szFile,path_arg);
-	char * path = szFile;
-	_splitpath (path, drive, dir, fname, ext);
-	char ext_temp [_MAX_EXT];
-	ext_temp[0] = 0;
-	sprintf(ext_temp,ext);
-
-	hFind = FindFirstFile(szFile, &FindFileData);
-	if (hFind == INVALID_HANDLE_VALUE) return;
-
-	if((!strcmp(ext,".com")) || (!strcmp(ext,".exe")) || (!strcmp(ext,".bat")))
-		OpenFileDialog(path_arg);
-	else
-		LOG_MSG("GUI: Unsupported filename extension.");
-#endif
-}
-
-HHOOK hhk;
-LRESULT CALLBACK CBTProc(INT nCode, WPARAM wParam, LPARAM lParam) {
-#if !defined(HX_DOS)
-	lParam;
-	if( HCBT_ACTIVATE == nCode ) {
-		HWND hChildWnd;
-		hChildWnd = (HWND)wParam;
-		SetDlgItemText(hChildWnd,IDYES,"CD-ROM");
-		SetDlgItemText(hChildWnd,IDNO,"Floppy");
-		SetDlgItemText(hChildWnd,IDCANCEL,"Harddisk");
-		UnhookWindowsHookEx(hhk);
-	}
-	CallNextHookEx(hhk, nCode, wParam, lParam);
-#endif
-	return 0;
-}
-
-int MountMessageBox( HWND hWnd, LPCTSTR lpText, LPCTSTR lpCaption, UINT uType ) {
-#if !defined(HX_DOS)
-	hhk = SetWindowsHookEx( WH_CBT, &CBTProc, 0, GetCurrentThreadId() );
-	const int iRes = MessageBox( hWnd, lpText, lpCaption, uType | MB_SETFOREGROUND );
-		return iRes;
-#else
-	return 0;
-#endif
-}
-
-void OpenFileDialog_Img( char drive ) {
-#if !defined(HX_DOS)
-		if(control->SecureMode()) {
-			LOG_MSG(MSG_Get("PROGRAM_CONFIG_SECURE_DISALLOW"));
-			return;
-		}
-	if (Drives[drive-'A']) {
-		LOG_MSG("GUI: Unmount drive %c first, and then try again.",drive);
-		return;
-	}
-	OPENFILENAME OpenFileName;
-	char szFile[MAX_PATH];
-	char CurrentDir[MAX_PATH];
-	const char * Temp_CurrentDir = CurrentDir;
-
-	szFile[0] = 0;
-	GetCurrentDirectory( MAX_PATH, CurrentDir );
-	OpenFileName.lStructSize = sizeof( OPENFILENAME );
-	OpenFileName.hwndOwner = NULL;
-
-	if(DOSBox_Kor())
-		OpenFileName.lpstrFilter = "이미지/ZIP 파일(*.ima, *.img, *.iso, *.cue, *.bin, *.mdf, *.zip, *.7z)\0*.ima;*.img;*.iso;*.mdf;*.zip;*.cue;*.bin;*.7z\0모든 파일(*.*)\0*.*\0";
-	else
-		OpenFileName.lpstrFilter = "Image/Zip files(*.ima, *.img, *.iso, *.cue, *.bin, *.mdf, *.zip, *.7z)\0*.ima;*.img;*.iso;*.mdf;*.zip;*.cue;*.bin;*.7z\0All files(*.*)\0*.*\0";
-
-	OpenFileName.lpstrCustomFilter = NULL;
-	OpenFileName.nMaxCustFilter = 0;
-	OpenFileName.nFilterIndex = 0;
-	OpenFileName.lpstrFile = szFile;
-	OpenFileName.nMaxFile = sizeof( szFile );
-	OpenFileName.lpstrFileTitle = NULL;
-	OpenFileName.nMaxFileTitle = 0;
-	OpenFileName.lpstrInitialDir = CurrentDir;
-	OpenFileName.lpstrTitle = "Select an image file";
-	OpenFileName.nFileOffset = 0;
-	OpenFileName.nFileExtension = 0;
-	OpenFileName.lpstrDefExt = NULL;
-	OpenFileName.lCustData = 0;
-	OpenFileName.lpfnHook = NULL;
-	OpenFileName.lpTemplateName = NULL;
-	OpenFileName.Flags = OFN_EXPLORER;
-
-search:
-	if(GetOpenFileName( &OpenFileName )) {
-		WIN32_FIND_DATA FindFileData;
-		HANDLE hFind;
-		hFind = FindFirstFile(szFile, &FindFileData);
-		if (hFind == INVALID_HANDLE_VALUE) goto search;
-		char drive2	[_MAX_DRIVE]; 
-		char dir	[_MAX_DIR]; 
-		char fname	[_MAX_FNAME]; 
-		char ext	[_MAX_EXT]; 
-		char * path = szFile;
-
-		_splitpath (path, drive2, dir, fname, ext);
-
-		if((!strcmp(ext,".img")) || (!strcmp(ext,".iso")) || (!strcmp(ext,".cue")) || (!strcmp(ext,".bin")) || (!strcmp(ext,".mdf"))) {
-			if(!strcmp(ext,".img")) {
-				int whichval=MountMessageBox(GetHWND(),"Drive type:","Mount as Image",MB_YESNOCANCEL);
-				if(whichval == IDYES) Mount_Img(drive,path);// CD-ROM
-				else if(whichval == IDNO) Mount_Img_Floppy(drive,path); // Floppy
-				else if(whichval == IDCANCEL)  Mount_Img_HDD(drive,path);// Harddisk
-			} else
-				Mount_Img(drive,path);
-		} else if(!strcmp(ext,".ima")) {
-			Mount_Img_Floppy(drive,path);
-		} else
-			LOG_MSG("GUI: Unsupported filename extension.");
-	}
-	SetCurrentDirectory( Temp_CurrentDir );
-#endif
-}
-
-void D3D_PS(void) {
-#if !defined(HX_DOS)
-	OPENFILENAME OpenFileName;
-	char szFile[MAX_PATH];
-	char CurrentDir[MAX_PATH];
-	const char * Temp_CurrentDir = CurrentDir;
-	szFile[0] = 0;
-
-	GetCurrentDirectory( MAX_PATH, CurrentDir );
-
-	OpenFileName.lStructSize = sizeof( OPENFILENAME );
-	OpenFileName.hwndOwner = NULL;
-	if(DOSBox_Kor())
-		OpenFileName.lpstrFilter = "효과 파일(*.fx)\0*.fx\0모든 파일(*.*)\0*.*\0";
-	else
-		OpenFileName.lpstrFilter = "Effect files(*.fx)\0*.fx\0All files(*.*)\0*.*\0";
-	OpenFileName.lpstrCustomFilter = NULL;
-	OpenFileName.nMaxCustFilter = 0;
-	OpenFileName.nFilterIndex = 0;
-	OpenFileName.lpstrFile = szFile;
-	OpenFileName.nMaxFile = sizeof( szFile );
-	OpenFileName.lpstrFileTitle = NULL;
-	OpenFileName.nMaxFileTitle = 0;
-	OpenFileName.lpstrInitialDir = ".\\Shaders";;
-	OpenFileName.lpstrTitle = "Select an effect file";
-	OpenFileName.nFileOffset = 0;
-	OpenFileName.nFileExtension = 0;
-	OpenFileName.lpstrDefExt = NULL;
-	OpenFileName.lCustData = 0;
-	OpenFileName.lpfnHook = NULL;
-	OpenFileName.lpTemplateName = NULL;
-	OpenFileName.Flags = OFN_EXPLORER;
-
-search:
-	if(GetOpenFileName( &OpenFileName )) {
-		WIN32_FIND_DATA FindFileData;
-		HANDLE hFind;
-		char drive	[_MAX_DRIVE]; 
-		char dir	[_MAX_DIR]; 
-		char fname	[_MAX_FNAME]; 
-		char ext	[_MAX_EXT]; 
-		char * path = 0;
-		path = szFile;
-		_splitpath (path, drive, dir, fname, ext);
-
-		if(!strcmp(ext,".fx")) {
-			if(!strcmp(fname,"none")) { SetVal("sdl","pixelshader","none"); goto godefault; }
-			if (sdl.desktop.want_type != SCREEN_DIRECT3D) MessageBox(GetHWND(),
-				"Set output to Direct3D for the changes to take effect", "Warning", 0);
-			if (MessageBox(GetHWND(),
-				"Always enable this pixelshader under any circumstances in Direct3D?" \
-				"\nIf yes, the shader will be used even if the result might not be desired.",
-				fname, MB_YESNO) == IDYES) strcat(fname, ".fx forced");
-			else strcat(fname, ".fx");
-			SetVal("sdl","pixelshader",fname);
-		} else {
-			LOG_MSG("GUI: Unsupported filename extension.");
-			goto godefault;
-		}
-	}
-
-godefault:
-	SetCurrentDirectory( Temp_CurrentDir );
-	return;
-#endif
-}
-#endif
-
 void* GetSetSDLValue(int isget, std::string target, void* setval) {
 	if (target == "wait_on_error") {
 		if (isget) return (void*) sdl.wait_on_error;
@@ -6073,6 +5647,16 @@ void GFX_Events() {
 								mainMenu.get_item("mapper_togmenu").check(!menu.toggle).refresh_item(mainMenu);
 							}
 							break;
+#if !defined(HX_DOS)
+                        case ID_WIN_SYSMENU_MAPPER:
+                            extern void MAPPER_Run(bool pressed);
+                            MAPPER_Run(false);
+                            break;
+                        case ID_WIN_SYSMENU_CFG_GUI:
+                            extern void GUI_Run(bool pressed);
+                            GUI_Run(false);
+                            break;
+#endif							
 					}
 				default:
 					break;
@@ -7285,31 +6869,38 @@ extern bool dpi_aware_enable;
 // NTS: I intend to add code that not only indicates High DPI awareness but also queries the monitor DPI
 //      and then factor the DPI into DOSBox's scaler and UI decisions.
 void Windows_DPI_Awareness_Init() {
-	// if the user says not to from the command line, or disables it from dosbox.conf, then don't enable DPI awareness.
-	if (!dpi_aware_enable || control->opt_disable_dpi_awareness)
-		return;
+    // if the user says not to from the command line, or disables it from dosbox.conf, then don't enable DPI awareness.
+    if (!dpi_aware_enable || control->opt_disable_dpi_awareness)
+        return;
+		
+    /* log it */
+    LOG(LOG_MISC,LOG_DEBUG)("Win32: I will announce High DPI awareness to Windows to eliminate upscaling");
 
-	/* log it */
-	LOG(LOG_MISC,LOG_DEBUG)("Win32: I will announce High DPI awareness to Windows to eliminate upscaling");
+    // turn off DPI scaling so DOSBox-X doesn't look so blurry on Windows 8 & Windows 10.
+    // use GetProcAddress and LoadLibrary so that these functions are not hard dependencies that prevent us from
+    // running under Windows 7 or XP.
+    HRESULT (WINAPI *__SetProcessDpiAwareness)(PROCESS_DPI_AWARENESS) = NULL; // windows 8.1
+    BOOL (WINAPI *__SetProcessDPIAware)(void) = NULL; // vista/7/8/10
+    HMODULE __user32;
+    HMODULE __shcore;
 
-	// turn off DPI scaling so DOSBox-X doesn't look so blurry on Windows 8 & Windows 10.
-	// use GetProcAddress and LoadLibrary so that these functions are not hard dependencies that prevent us from
-	// running under Windows 7 or XP.
-	// 
-	// I'm also told that Windows 8.1 has SetProcessDPIAwareness but nobody seems to know where it is.
-	// Perhaps the tooth fairy can find it for me. Come on, Microsoft get your act together! [https://msdn.microsoft.com/en-us/library/windows/desktop/dn302122(v=vs.85).aspx]
-	BOOL (WINAPI *__SetProcessDPIAware)(void) = NULL; // vista/7/8/10
-	HMODULE __user32;
+    __user32 = GetModuleHandle("USER32.DLL");
+    __shcore = GetModuleHandle("SHCORE.DLL");
 
-	__user32 = GetModuleHandle("USER32.DLL");
+    if (__user32)
+        __SetProcessDPIAware = (BOOL(WINAPI *)(void))GetProcAddress(__user32, "SetProcessDPIAware");
+    if (__shcore)
+        __SetProcessDpiAwareness = (HRESULT (WINAPI *)(PROCESS_DPI_AWARENESS))GetProcAddress(__shcore, "SetProcessDpiAwareness");
 
-	if (__user32)
-		__SetProcessDPIAware = (BOOL(WINAPI *)(void))GetProcAddress(__user32, "SetProcessDPIAware");
-
-	if (__SetProcessDPIAware) {
-		LOG(LOG_MISC,LOG_DEBUG)("USER32.DLL exports SetProcessDPIAware function, calling it to signal we are DPI aware.");
-		__SetProcessDPIAware();
-	}
+	if (__SetProcessDpiAwareness) {
+        LOG(LOG_MISC,LOG_DEBUG)("SHCORE.DLL exports SetProcessDpiAwareness function, calling it to signal we are DPI aware.");
+        if (__SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE) != S_OK)
+            LOG(LOG_MISC,LOG_DEBUG)("SetProcessDpiAwareness failed");
+    }
+    if (__SetProcessDPIAware) {
+        LOG(LOG_MISC,LOG_DEBUG)("USER32.DLL exports SetProcessDPIAware function, calling it to signal we are DPI aware.");
+        __SetProcessDPIAware();
+    }
 }
 #endif
 

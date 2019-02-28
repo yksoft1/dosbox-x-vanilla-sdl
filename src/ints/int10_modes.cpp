@@ -83,7 +83,7 @@ VideoModeBlock ModeList_VGA[]={
 /* VESA text modes */ 
 { 0x108  ,M_TEXT   ,640 ,480,  80,60, 8,  8 ,2 ,0xB8000 ,0x4000, 100 ,525 ,80 ,480 ,0   },
 { 0x109  ,M_TEXT   ,1056,400, 132,25, 8, 16, 1 ,0xB8000 ,0x2000, 160, 449, 132,400, 0   },
-{ 0x10A  ,M_TEXT   ,1056,688, 132,43, 8,  8, 1 ,0xB8000 ,0x4000, 160, 449, 132,344, 0   },
+{ 0x10A  ,M_TEXT   ,1056,688, 132,43, 8,  8, 1 ,0xB8000 ,0x4000, 160, 806, 132,688, 0   },
 { 0x10B  ,M_TEXT   ,1056,400, 132,50, 8,  8, 1 ,0xB8000 ,0x4000, 160, 449, 132,400, 0   },
 { 0x10C  ,M_TEXT   ,1056,480, 132,60, 8,  8, 2 ,0xB8000 ,0x4000, 160, 531, 132,480, 0   },
 
@@ -1835,6 +1835,10 @@ dac_text16:
 			break;
 		}
 		
+        /* SVGA text modes need the 256k+ access bit */
+	        if (CurMode->mode >= 0x100 && !int10.vesa_nolfb)
+	            reg_31 |= 8; /* enable 256k+ access */
+				
 		/* whether to enable the linear framebuffer */
 		if (CurMode->mode >= 0x100 && !int10.vesa_nolfb)
 			s3_mode |= 0x10; /* enable LFB */

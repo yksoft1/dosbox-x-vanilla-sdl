@@ -234,7 +234,7 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
  	// Jonathan C: do it FASTER!
  	SDL_Event event;
     SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_BLEND);
- 	for (int i = 0xff; i > 0; i -= 0x30) { 
+ 	for (int i = 0xff; i > 0; i -= 0x40) { 
  		SDL_SetSurfaceAlphaMod(screenshot, i); 
  		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
  		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
@@ -261,7 +261,7 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
 	// fade out
 	// Jonathan C: do it FASTER!
 	SDL_Event event; 
-	for (int i = 0xff; i > 0; i -= 0x30) { 
+	for (int i = 0xff; i > 0; i -= 0x40) { 
 		SDL_SetAlpha(screenshot, SDL_SRCALPHA, i); 
 		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
 		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL); 
@@ -304,7 +304,7 @@ static void UI_Shutdown(GUI::ScreenSDL *screen) {
  	// Jonathan C: do it FASTER!
  	SDL_Event event;
     SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_BLEND);
- 	for (unsigned int i = 0x00; i < 0xff; i += 0x30) {
+ 	for (unsigned int i = 0x00; i < 0xff; i += 0x60) {
  		SDL_SetSurfaceAlphaMod(screenshot, i); 
  		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
  		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
@@ -325,7 +325,7 @@ static void UI_Shutdown(GUI::ScreenSDL *screen) {
 	// fade in
 	// Jonathan C: do it FASTER!
 	SDL_Event event;
-	for (int i = 0x00; i < 0xff; i += 0x30) {
+	for (int i = 0x00; i < 0xff; i += 0x60) {
 		SDL_SetAlpha(screenshot, SDL_SRCALPHA, i);
 		SDL_BlitSurface(background, NULL, sdlscreen, NULL);
 		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
@@ -570,6 +570,7 @@ public:
 
 class SectionEditor : public GUI::ToplevelWindow {
 	Section_prop * section;
+	GUI::Button * closeButton;
 public:
 	SectionEditor(GUI::Screen *parent, int x, int y, Section_prop *section) :
 		ToplevelWindow(parent, x, y, 510, 442, ""), section(section) {
@@ -622,6 +623,8 @@ public:
 		new GUI::Label(this, 5, 10, "Settings:");
 		GUI::Button *b = new GUI::Button(this, button_row_cx, button_row_y, "Cancel", button_w);
 		b->addActionHandler(this);
+		closeButton = b;
+		
 		b = new GUI::Button(this, button_row_cx + (button_w + button_pad_w), button_row_y, "Help", button_w);
 		b->addActionHandler(this);
 		b = new GUI::Button(this, button_row_cx + (button_w + button_pad_w)*2, button_row_y, "OK", button_w);
@@ -656,9 +659,26 @@ public:
 		else if (arg == "Help") new HelpWindow(static_cast<GUI::Screen*>(parent), getX()-10, getY()-10, section);
 		else ToplevelWindow::actionExecuted(b, arg);
 	}
+	
+	virtual bool keyDown(const GUI::Key &key) {
+        if (GUI::ToplevelWindow::keyDown(key)) return true;
+        return false;
+    }
+
+	virtual bool keyUp(const GUI::Key &key) {
+        if (GUI::ToplevelWindow::keyUp(key)) return true;
+
+        if (key.special == GUI::Key::Escape) {
+            closeButton->executeAction();
+            return true;
+        }
+
+        return false;
+    }	
 };
 
 class AutoexecEditor : public GUI::ToplevelWindow {
+	GUI::Button *closeButton;
 	Section_line * section;
 	GUI::Input *content;
 public:
@@ -677,7 +697,7 @@ public:
 		content->setText(section->data);
 		if (first_shell) (new GUI::Button(this, 5, 220, "Append History"))->addActionHandler(this);
 		if (shell_idle) (new GUI::Button(this, 180, 220, "Execute Now"))->addActionHandler(this);
-		(new GUI::Button(this, 290, 220, "Cancel", 70))->addActionHandler(this);
+		(closeButton = new GUI::Button(this, 290, 220, "Cancel", 70))->addActionHandler(this);
 		(new GUI::Button(this, 360, 220, "OK", 70))->addActionHandler(this);
 	}
 
@@ -698,6 +718,22 @@ public:
 			UI_RunCommands(dynamic_cast<GUI::ScreenSDL*>(getScreen()), content->getText());
 		} else ToplevelWindow::actionExecuted(b, arg);
 	}
+	
+	virtual bool keyDown(const GUI::Key &key) {
+        if (GUI::ToplevelWindow::keyDown(key)) return true;
+        return false;
+    }
+
+	virtual bool keyUp(const GUI::Key &key) {
+        if (GUI::ToplevelWindow::keyUp(key)) return true;
+
+        if (key.special == GUI::Key::Escape) {
+            closeButton->executeAction();
+            return true;
+        }
+
+        return false;
+    }	
 };
 
 class SaveDialog : public GUI::ToplevelWindow {
@@ -890,10 +926,11 @@ public:
 
 class ConfigurationWindow : public GUI::ToplevelWindow {
 public:
+	GUI::Button *closeButton;
 	ConfigurationWindow(GUI::Screen *parent, GUI::Size x, GUI::Size y, GUI::String title) :
 		GUI::ToplevelWindow(parent, x, y, 580, 380, title) {
 
-		(new GUI::Button(this, 240, 305, "Close", 80))->addActionHandler(this);
+		(closeButton = new GUI::Button(this, 240, 305, "Close", 80))->addActionHandler(this);
 
 		GUI::Menubar *bar = new GUI::Menubar(this, 0, 0, getWidth());
 		bar->addMenu("Configuration");
@@ -927,6 +964,22 @@ public:
 
 	~ConfigurationWindow() { running = false; }
 
+	virtual bool keyDown(const GUI::Key &key) {
+        if (GUI::ToplevelWindow::keyDown(key)) return true;
+        return false;
+    }
+
+	virtual bool keyUp(const GUI::Key &key) {
+        if (GUI::ToplevelWindow::keyUp(key)) return true;
+
+        if (key.special == GUI::Key::Escape) {
+            closeButton->executeAction();
+            return true;
+        }
+
+        return false;
+    }
+	
 	void actionExecuted(GUI::ActionEventSource *b, const GUI::String &arg) {
 		GUI::String sname = arg;
 		sname.at(0) = std::tolower(sname.at(0));

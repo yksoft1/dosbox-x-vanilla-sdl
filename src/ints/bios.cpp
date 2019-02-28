@@ -2507,6 +2507,27 @@ static Bitu INT18_PC98_Handler(void) {
             break;
         case 0x04: /* Sense of key input state (キー入力状態のセンス) */
             reg_ah = mem_readb(0x52A + (reg_al & 0x0F));
+            /* Hack for "Shangrlia" by Elf: The game's regulation of animation speed seems to depend on
+             * INT 18h AH=0x04 taking some amount of time. If we do not do this, animation will run way
+             * too fast and everyone will be talking/moving at a million miles a second.
+             *
+             * This is based on comparing animation speed vs the same game on real Pentium-class PC-98
+             * hardware.
+             *
+             * Looking at the software loop involved during opening cutscenes, the game is constantly
+             * polling INT 18h AH=04h (keyboard state) and INT 33h AH=03h (mouse button/position state)
+             * while animating the characters on the screen. Without this delay, animation runs way too
+             * fast.
+             *
+             * This guess is also loosely based on a report by the Touhou Community Reliant Automatic Patcher
+             * that Touhou Project directly reads this byte but delays by 0.6ms to handle the fact that
+             * the bit in question may toggle while the key is held down due to the scan codes returned by
+             * the keyboard.
+             *
+             * This is a guess, but it seems to help animation speed match that of real hardware regardless
+             * of cycle count in DOSBox-X. */
+			 /* Will there be any side effect of this violent delay? -- yksoft1 */
+            CPU_Cycles -= (unsigned int)(CPU_CycleMax * 0.006);			
             break;
         case 0x05: /* Key input sense (キー入力センス) */
             /* This appears to return a key from the buffer (and remove from
@@ -2593,7 +2614,6 @@ static Bitu INT18_PC98_Handler(void) {
 
             pc98_gdc[GDC_MASTER].force_fifo_complete();
             vga_pc98_direct_cursor_pos(reg_dx >> 1);
-            pc98_gdc[GDC_MASTER].cursor_enable = true; // FIXME: Right?
             break;
         case 0x14: /* read FONT RAM */
             {
@@ -7510,6 +7530,8 @@ void BIOS_OnResetComplete(Section *x) {
 }
 
 void BIOS_Init() {
+	DOSBoxMenu::item *item;
+	
 	LOG(LOG_MISC,LOG_DEBUG)("Initializing BIOS");
 
 	/* make sure the array is zeroed */
@@ -7518,8 +7540,11 @@ void BIOS_Init() {
 	for (int i=0;i < MAX_ISA_PNP_SYSDEVNODES;i++) ISAPNP_SysDevNodes[i] = NULL;
 
 	/* make sure CD swap and floppy swap mapper events are available */
-	MAPPER_AddHandler(swapInNextDisk,MK_d,MMODHOST|MMOD1,"swapimg","SwapFloppy"); /* Originally "Swap Image" but this version does not swap CDs */
-	MAPPER_AddHandler(swapInNextCD,MK_c,MMODHOST|MMOD1,"swapcd","SwapCD"); /* Variant of "Swap Image" for CDs */
+    MAPPER_AddHandler(swapInNextDisk,MK_d,MMODHOST|MMOD1,"swapimg","SwapFloppy",&item); /* Originally "Swap Image" but this version does not swap CDs */
+    item->set_text("Swap floppy");
+
+    MAPPER_AddHandler(swapInNextCD,MK_c,MMODHOST|MMOD1,"swapcd","SwapCD",&item); /* Variant of "Swap Image" for CDs */
+    item->set_text("Swap CD");
 
 	/* NTS: VM_EVENT_BIOS_INIT this callback must be first. */
 	AddExitFunction(AddExitFunctionFuncPair(BIOS_Destroy),false);
