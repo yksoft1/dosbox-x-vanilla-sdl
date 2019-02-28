@@ -78,6 +78,16 @@ void memxor_greendotted_16bpp(uint16_t *d,unsigned int count,unsigned int line) 
 	}
 }
 
+void memxor_greendotted_32bpp(uint32_t *d,unsigned int count,unsigned int line) {
+    static const uint32_t greenptrn[2] = { (0xFF << 8), 0 };
+    line &= 1;
+    count >>= 2;
+    while (count-- > 0) {
+        *d++ ^= greenptrn[line];
+        *d++ ^= greenptrn[line^1];
+    }
+}
+	
 typedef Bit8u * (* VGA_Line_Handler)(Bitu vidstart, Bitu line);
 
 static VGA_Line_Handler VGA_DrawLine;
@@ -1595,7 +1605,10 @@ again:
                 vga_page_flip_occurred = false;
             }
             if (vga_3da_polled) {
-                memxor_greendotted_16bpp((uint16_t*)TempLine,(vga.draw.width>>1)*(vga.draw.bpp>>3),vga.draw.lines_done);
+                if (vga.draw.bpp==32)
+                    memxor_greendotted_32bpp((uint32_t*)TempLine,(vga.draw.width>>1)*(vga.draw.bpp>>3),vga.draw.lines_done);
+                else
+                    memxor_greendotted_16bpp((uint16_t*)TempLine,(vga.draw.width>>1)*(vga.draw.bpp>>3),vga.draw.lines_done);
                 vga_3da_polled = false;
             }
             RENDER_DrawLine(TempLine);
@@ -1606,7 +1619,10 @@ again:
                 vga_page_flip_occurred = false;
             }
             if (vga_3da_polled) {
-                memxor_greendotted_16bpp((uint16_t*)TempLine,(vga.draw.width>>1)*(vga.draw.bpp>>3),vga.draw.lines_done);
+                if (vga.draw.bpp==32)
+                    memxor_greendotted_32bpp((uint32_t*)data,(vga.draw.width>>1)*(vga.draw.bpp>>3),vga.draw.lines_done);
+                else
+                    memxor_greendotted_16bpp((uint16_t*)data,(vga.draw.width>>1)*(vga.draw.bpp>>3),vga.draw.lines_done);			
                 vga_3da_polled = false;
             }
             RENDER_DrawLine(data);
@@ -2040,7 +2056,12 @@ static void VGA_VerticalTimer(Bitu /*val*/) {
 	case M_TANDY_TEXT:
 	case M_HERC_TEXT:
 		if (machine==MCH_HERC || machine==MCH_MDA) vga.draw.linear_mask = 0xfff; // 1 page
-		else if (IS_EGAVGA_ARCH || machine == MCH_MCGA) vga.draw.linear_mask = 0x7fff; // 8 pages
+        else if (IS_EGAVGA_ARCH || machine == MCH_MCGA) {
+	            if (vga.config.compatible_chain4 || svgaCard == SVGA_None)
+	                vga.draw.linear_mask = 0x7fff; // 8 pages (FIXME: Check real hardware to determine address masking)
+	            else
+	                vga.draw.linear_mask = vga.mem.memmask; // SVGA text mode
+	        }
 		else vga.draw.linear_mask = 0x3fff; // CGA, Tandy 4 pages
 		if (IS_EGAVGA_ARCH)
 			vga.draw.cursor.address=vga.config.cursor_start<<vga.config.addr_shift;
@@ -2167,7 +2188,27 @@ void VGA_CheckScanLength(void) {
 		}
 		else {
 			/* the rest (SVGA modes) can be rendered with sanity */
-			vga.draw.address_add=vga.config.scan_len*(2<<vga.config.addr_shift);
+            if (svgaCard == SVGA_TsengET3K || svgaCard == SVGA_TsengET4K || svgaCard == SVGA_S3Trio) {
+                // Real hardware testing (Tseng ET4000) shows that in SVGA modes the
+                // standard VGA byte/word/dword mode bits have no effect.
+                //
+                // This was verified by using TMOTSENG.EXE on real hardware, setting
+                // mode 0x2F (640x400 256-color mode) and then playing with the
+                // word/dword/byte mode bits.
+                //
+                // Also noted is that the "count memory clock by 4" bit is set. If
+                // you clear it, the hardware acts as if it completes the scanline
+                // early and 3/4ths of the screen is the last 4-pixel block repeated.
+                //
+                // S3 Trio: Testing on a real S3 Virge PCI card shows that the
+                //          byte/word/dword bits have no effect on SVGA modes other
+                //          than the 16-color 800x600 SVGA mode.
+                vga.draw.address_add=vga.config.scan_len*(unsigned int)(2u<<2u);
+            }
+            else {
+                // Other cards (?)
+                vga.draw.address_add=vga.config.scan_len*(unsigned int)(2u<<vga.config.addr_shift);
+            }
 		}
 		break;
     case M_PC98:

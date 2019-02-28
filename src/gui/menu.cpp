@@ -868,6 +868,9 @@ static const char *def_menu_dos[] = {
 	"DOSMouseMenu",
 	"--",
 	"DOSPC98Menu",
+    "--",
+    "mapper_swapimg",
+    "mapper_swapcd",	
 	NULL
 };
 
@@ -2002,6 +2005,35 @@ void DOSBox_SetSysMenu(void) {
 
 		s = InsertMenuItem(sysmenu, GetMenuItemCount(sysmenu), TRUE, &mii);
 	}
+
+	AppendMenu(sysmenu, MF_SEPARATOR, -1, "");
+	
+	{
+		const char *msg = "Show &mapper interface";
+
+		memset(&mii, 0, sizeof(mii));
+		mii.cbSize = sizeof(mii);
+		mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
+		mii.fState = MFS_ENABLED;
+		mii.wID = ID_WIN_SYSMENU_MAPPER;
+		mii.dwTypeData = (LPTSTR)(msg);
+		mii.cch = (UINT)(strlen(msg) + 1);
+
+		InsertMenuItem(sysmenu, GetMenuItemCount(sysmenu), TRUE, &mii);
+	}
+	
+	{
+		const char *msg = "Show configuration &GUI";
+	
+        memset(&mii, 0, sizeof(mii));	        mii.cbSize = sizeof(mii);
+		mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
+		mii.fState = MFS_ENABLED;
+		mii.wID = ID_WIN_SYSMENU_CFG_GUI;
+		mii.dwTypeData = (LPTSTR)(msg);
+		mii.cch = (UINT)(strlen(msg) + 1);
+	
+		InsertMenuItem(sysmenu, GetMenuItemCount(sysmenu), TRUE, &mii);
+	}	
 #endif
 }
 
@@ -2307,8 +2339,6 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
 		int my = item.screenBox.y + item.screenBox.h;
 		if (y < my) y = my;
 	}
-    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
-        menu.get_item(*i).layoutSubmenu(menu, /*toplevel*/false);
 
     popupBox.w = maxx - popupBox.x;
     popupBox.h = y - popupBox.y;
@@ -2329,6 +2359,9 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
     popupBox.w += 1;
     /* 1 pixel border, bottom */
     popupBox.h += 1;
+	
+    for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++)
+        menu.get_item(*i).layoutSubmenu(menu, /*toplevel*/false);	
 }
 
 void DOSBoxMenu::item::placeItemFinal(DOSBoxMenu &menu,int finalwidth,bool isTopLevel) {
