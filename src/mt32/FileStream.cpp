@@ -85,6 +85,13 @@ bool FileStream::open(const char *filename) {
 	return (ifsp->good());
 }
 
+bool FileStream::open(const std::string filename) {
+	if (ifsp) {
+		ifsp->open(filename.c_str(), ios_base::in | ios_base::binary);
+	}
+	return (ifsp->good());
+}
+
 void FileStream::close() {
 	ifsp->close();
 }

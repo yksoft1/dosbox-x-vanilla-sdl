@@ -91,8 +91,22 @@ CPPSRCS	=	$(DBX_PATH)/src/dosbox.cpp \
 			$(wildcard $(DBX_PATH)/src/misc/*.cpp) \
 			$(wildcard $(DBX_PATH)/src/shell/*.cpp) 
 
+CPPSRCS_MT32 = $(wildcard $(DBX_PATH)/src/mt32/*.cpp) \
+			$(wildcard $(DBX_PATH)/src/mt32/freeverb/*.cpp) \
+			$(wildcard $(DBX_PATH)/src/mt32/sha1/*.cpp)
+
+OBJS_MT32 = $(addsuffix .o,$(basename $(CPPSRCS_MT32)))
+
+CXXFLAGS_MT32 = -DC_MT32=1 -I$(DBX_PATH)/src/mt32 -I$(DBX_PATH)/src/mt32/freeverb -I$(DBX_PATH)/src/mt32/sha1
+	
 OBJS = $(addsuffix .o,$(basename $(CPPSRCS)))
 LIBS = -static -lz -lpng -lm -lstdc++ $(shell sdl2-config --libs)
+
+ifeq ($(MT32),1)
+	CPPSRCS += $(CPPSRCS_MT32)
+	CXXFLAGS += $(CXXFLAGS_MT32)
+#	OBJS += $(OBJS_MT32)
+endif
 
 .SUFFIXES: .c.o
 .SUFFIXES: .cpp.o
@@ -110,4 +124,4 @@ $(TARGET):	$(OBJS)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS) $(OBJS_MT32)
