@@ -1312,6 +1312,7 @@ retry:
 	
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
 	mainMenu.screenWidth = sdl.surface->w;
+	mainMenu.screenHeight = sdl.surface->h;
 	mainMenu.updateRect();
 	mainMenu.setRedraw();
 #endif
@@ -1718,6 +1719,9 @@ void DOSBoxMenu::item::drawMenuItem(DOSBoxMenu &menu) {
         fgshortcolor = GFX_GetRGB(191, 191, 255);
     }
 
+    itemHoverDrawn = itemHover;
+    itemHilightDrawn = itemHilight;
+
     if (SDL_MUSTLOCK(sdl.surface))
         SDL_LockSurface(sdl.surface);
 
@@ -1900,17 +1904,18 @@ dosurface:
 			}
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-			if (mainMenu.isVisible())
-			{
-				/* enforce a minimum 640x400 surface size.
-				 * the menus are useless below 640x400 */
-				if (consider_width < (640 + (sdl.overscan_width * 2)))
-					consider_width = (640 + (sdl.overscan_width * 2));
-				if (consider_height < (400 + (sdl.overscan_width * 2) + (unsigned int)menuheight))
-					consider_height = (400 + (sdl.overscan_width * 2) + (unsigned int)menuheight);
-			}
+        if (mainMenu.isVisible())
+        {
+            extern unsigned int min_sdldraw_menu_width;
+            extern unsigned int min_sdldraw_menu_height;
+            /* enforce a minimum 500x300 surface size.
+             * the menus are useless below 500x300 */
+            if (consider_width < (min_sdldraw_menu_width + (sdl.overscan_width * 2)))
+                consider_width = (min_sdldraw_menu_width + (sdl.overscan_width * 2));
+            if (consider_height < (min_sdldraw_menu_height + (sdl.overscan_width * 2) + (unsigned int)menuheight))
+                consider_height = (min_sdldraw_menu_height + (sdl.overscan_width * 2) + (unsigned int)menuheight);
+        }
 #endif
-
 			/* decide where the rectangle on the screen goes */
 			int final_width,final_height,ax,ay;
 
@@ -1982,6 +1987,7 @@ dosurface:
         SDL_FillRect(sdl.surface, NULL, SDL_MapRGB(sdl.surface->format, 0, 0, 0));
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
         mainMenu.screenWidth = sdl.surface->w;
+		mainMenu.screenHeight = sdl.surface->h;
         mainMenu.updateRect();
         mainMenu.setRedraw();
         GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
@@ -2079,17 +2085,19 @@ dosurface:
 			}
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-			if (mainMenu.isVisible())
-			{
-				/* enforce a minimum 640x400 surface size.
-				 * the menus are useless below 640x400 */
-				if (consider_width < (640 + (sdl.overscan_width * 2)))
-					consider_width = (640 + (sdl.overscan_width * 2));
-				if (consider_height < (400 + (sdl.overscan_width * 2) + (unsigned int)menuheight))
-					consider_height = (400 + (sdl.overscan_width * 2) + (unsigned int)menuheight);
-			}
+        if (mainMenu.isVisible())
+        {
+            extern unsigned int min_sdldraw_menu_width;
+            extern unsigned int min_sdldraw_menu_height;
+            /* enforce a minimum 500x300 surface size.
+             * the menus are useless below 500x300 */
+            if (consider_width < (min_sdldraw_menu_width + (sdl.overscan_width * 2)))
+                consider_width = (min_sdldraw_menu_width + (sdl.overscan_width * 2));
+            if (consider_height < (min_sdldraw_menu_height + (sdl.overscan_width * 2) + (unsigned int)menuheight))
+                consider_height = (min_sdldraw_menu_height + (sdl.overscan_width * 2) + (unsigned int)menuheight);
+        }
 #endif
-
+	
 			/* decide where the rectangle on the screen goes */
 			int final_width,final_height,ax,ay;
 			
@@ -2196,6 +2204,7 @@ dosurface:
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
         mainMenu.screenWidth = sdl.surface->w;
+		mainMenu.screenHeight = sdl.surface->h;
         mainMenu.updateRect();
         mainMenu.setRedraw();
         GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
@@ -2561,6 +2570,7 @@ dosurface:
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
 		mainMenu.screenWidth = sdl.surface->w;
+		mainMenu.screenHeight = sdl.surface->h;
 		mainMenu.updateRect();
 		mainMenu.setRedraw();
 		GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
@@ -4476,17 +4486,23 @@ void DOSBoxMenu::item::drawBackground(DOSBoxMenu &menu) {
 void GFX_SDLMenuTrackHover(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id) {
     if (mainMenu.menuUserHoverAt != item_id) {
         if (mainMenu.menuUserHoverAt != DOSBoxMenu::unassigned_item_handle) {
-            mainMenu.get_item(mainMenu.menuUserHoverAt).setHover(mainMenu,false);
-            mainMenu.get_item(mainMenu.menuUserHoverAt).drawMenuItem(mainMenu);
-            mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
+            DOSBoxMenu::item &item = mainMenu.get_item(mainMenu.menuUserHoverAt);
+            item.setHover(mainMenu,false);
+            if (item.checkResetRedraw()) {
+                item.drawMenuItem(mainMenu);
+                item.updateScreenFromItem(mainMenu);
+            }
         }
 
         mainMenu.menuUserHoverAt = item_id;
 
         if (mainMenu.menuUserHoverAt != DOSBoxMenu::unassigned_item_handle) {
-            mainMenu.get_item(mainMenu.menuUserHoverAt).setHover(mainMenu,true);
-            mainMenu.get_item(mainMenu.menuUserHoverAt).drawMenuItem(mainMenu);
-            mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
+            DOSBoxMenu::item &item = mainMenu.get_item(mainMenu.menuUserHoverAt);
+            item.setHover(mainMenu,true);
+            if (item.checkResetRedraw()) {
+                item.drawMenuItem(mainMenu);
+                item.updateScreenFromItem(mainMenu);
+            }
         }
 		
 		if (OpenGL_using())
@@ -4497,17 +4513,23 @@ void GFX_SDLMenuTrackHover(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id) {
 void GFX_SDLMenuTrackHilight(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id) {
     if (mainMenu.menuUserAttentionAt != item_id) {
         if (mainMenu.menuUserAttentionAt != DOSBoxMenu::unassigned_item_handle) {
-            mainMenu.get_item(mainMenu.menuUserAttentionAt).setHilight(mainMenu,false);
-            mainMenu.get_item(mainMenu.menuUserAttentionAt).drawMenuItem(mainMenu);
-            mainMenu.get_item(mainMenu.menuUserAttentionAt).updateScreenFromItem(mainMenu);
+            DOSBoxMenu::item &item = mainMenu.get_item(mainMenu.menuUserAttentionAt);
+            item.setHilight(mainMenu,false);
+            if (item.checkResetRedraw()) {
+                item.drawMenuItem(mainMenu);
+                item.updateScreenFromItem(mainMenu);
+            }
         }
 
         mainMenu.menuUserAttentionAt = item_id;
 
         if (mainMenu.menuUserAttentionAt != DOSBoxMenu::unassigned_item_handle) {
-            mainMenu.get_item(mainMenu.menuUserAttentionAt).setHilight(mainMenu,true);
-            mainMenu.get_item(mainMenu.menuUserAttentionAt).drawMenuItem(mainMenu);
-            mainMenu.get_item(mainMenu.menuUserAttentionAt).updateScreenFromItem(mainMenu);
+            DOSBoxMenu::item &item = mainMenu.get_item(mainMenu.menuUserAttentionAt);
+            item.setHilight(mainMenu,true);
+            if (item.checkResetRedraw()) {
+                item.drawMenuItem(mainMenu);
+                item.updateScreenFromItem(mainMenu);
+            }
         }
 		
 		if (OpenGL_using())
@@ -4906,6 +4928,8 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
                             break;
                         case SDL_MOUSEMOTION:
                             {
+								bool noRedrawNew = false,noRedrawOld = false;
+
                                 sel_item = DOSBoxMenu::unassigned_item_handle;
 
                                 std::vector<DOSBoxMenu::item_handle_t>::iterator search = popup_stack.end();
@@ -4934,6 +4958,11 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 										mainMenu.get_item(mainMenu.menuUserHoverAt).setHover(mainMenu,false);
 										if (mainMenu.get_item(mainMenu.menuUserHoverAt).get_type() == DOSBoxMenu::item_type_id)
 											mainMenu.get_item(mainMenu.menuUserHoverAt).setHilight(mainMenu,false);
+                                        else if (mainMenu.get_item(mainMenu.menuUserHoverAt).get_type() == DOSBoxMenu::submenu_type_id) {
+                                            if (mainMenu.get_item(mainMenu.menuUserHoverAt).isHilight()) {
+                                                noRedrawOld = true;
+                                            }
+                                        }
 									}
 									
                                     if (sel_item != DOSBoxMenu::unassigned_item_handle) {
@@ -4955,6 +4984,10 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 												popup_stack.push_back(sel_item);
 												redrawAll = true;
 											}
+                                            else {
+                                                /* no change in item state, don't bother redrawing */
+                                                noRedrawNew = true;
+                                            }											
                                         }
                                         else {
 											/* use a copy of the iterator to scan forward and un-hilight the menu items.
@@ -4984,15 +5017,20 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 											redrawAll = true;
 									}
 										
-									if (mainMenu.menuUserHoverAt != DOSBoxMenu::unassigned_item_handle && !OpenGL_using() && !redrawAll) {
-										mainMenu.get_item(mainMenu.menuUserHoverAt).drawMenuItem(mainMenu);
-										mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
+									if (mainMenu.menuUserHoverAt != DOSBoxMenu::unassigned_item_handle && !OpenGL_using() && !redrawAll && !noRedrawOld) {
+                                        if (mainMenu.get_item(mainMenu.menuUserHoverAt).checkResetRedraw()) {
+                                            mainMenu.get_item(mainMenu.menuUserHoverAt).drawMenuItem(mainMenu);
+                                            mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
+                                        }
 									}
                                     
 									mainMenu.menuUserHoverAt = sel_item;
-									if (mainMenu.menuUserHoverAt != DOSBoxMenu::unassigned_item_handle && !OpenGL_using() && !redrawAll) {
-										mainMenu.get_item(mainMenu.menuUserHoverAt).drawMenuItem(mainMenu);
-										mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
+
+									if (mainMenu.menuUserHoverAt != DOSBoxMenu::unassigned_item_handle && !OpenGL_using() && !redrawAll && !noRedrawNew) {
+                                        if (mainMenu.get_item(mainMenu.menuUserHoverAt).checkResetRedraw()) {
+                                            mainMenu.get_item(mainMenu.menuUserHoverAt).drawMenuItem(mainMenu);
+                                            mainMenu.get_item(mainMenu.menuUserHoverAt).updateScreenFromItem(mainMenu);
+                                        }
 									} 
                                 }
                             }
@@ -8339,6 +8377,7 @@ int main(int argc, char* argv[]) {
 #endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
         mainMenu.screenWidth = sdl.surface->w;
+		mainMenu.screenHeight = sdl.surface->h;
         mainMenu.updateRect();
 #endif
 
