@@ -32,8 +32,6 @@ ifeq ($(DYNAMIC_X86), 1)
 	CXXFLAGS	+=  -DC_DYNAMIC_X86=32
 endif
 
-CXXFLAGS	+=	$(shell sdl2-config --cflags)
-
 CFLAGS	=	-O3 -DNDEBUG -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-pointer  -mno-ms-bitfields  -I. \
 			-I$(DBX_PATH) \
 			-I$(DBX_PATH)/include \
@@ -46,7 +44,13 @@ CFLAGS	=	-O3 -DNDEBUG -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-point
 			-I$(DBX_PATH)/src/hardware/snd_pc98/x11 \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus 
 			
-CFLAGS	+=	$(shell sdl2-config --cflags)
+ifeq ($(SDL1), 1)
+	CFLAGS	+= -DC_OPENGL=1 $(shell sdl-config --cflags)
+	CXXFLAGS += -DC_OPENGL=1 $(shell sdl-config --cflags)
+else
+	CFLAGS	+=	-DC_SDL2=1 $(shell sdl2-config --cflags)
+	CXXFLAGS += -DC_SDL2=1	$(shell sdl2-config --cflags)
+endif
 
 LFLAGS	=
 
@@ -100,7 +104,18 @@ OBJS_MT32 = $(addsuffix .o,$(basename $(CPPSRCS_MT32)))
 CXXFLAGS_MT32 = -DC_MT32=1 -I$(DBX_PATH)/src/mt32 -I$(DBX_PATH)/src/mt32/freeverb -I$(DBX_PATH)/src/mt32/sha1
 	
 OBJS = $(addsuffix .o,$(basename $(CPPSRCS)))
-LIBS = -static -lz -lpng -lm -lstdc++ $(shell sdl2-config --libs)
+LIBS = -static -lz -lpng -lm -lstdc++ 
+
+ifeq ($(SDL1), 1) 
+	LIBS += $(shell sdl-config --libs)
+	ifdef WINDIR
+		LIBS += -limm32 -lopengl32
+	else
+		LIBS += -lGL
+	endif
+else
+	LIBS += $(shell sdl2-config --libs)
+endif
 
 ifeq ($(MT32),1)
 	CPPSRCS += $(CPPSRCS_MT32)
