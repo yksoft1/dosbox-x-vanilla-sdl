@@ -30,6 +30,11 @@
 #include "timer.h"
 #include "inout.h"
 
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+unsigned int min_sdldraw_menu_width = 500;
+unsigned int min_sdldraw_menu_height = 300;
+#endif
+	
 #if DOSBOXMENU_TYPE == DOSBOXMENU_NSMENU /* Mac OS X menu handle */
 void sdl_hax_nsMenuAddApplicationMenu(void *nsMenu);
 void *sdl_hax_nsMenuItemFromTag(void *nsMenu, unsigned int tag);
@@ -2185,7 +2190,6 @@ void DOSBoxMenu::item::showItem(DOSBoxMenu &menu,bool show) {
 DOSBoxMenu::item &DOSBoxMenu::item::setHilight(DOSBoxMenu &menu,bool hi) {
     if (itemHilight != hi) {
         itemHilight = hi;
-        needRedraw = true;
     }
 	
 	return *this;
@@ -2194,7 +2198,6 @@ DOSBoxMenu::item &DOSBoxMenu::item::setHilight(DOSBoxMenu &menu,bool hi) {
 DOSBoxMenu::item &DOSBoxMenu::item::setHover(DOSBoxMenu &menu,bool ho) {
     if (itemHover != ho) {
         itemHover = ho;
-        needRedraw = true;
     }
 	
 	return *this;
@@ -2262,7 +2265,10 @@ void DOSBoxMenu::updateRect(void) {
     menuBox.y = 0;
     menuBox.w = menuVisible ? screenWidth : 0;
     menuBox.h = menuVisible ? menuBarHeight : 0;
+#if 0
     LOG_MSG("SDL menuBox w=%d h=%d",menuBox.w,menuBox.h);
+#endif
+	layoutMenu();
 }
 
 void DOSBoxMenu::layoutMenu(void) {
@@ -2343,6 +2349,46 @@ void DOSBoxMenu::item::layoutSubmenu(DOSBoxMenu &menu, bool isTopLevel) {
     popupBox.w = maxx - popupBox.x;
     popupBox.h = y - popupBox.y;
 
+    /* keep it on the screen if possible */
+    {
+        int new_y = 0;
+
+        new_y = popupBox.y;
+        if ((new_y + (int)popupBox.h) > (int)menu.screenHeight)
+            new_y = (int)menu.screenHeight - popupBox.h;
+        if (new_y < ((int)menu.menuBarHeight - 1))
+            new_y = ((int)menu.menuBarHeight - 1);	
+
+        int adj_y = new_y - popupBox.y;
+        if (adj_y != 0) {
+            popupBox.y += adj_y;
+
+            for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++) {
+                DOSBoxMenu::item &item = menu.get_item(*i);
+                item.screenBox.y += adj_y;
+            }
+        }
+    }
+    {
+        int new_x = 0;
+
+        new_x = popupBox.x;
+        if ((new_x + (int)popupBox.w) > (int)menu.screenWidth)
+            new_x = (int)menu.screenWidth - popupBox.w;
+        if (new_x < (int)0)
+            new_x = (int)0;
+
+        int adj_x = new_x - popupBox.x;
+        if (adj_x != 0) {
+            popupBox.x += adj_x;
+
+            for (std::vector<item_handle_t>::iterator i=display_list.disp_list.begin();i!=display_list.disp_list.end();i++) {
+                DOSBoxMenu::item &item = menu.get_item(*i);
+                item.screenBox.x += adj_x;
+            }
+        }
+    }
+		
     /* 1 pixel border, top */
     if (!isTopLevel) {
         borderTop = true;
