@@ -10,6 +10,8 @@ DBX_PATH	= ..
 
 DYNAMIC_X86 = 1
 
+OPENGL = 1
+
 CXXFLAGS = -O3  -DNDEBUG \
 			-std=gnu++98 -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-pointer  -mno-ms-bitfields  -I. \
 			-I$(DBX_PATH) \
@@ -45,11 +47,15 @@ CFLAGS	=	-O3 -DNDEBUG -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-point
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus 
 			
 ifeq ($(SDL1), 1)
-	CFLAGS	+= -DC_OPENGL=1 $(shell sdl-config --cflags)
-	CXXFLAGS += -DC_OPENGL=1 $(shell sdl-config --cflags)
+	CFLAGS	+=  $(shell sdl-config --cflags)
+	CXXFLAGS += $(shell sdl-config --cflags)
+	ifeq ($(OPENGL), 1)
+		CFLAGS	+= -DC_OPENGL=1
+		CXXFLAGS += -DC_OPENGL=1
+	endif
 else
 	CFLAGS	+=	-DC_SDL2=1 $(shell sdl2-config --cflags)
-	CXXFLAGS += -DC_SDL2=1	$(shell sdl2-config --cflags)
+	CXXFLAGS += -DC_SDL2=1 $(shell sdl2-config --cflags)
 endif
 
 LFLAGS	=
@@ -109,9 +115,14 @@ LIBS = -static -lz -lpng -lm -lstdc++
 ifeq ($(SDL1), 1) 
 	LIBS += $(shell sdl-config --libs)
 	ifdef WINDIR
-		LIBS += -limm32 -lopengl32
-	else
-		LIBS += -lGL
+		LIBS += -limm32
+	endif
+	ifeq ($(OPENGL), 1)
+		ifdef WINDIR
+			LIBS += -lopengl32
+		else
+			LIBS += -lGL
+		endif
 	endif
 else
 	LIBS += $(shell sdl2-config --libs)
