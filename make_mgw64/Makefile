@@ -93,12 +93,11 @@ CPPSRCS	=	$(DBX_PATH)/src/dosbox.cpp \
 			$(wildcard $(DBX_PATH)/src/shell/*.cpp) 
 
 CPPSRCS_MT32 = $(wildcard $(DBX_PATH)/src/mt32/*.cpp) \
-			$(wildcard $(DBX_PATH)/src/mt32/freeverb/*.cpp) \
 			$(wildcard $(DBX_PATH)/src/mt32/sha1/*.cpp)
 
 OBJS_MT32 = $(addsuffix .o,$(basename $(CPPSRCS_MT32)))
 
-CXXFLAGS_MT32 = -DC_MT32=1 -I$(DBX_PATH)/src/mt32 -I$(DBX_PATH)/src/mt32/freeverb -I$(DBX_PATH)/src/mt32/sha1
+CXXFLAGS_MT32 = -DC_MT32=1 -I$(DBX_PATH)/src/mt32 -I$(DBX_PATH)/src/mt32/sha1
 
 OBJS = $(addsuffix .o,$(basename $(CPPSRCS)))
 LIBS = -static -lz -lpng -lm -lstdc++
