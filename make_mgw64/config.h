@@ -102,7 +102,7 @@
 #define C_SDL1 1
 
 /* Set to 1 to enable SDL 2.x support */
-#define C_SDL2 1
+/* #define C_SDL2 1 */
 
 /* Indicate whether SDL_net is present */
 /*#define C_SDL_NET 1*/
