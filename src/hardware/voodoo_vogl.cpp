@@ -30,9 +30,9 @@
 
 /* NTS: This causes errors in Linux because MesaGL already defines these */
 #ifdef WIN32
-PFNGLMULTITEXCOORD4FVARBPROC glMultiTexCoord4fvARB = NULL;
-PFNGLMULTITEXCOORD4FARBPROC glMultiTexCoord4fARB = NULL;
-PFNGLACTIVETEXTUREARBPROC glActiveTextureARB = NULL;
+PFNGLMULTITEXCOORD4FVARBPROC __glMultiTexCoord4fvARB = NULL;
+PFNGLMULTITEXCOORD4FARBPROC __glMultiTexCoord4fARB = NULL;
+PFNGLACTIVETEXTUREARBPROC __glActiveTextureARB = NULL;
 #endif
 
 PFNGLCREATESHADEROBJECTARBPROC glCreateShaderObjectARB = NULL;
@@ -169,20 +169,20 @@ bool VOGL_Initialize(void) {
 	VOGL_InitVersion();
 
 #ifdef WIN32
-	glActiveTextureARB = (PFNGLACTIVETEXTUREARBPROC)((void*)SDL_GL_GetProcAddress("glActiveTextureARB"));
-	if (!glActiveTextureARB) {
+	__glActiveTextureARB = (PFNGLACTIVETEXTUREARBPROC)((void*)SDL_GL_GetProcAddress("glActiveTextureARB"));
+	if (!__glActiveTextureARB) {
 		LOG_MSG("opengl: glActiveTextureARB extension not supported");
 		return false;
 	}
 
-	glMultiTexCoord4fARB = (PFNGLMULTITEXCOORD4FARBPROC)((void*)SDL_GL_GetProcAddress("glMultiTexCoord4fARB"));
-	if (!glMultiTexCoord4fARB) {
+	__glMultiTexCoord4fARB = (PFNGLMULTITEXCOORD4FARBPROC)((void*)SDL_GL_GetProcAddress("glMultiTexCoord4fARB"));
+	if (!__glMultiTexCoord4fARB) {
 		LOG_MSG("opengl: glMultiTexCoord4fARB extension not supported");
 		return false;
 	}
 
-	glMultiTexCoord4fvARB = (PFNGLMULTITEXCOORD4FVARBPROC)((void*)SDL_GL_GetProcAddress("glMultiTexCoord4fvARB"));
-	if (!glMultiTexCoord4fvARB) {
+	__glMultiTexCoord4fvARB = (PFNGLMULTITEXCOORD4FVARBPROC)((void*)SDL_GL_GetProcAddress("glMultiTexCoord4fvARB"));
+	if (!__glMultiTexCoord4fvARB) {
 		LOG_MSG("opengl: glMultiTexCoord4fvARB extension not supported");
 		return false;
 	}
