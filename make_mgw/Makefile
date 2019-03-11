@@ -49,15 +49,16 @@ CFLAGS	=	-O3 -DNDEBUG -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-point
 ifeq ($(SDL1), 1)
 	CFLAGS	+=  $(shell sdl-config --cflags)
 	CXXFLAGS += $(shell sdl-config --cflags)
-	ifeq ($(OPENGL), 1)
-		CFLAGS	+= -DC_OPENGL=1
-		CXXFLAGS += -DC_OPENGL=1
-	endif
 else
 	CFLAGS	+=	-DC_SDL2=1 $(shell sdl2-config --cflags)
 	CXXFLAGS += -DC_SDL2=1 $(shell sdl2-config --cflags)
 endif
 
+ifeq ($(OPENGL), 1)
+	CFLAGS	+= -DC_OPENGL=1
+	CXXFLAGS += -DC_OPENGL=1
+endif
+	
 LFLAGS	=
 
 TARGET	=	dosbox-x.exe
@@ -116,17 +117,18 @@ ifeq ($(SDL1), 1)
 	ifdef WINDIR
 		LIBS += -limm32
 	endif
-	ifeq ($(OPENGL), 1)
-		ifdef WINDIR
-			LIBS += -lopengl32
-		else
-			LIBS += -lGL
-		endif
-	endif
 else
 	LIBS += $(shell sdl2-config --libs)
 endif
 
+ifeq ($(OPENGL), 1)
+	ifdef WINDIR
+		LIBS += -lopengl32
+	else
+		LIBS += -lGL
+	endif
+endif
+	
 ifeq ($(MT32),1)
 	CPPSRCS += $(CPPSRCS_MT32)
 	CXXFLAGS += $(CXXFLAGS_MT32)

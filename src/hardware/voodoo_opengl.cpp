@@ -27,6 +27,9 @@
 #include "voodoo_emu.h"
 #include "voodoo_opengl.h"
 
+#if defined(C_SDL2) && defined(C_OPENGL)/*HACK*/
+void SDL_GL_SwapBuffers(void);
+#endif
 
 #if C_OPENGL
 
@@ -1615,6 +1618,9 @@ void voodoo_ogl_reset_videomode(void) {
     DOSBox_SetMenu();
 #endif
 
+#if defined(C_SDL2)
+    E_Exit("SDL2 3Dfx OpenGL emulation not implemented yet");
+#else
     GFX_PreventFullscreen(true);
 
 	last_clear_color=0;
@@ -1761,6 +1767,7 @@ void voodoo_ogl_reset_videomode(void) {
 	glShadeModel(GL_SMOOTH);
 
 	LOG_MSG("VOODOO: OpenGL: mode set, resolution %d:%d %s", v->fbi.width, v->fbi.height, (sdl_flags & SDL_FULLSCREEN) ? "(fullscreen)" : "");
+#endif
 }
 
 void voodoo_ogl_update_dimensions(void) {
