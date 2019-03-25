@@ -59,14 +59,8 @@
   #define fseeko64 fseek
  #endif
 #endif
-
 #endif
 
-#ifdef __MINGW32__
-  #error MinGW32
-  #define ftello64 _ftelli64
-  #define fseeko64 _fseeki64
-#endif
 /*
 #ifndef ZPOS64_T
   #ifdef _WIN32
