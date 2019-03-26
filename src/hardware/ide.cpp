@@ -177,6 +177,7 @@ public:
 	Bitu phys_heads,phys_sects,phys_cyls;
 	unsigned char sector[512*128];
 	Bitu sector_i,sector_total;
+	bool geo_translate;
 };
 
 enum {
@@ -2023,6 +2024,7 @@ IDEATADevice::IDEATADevice(IDEController *c,unsigned char bios_disk_index) : IDE
 	id_model = "DOSBox IDE disk";
 	multiple_sector_max = sizeof(sector) / 512;
 	multiple_sector_count = 1;
+	geo_translate = false;
 }
 
 IDEATADevice::~IDEATADevice() {
@@ -2058,6 +2060,7 @@ void IDEATADevice::update_from_biosdisk() {
 	}
 
 	headshr = 0;
+	geo_translate = false;
 	cyls = dsk->cylinders;
 	heads = dsk->heads;
 	sects = dsk->sectors;
@@ -2079,6 +2082,8 @@ void IDEATADevice::update_from_biosdisk() {
 	if (heads > 16) {
 		unsigned long tmp;
 
+		geo_translate = true;
+		
 		tmp = heads * cyls * sects;
 		sects = 63;
 		heads = 16;
@@ -2480,7 +2485,7 @@ void IDE_EmuINT13DiskReadByBIOS(unsigned char disk,unsigned int cyl,unsigned int
 					}
 
 					/* translate BIOS INT 13h geometry to IDE geometry */
-					if (ata->headshr != 0) {
+					if (ata->headshr != 0 || ata->geo_translate) {
 						unsigned long lba;
 
 						if (dsk == NULL) return;
