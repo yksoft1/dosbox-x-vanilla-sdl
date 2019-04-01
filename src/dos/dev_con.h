@@ -496,6 +496,10 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
         }
 
         if (!ansi.esc){
+            // TODO: PC-98 MS-DOS ANSI driver accepts 0x1E (RECORD SEPARATOR) as a single char command
+            //       to put the cursor in home position.
+            // TODO: PC-98 MS-DOS ANSI driver accepts CTRL+Z as a single char command to clear the
+            //       screeen and move the cursor to home (upper left).
             if(data[count]=='\033') {
                 /*clear the datastructure */
                 ClearAnsi();
@@ -519,22 +523,42 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
                 case '[': 
                     ansi.sci=true;
                     break;
-                case '7': /* save cursor pos + attr */
-                case '8': /* restore this  (Wonder if this is actually used) */
-                case 'D':/* scrolling DOWN*/
-                case 'M':/* scrolling UP*/ 
                 case '*':/* PC-98: clear screen */
                     if (IS_PC98_ARCH) {
+                        /* NTS: Some reverse engineering of INT DCh ANSI handling shows that
+                         *      ESC * handling does nothing but execute the same code path
+                         *      as CTRL+Z handling, which clears the screen including removal
+                         *      of the function key row, then calls into the code path for
+                         *      0x1E (RECORD SEPARATOR) handling which then positions the
+                         *      cursor to home position (upper left corner of the screen).
+                         *
+                         *      boot144.dsk ref NOTES
+                         *
+                         *         0ADC:0B84 ESC * handling
+                         *         0ADC:117D CTRL+Z handling
+                         *         0ADC:1516 Fill (clear) the screen
+                         *         0ADC:13FF Remove function key row
+                         *         0ADC:116B 0x1E RECORD SEPARATOR handling
+                         */
                         Bit8u page = real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
+						
+                        /* reverse engineering of a bootdisk shows that ESC * (and CTRL+Z) also remove the function key row */
+                        void update_pc98_function_row(bool enable);
+						update_pc98_function_row(false);
 
                         INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
                         Real_INT10_SetCursorPos(0,0,page);
                         ClearAnsi();
-                        break;
                     }
                     else {
-                        /* fall through */
+                        LOG(LOG_IOCTL,LOG_NORMAL)("ANSI: unknown char %c after a esc",data[count]); /*prob () */
+                        ClearAnsi();
                     }
+					break;
+                case '7': /* save cursor pos + attr TODO */
+                case '8': /* restore this TODO */
+                case 'D':/* scrolling DOWN TODO */
+                case 'M':/* scrolling UP TODO */ 
                 default:
                     LOG(LOG_IOCTL,LOG_NORMAL)("ANSI: unknown char %c after a esc",data[count]); /*prob () */
                     ClearAnsi();
