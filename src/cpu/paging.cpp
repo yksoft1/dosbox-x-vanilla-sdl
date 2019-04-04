@@ -110,8 +110,11 @@ static struct {
 Bits PageFaultCore(void) {
 	CPU_CycleLeft+=CPU_Cycles;
 	CPU_Cycles=1;
-//	Bits ret=CPU_Core_Full_Run();
-	Bits ret=CPU_Core_Normal_Run();
+#ifndef EMSCRIPTEN
+	Bits ret=CPU_Core_Full_Run(); // FIXME: What is the Full core doing right that Normal core is doing wrong here?
+#else
+	Bits ret=CPU_Core_Normal_Run(); //Emscripten builds don't have Full core
+#endif
 	CPU_CycleLeft+=CPU_Cycles;
 	if (ret<0) E_Exit("Got a dosbox close machine in pagefault core?");
 	if (ret) 
@@ -270,6 +273,8 @@ void PrintPageInfo(const char* string, PhysPt lin_addr, bool writing, bool prepa
 bool use_dynamic_core_with_paging = false; /* allow dynamic core even with paging (AT YOUR OWN RISK!!!!) */
 bool dosbox_allow_nonrecursive_page_fault = false;	/* when set, do nonrecursive mode (when executing instruction) */
 
+bool CPU_IsDynamicCore(void);
+
 // PAGING_NewPageFault
 // lin_addr, page_addr: the linear and page address the fault happened at
 // prepare_only: true in case the calling core handles the fault, else the PageFaultCore does
@@ -281,7 +286,7 @@ static void PAGING_NewPageFault(PhysPt lin_addr, Bitu page_addr, bool prepare_on
 	if (prepare_only) {
 		cpu.exception.which = EXCEPTION_PF;
 		cpu.exception.error = faultcode;
-	} else if (dosbox_allow_nonrecursive_page_fault) {
+	} else if (dosbox_allow_nonrecursive_page_fault && !CPU_IsDynamicCore()) {
 		throw GuestPageFaultException(lin_addr,page_addr,faultcode);
 	} else {
 		// Save the state of the cpu cores
