@@ -1649,7 +1649,7 @@ void DOSBOX_SetupConfigSections(void) {
 	Pint->SetMinMax(1,1000000);
 	Pint->Set_help("Setting it lower than 100 will be a percentage.");
 
-	Pbool = secprop->Add_bool("use dynamic core with paging on",Property::Changeable::Always,false);
+	Pbool = secprop->Add_bool("use dynamic core with paging on",Property::Changeable::Always,true);
 	Pbool->Set_help("Dynamic core is NOT compatible with the way page faults in the guest are handled in DosBox-X.\n"
 			"Windows 9x may crash with paging on if dynamic core is enabled. Enable at your own risk.\n");
 			
