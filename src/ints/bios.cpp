@@ -49,6 +49,10 @@ extern bool PS1AudioCard;
 # define S_ISREG(x) ((x & S_IFREG) == S_IFREG)
 #endif
 
+const std::string pc98_copyright_str = "Copyright (C) 1983 by NEC Corporation / Microsoft Corp.\x0D\x0A";
+
+bool enable_pc98_copyright_string = false;
+
 /* mouse.cpp */
 extern bool en_bios_ps2mouse;
 extern bool rom_bios_8x8_cga_font;
@@ -7076,6 +7080,8 @@ public:
 		{ // TODO: Eventually, move this to BIOS POST or init phase
 			Section_prop * section=static_cast<Section_prop *>(control->GetSection("dosbox"));
 
+			enable_pc98_copyright_string = section->Get_bool("pc-98 BIOS copyright string");
+
 			bochs_port_e9 = section->Get_bool("bochs debug port e9");
 
 			// TODO: motherboard init, especially when we get around to full Intel Triton/i440FX chipset emulation
@@ -7320,6 +7326,15 @@ public:
 				phys_writeb(bo+0x04,0xEB); // JMP $-2
 				phys_writeb(bo+0x05,0xFE);
 			}
+
+            if (IS_PC98_ARCH && enable_pc98_copyright_string) {
+                size_t i=0;
+
+                for (;i < pc98_copyright_str.length();i++)
+                    phys_writeb(0xE8000 + 0x0DD8 + i,pc98_copyright_str[i]);
+
+                phys_writeb(0xE8000 + 0x0DD8 + i,0);
+            }
 		}
 	}
 	~BIOS(){

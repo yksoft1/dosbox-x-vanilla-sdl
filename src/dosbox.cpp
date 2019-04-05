@@ -1206,6 +1206,9 @@ void DOSBOX_SetupConfigSections(void) {
 		"        or 386DX and 486 systems where the CPU communicated directly with the ISA bus (A24-A31 tied off)\n"
 		"    26: 64MB aliasing. Some 486s had only 26 external address bits, some motherboards tied off A26-A31");
 
+    Pbool = secprop->Add_bool("pc-98 BIOS copyright string",Property::Changeable::WhenIdle,false);
+    Pbool->Set_help("If set, the PC-98 BIOS copyright string is placed at E800:0000. Enable this for software that does \"Epson Check\".");
+
 	Pbool = secprop->Add_bool("pc-98 pic init to read isr",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("If set, the programmable interrupt controllers are initialized by default (if PC-98 mode)\n"
 					"so that the in-service interrupt status can be read immediately. There seems to be a common\n"
