@@ -2467,22 +2467,37 @@ static void CTMIXER_Write(Bit8u val) {
 	case 0x80:		/* IRQ Select */
 		if (sb.type==SBT_16 && !sb.vibra) { /* ViBRA PnP cards do not allow reconfiguration by this byte */
 			sb.hw.irq=0xff;
-			if (val & 0x1) sb.hw.irq=2;
-			else if (val & 0x2) sb.hw.irq=5;
-			else if (val & 0x4) sb.hw.irq=7;
-			else if (val & 0x8) sb.hw.irq=10;
+			if (IS_PC98_ARCH) {
+				if (val & 0x1) sb.hw.irq=3;
+				else if (val & 0x2) sb.hw.irq=10;
+				else if (val & 0x4) sb.hw.irq=12;
+				else if (val & 0x8) sb.hw.irq=5;
+			}
+			else {
+				if (val & 0x1) sb.hw.irq=2;
+				else if (val & 0x2) sb.hw.irq=5;
+				else if (val & 0x4) sb.hw.irq=7;
+				else if (val & 0x8) sb.hw.irq=10;
+			}
 		}
 		break;
 	case 0x81:		/* DMA Select */
 		if (sb.type==SBT_16 && !sb.vibra) { /* ViBRA PnP cards do not allow reconfiguration by this byte */
 			sb.hw.dma8=0xff;
 			sb.hw.dma16=0xff;
-			if (val & 0x1) sb.hw.dma8=0;
-			else if (val & 0x2) sb.hw.dma8=1;
-			else if (val & 0x8) sb.hw.dma8=3;
-			if (val & 0x20) sb.hw.dma16=5;
-			else if (val & 0x40) sb.hw.dma16=6;
-			else if (val & 0x80) sb.hw.dma16=7;
+			if (IS_PC98_ARCH) {
+				if (val & 0x1) sb.hw.dma8=0;
+				else if (val & 0x2) sb.hw.dma8=3;
+				// FIXME: Any other DMA channels available for SB16? DOOM only allows selecting 0 and 3.
+			}
+			else {
+				if (val & 0x1) sb.hw.dma8=0;
+				else if (val & 0x2) sb.hw.dma8=1;
+				else if (val & 0x8) sb.hw.dma8=3;
+				if (val & 0x20) sb.hw.dma16=5;
+				else if (val & 0x40) sb.hw.dma16=6;
+				else if (val & 0x80) sb.hw.dma16=7;
+			}
 			LOG(LOG_SB,LOG_NORMAL)("Mixer select dma8:%x dma16:%x",sb.hw.dma8,sb.hw.dma16);
 		}
 		break;
@@ -2581,23 +2596,42 @@ static Bit8u CTMIXER_Read(void) {
 		break;
 	case 0x80:		/* IRQ Select */
 		ret=0;
-		switch (sb.hw.irq) {
-		case 2:  return 0x1;
-		case 5:  return 0x2;
-		case 7:  return 0x4;
-		case 10: return 0x8;
+		if (IS_PC98_ARCH) {
+			switch (sb.hw.irq) {
+				case 3:  return 0x1;
+				case 10: return 0x2;
+				case 12: return 0x4;
+				case 5:  return 0x8;
+			}
 		}
+		else {
+			switch (sb.hw.irq) {
+				case 2:  return 0x1;
+				case 5:  return 0x2;
+				case 7:  return 0x4;
+				case 10: return 0x8;
+			}
+		}
+		break;
 	case 0x81:		/* DMA Select */
 		ret=0;
-		switch (sb.hw.dma8) {
-		case 0:ret|=0x1;break;
-		case 1:ret|=0x2;break;
-		case 3:ret|=0x8;break;
+        if (IS_PC98_ARCH) {
+			switch (sb.hw.dma8) {
+				case 0:ret|=0x1;break;
+				case 3:ret|=0x2;break;
+			}
 		}
-		switch (sb.hw.dma16) {
-		case 5:ret|=0x20;break;
-		case 6:ret|=0x40;break;
-		case 7:ret|=0x80;break;
+		else {
+			switch (sb.hw.dma8) {
+				case 0:ret|=0x1;break;
+				case 1:ret|=0x2;break;
+				case 3:ret|=0x8;break;
+			}
+			switch (sb.hw.dma16) {
+				case 5:ret|=0x20;break;
+				case 6:ret|=0x40;break;
+				case 7:ret|=0x80;break;
+			}
 		}
 		return ret;
 	case 0x82:		/* IRQ Status */
@@ -2618,17 +2652,19 @@ static Bit8u CTMIXER_Read(void) {
 
 
 static Bitu read_sb(Bitu port,Bitu /*iolen*/) {
-	/* All Creative hardware prior to Sound Blaster 16 appear to alias most of the I/O ports.
-	 * This has been confirmed on a Sound Blaster 2.0 and a Sound Blaster Pro (v3.1).
-	 * DSP aliasing is also faithfully emulated by the ESS AudioDrive. */
-	if (sb.hw.sb_io_alias) {
-		if ((port-sb.hw.base) == DSP_ACK_16BIT && sb.ess_type != ESS_NONE)
-			{ } /* ESS AudioDrive does not alias DSP STATUS (0x22E) as seen on real hardware */
-		else if ((port-sb.hw.base) < MIXER_INDEX || (port-sb.hw.base) > MIXER_DATA)
-			port &= ~1;
+    if (!IS_PC98_ARCH) {
+		/* All Creative hardware prior to Sound Blaster 16 appear to alias most of the I/O ports.
+		 * This has been confirmed on a Sound Blaster 2.0 and a Sound Blaster Pro (v3.1).
+		 * DSP aliasing is also faithfully emulated by the ESS AudioDrive. */
+		if (sb.hw.sb_io_alias) {
+			if ((port-sb.hw.base) == DSP_ACK_16BIT && sb.ess_type != ESS_NONE)
+				{ } /* ESS AudioDrive does not alias DSP STATUS (0x22E) as seen on real hardware */
+			else if ((port-sb.hw.base) < MIXER_INDEX || (port-sb.hw.base) > MIXER_DATA)
+				port &= ~1;
+		}
 	}
 
-	switch (port-sb.hw.base) {
+	switch (((port-sb.hw.base) >> (IS_PC98_ARCH ? 8u : 0u)) & 0xFu) {
 	case MIXER_INDEX:
 		return sb.mixer.index;
 	case MIXER_DATA:
@@ -2703,15 +2739,17 @@ static void write_sb(Bitu port,Bitu val,Bitu /*iolen*/) {
 	/* All Creative hardware prior to Sound Blaster 16 appear to alias most of the I/O ports.
 	 * This has been confirmed on a Sound Blaster 2.0 and a Sound Blaster Pro (v3.1).
 	 * DSP aliasing is also faithfully emulated by the ESS AudioDrive. */
-	if (sb.hw.sb_io_alias) {
-		if ((port-sb.hw.base) == DSP_ACK_16BIT && sb.ess_type != ESS_NONE)
-			{ } /* ESS AudioDrive does not alias DSP STATUS (0x22E) as seen on real hardware */
-		else if ((port-sb.hw.base) < MIXER_INDEX || (port-sb.hw.base) > MIXER_DATA)
-			port &= ~1;
+	if (!IS_PC98_ARCH) {
+		if (sb.hw.sb_io_alias) {
+			if ((port-sb.hw.base) == DSP_ACK_16BIT && sb.ess_type != ESS_NONE)
+				{ } /* ESS AudioDrive does not alias DSP STATUS (0x22E) as seen on real hardware */
+			else if ((port-sb.hw.base) < MIXER_INDEX || (port-sb.hw.base) > MIXER_DATA)
+				port &= ~1;
+		}
 	}
 
 	Bit8u val8=(Bit8u)(val&0xff);
-	switch (port-sb.hw.base) {
+	switch (((port-sb.hw.base) >> (IS_PC98_ARCH ? 8u : 0u)) & 0xFu) {
 	case DSP_RESET:
 		DSP_DoReset(val8);
 		break;
@@ -3130,7 +3168,23 @@ private:
 				opl_mode=OPL_opl3;
 				break;
 			}
-		}	
+        }
+	
+		if (IS_PC98_ARCH) {
+			if (opl_mode != OPL_none) {
+				if (opl_mode != OPL_opl3) {
+					LOG(LOG_SB,LOG_WARN)("Only OPL3 is allowed in PC-98 mode");
+					opl_mode = OPL_opl3;
+				}
+			}
+
+			/* card type MUST be SB16.
+			 * Creative did not release any other Sound Blaster for PC-98 as far as I know. */
+			if (sb.type != SBT_16) {
+				LOG(LOG_SB,LOG_ERROR)("Only Sound Blaster 16 is allowed in PC-98 mode");
+				sb.type = SBT_NONE;
+			}
+		}
 	}
 public:
 	SBLASTER(Section* configuration):Module_base(configuration) {
@@ -3142,6 +3196,16 @@ public:
 		Section_prop * section=static_cast<Section_prop *>(configuration);
 
 		sb.hw.base=section->Get_hex("sbbase");
+
+		if (IS_PC98_ARCH) {
+			if (sb.hw.base >= 0x220 && sb.hw.base <= 0x2E0) /* translate IBM PC to PC-98 (220h -> D2h) */
+				sb.hw.base = 0xD0 + ((sb.hw.base >> 4u) & 0xFu);
+		}
+		else {
+			if (sb.hw.base >= 0xD2 && sb.hw.base <= 0xDE) /* translate PC-98 to IBM PC (D2h -> 220h) */
+				sb.hw.base = 0x200 + ((sb.hw.base & 0xFu) << 4u);
+		}
+			
 		sb.goldplay=section->Get_bool("goldplay");
 		sb.min_dma_user=section->Get_int("mindma");
 		sb.goldplay_stereo=section->Get_bool("goldplay stereo");
@@ -3211,12 +3275,31 @@ public:
 		si=section->Get_int("irq");
 		sb.hw.irq=(si >= 0) ? si : 0xFF;
 
+		if (IS_PC98_ARCH) {
+			if (sb.hw.irq == 7) /* IRQ 7 is not valid on PC-98 (that's cascade interrupt) */
+			sb.hw.irq = 5;
+		}	
+
 		si=section->Get_int("dma");
 		sb.hw.dma8=(si >= 0) ? si : 0xFF;
 
 		si=section->Get_int("hdma");
 		sb.hw.dma16=(si >= 0) ? si : 0xFF;
 
+		if (IS_PC98_ARCH) {
+			if (sb.hw.dma8 > 3)
+				sb.hw.dma8 = 3;
+			if (sb.hw.dma8 == 1) /* DMA 1 is not usable for SB on PC-98? */
+				sb.hw.dma8 = 3;
+			if (sb.hw.dma16 > 3)
+				sb.hw.dma16 = sb.hw.dma8;
+
+			LOG_MSG("PC-98: Final SB16 resources are DMA8=%u DMA16=%u\n",sb.hw.dma8,sb.hw.dma16);
+
+			sb.dma.chan=GetDMAChannel(sb.hw.dma8);
+			if (sb.dma.chan == NULL) LOG_MSG("PC-98: SB16 is unable to obtain DMA channel");
+		}
+			
 		/* some DOS games/demos support Sound Blaster, and expect the IRQ to fire, but
 		 * make no attempt to unmask the IRQ (perhaps the programmer forgot). This option
 		 * is needed for Public NMI "jump" demo in order for music to continue playing. */
@@ -3277,8 +3360,8 @@ public:
 			if (i==8 || i==9) continue;
 			//Disable mixer ports for lower soundblaster
 			if ((sb.type==SBT_1 || sb.type==SBT_2) && (i==4 || i==5)) continue; 
-			ReadHandler[i].Install(sb.hw.base+i,read_sb,IO_MB);
-			WriteHandler[i].Install(sb.hw.base+i,write_sb,IO_MB);
+			ReadHandler[i].Install(sb.hw.base+(IS_PC98_ARCH ? ((i+0x20u) << 8u) : i),read_sb,IO_MB);
+			WriteHandler[i].Install(sb.hw.base+(IS_PC98_ARCH ? ((i+0x20u) << 8u) : i),write_sb,IO_MB);
 		}
 
         // NTS: Unknown/undefined registers appear to return the register index you requested rather than the actual contents,
@@ -3500,7 +3583,10 @@ ASP>
 		if (sb.emit_blaster_var) {
 			// Create set blaster line
 			ostringstream temp;
-			temp << "SET BLASTER=A" << setw(3) << hex << sb.hw.base;
+			if (IS_PC98_ARCH)
+				temp << "SET BLASTER=A" << setw(2) << hex << sb.hw.base;
+			else
+				temp << "SET BLASTER=A" << setw(3) << hex << sb.hw.base;
 			if (sb.hw.irq != 0xFF) temp << " I" << dec << (Bitu)sb.hw.irq;
 			if (sb.hw.dma8 != 0xFF) temp << " D" << (Bitu)sb.hw.dma8;
 			if (sb.type==SBT_16 && sb.hw.dma16 != 0xFF) temp << " H" << (Bitu)sb.hw.dma16;
@@ -3557,7 +3643,7 @@ void SBLASTER_OnReset(Section *sec) {
 	}
 	HWOPL_Cleanup();
 
-    if (test == NULL && !IS_PC98_ARCH) {
+    if (test == NULL) {
 		LOG(LOG_MISC,LOG_DEBUG)("Allocating Sound Blaster emulation");
 		test = new SBLASTER(control->GetSection("sblaster"));
 	}
