@@ -60,6 +60,8 @@ extern bool pcibus_enable;
 
 bool VM_Boot_DOSBox_Kernel();
 
+void pc98_update_palette(void);
+
 bool bochs_port_e9 = false;
 bool isa_memory_hole_512kb = false;
 bool int15_wait_force_unmask_irq = false;
@@ -2383,6 +2385,7 @@ extern bool                         gdc_5mhz_mode;
 extern bool                         enable_pc98_egc;
 extern bool                         enable_pc98_grcg;
 extern bool                         enable_pc98_16color;
+extern bool                         enable_pc98_256color;
 extern bool                         enable_pc98_188usermod;
 extern bool                         pc98_31khz_mode;
 extern bool                         pc98_attr4_graphic;
@@ -2850,6 +2853,23 @@ static Bitu INT18_PC98_Handler(void) {
                 LOG_MSG("PC-98 INT 18 AH=43h CX=0x%04X DS=0x%04X", reg_cx, SegValue(ds));
                 break;
             }
+		case 0x4D:  // 256-color enable
+			if (reg_ch == 1) {
+				void pc98_port6A_command_write(unsigned char b);
+				pc98_port6A_command_write(0x07);        // enable EGC
+				pc98_port6A_command_write(0x01);        // enable 16-color
+				pc98_port6A_command_write(0x21);        // enable 256-color
+				PC98_show_cursor(false);                // apparently hides the cursor?
+			}
+			else if (reg_ch == 0) {
+				void pc98_port6A_command_write(unsigned char b);
+				pc98_port6A_command_write(0x20);        // disable 256-color
+				PC98_show_cursor(false);                // apparently hides the cursor?
+			}
+			else {
+				LOG_MSG("PC-98 INT 18h AH=4Dh unknown CH=%02xh",reg_ch);
+			}
+			break;
         default:
             LOG_MSG("PC-98 INT 18h unknown call AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
                 reg_ax,
@@ -5526,7 +5546,11 @@ void gdc_16color_enable_update_vars(void) {
     b &= ~0x04;
     if (enable_pc98_16color) b |= 0x04;
     mem_writeb(0x54C,b);
-	
+
+	if(!enable_pc98_256color) {//force switch to 16-colors mode
+		void pc98_port6A_command_write(unsigned char b);
+		pc98_port6A_command_write(0x20);
+	}
 	if(!enable_pc98_16color) {//force switch to 8-colors mode
 		void pc98_port6A_command_write(unsigned char b);
 		pc98_port6A_command_write(0x00);

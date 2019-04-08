@@ -153,6 +153,7 @@ extern bool                         gdc_5mhz_mode;
 extern bool                         enable_pc98_egc;
 extern bool                         enable_pc98_grcg;
 extern bool                         enable_pc98_16color;
+extern bool                         enable_pc98_256color;
 extern bool 						enable_pc98_188usermod;
 extern bool                         GDC_vsync_interrupt;
 extern uint8_t                      GDC_display_plane;
@@ -652,7 +653,15 @@ void VGA_Reset(Section*) {
     enable_pc98_egc = section->Get_bool("pc-98 enable egc");
     enable_pc98_grcg = section->Get_bool("pc-98 enable grcg");
     enable_pc98_16color = section->Get_bool("pc-98 enable 16-color");
+	enable_pc98_256color = section->Get_bool("pc-98 enable 256-color");
 	enable_pc98_188usermod = section->Get_bool("pc-98 enable 188 user cg");
+
+#if 0//TODO: Do not enforce until 256-color mode is fully implemented.
+	 //      Some users out there may expect the EGC, GRCG, 16-color options to disable the emulation.
+	 //      Having 256-color mode on by default, auto-enable them, will cause surprises and complaints.
+	 // 256-color mode implies EGC, 16-color, GRCG
+    if (enable_pc98_256color) enable_pc98_grcg = enable_pc98_16color = true;
+#endif
 
     // EGC implies GRCG
     if (enable_pc98_egc) enable_pc98_grcg = true;
@@ -1002,6 +1011,12 @@ void VGA_OnEnterPC98(Section *sec) {
             pc98_pal_analog[((i+8)*3) + 2] = 0x07;
         }
     }
+
+	for (unsigned int i=0;i < 256;i++) {
+		pc98_pal_vga[(i*3)+0] = i;
+		pc98_pal_vga[(i*3)+1] = i;
+		pc98_pal_vga[(i*3)+2] = i;
+	}
 
     pc98_update_palette();
 

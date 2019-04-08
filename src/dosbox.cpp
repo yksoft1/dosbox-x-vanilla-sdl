@@ -1251,6 +1251,9 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool = secprop->Add_bool("pc-98 enable egc",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Allow EGC graphics functions if set, disable if not set");
 
+	Pbool = secprop->Add_bool("pc-98 enable 256-color",Property::Changeable::WhenIdle,true);
+	Pbool->Set_help("Allow 256-color graphics mode if set, disable if not set");
+
 	Pbool = secprop->Add_bool("pc-98 enable 188 user cg",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Allow 188+ user-defined CG cells if set");
 
