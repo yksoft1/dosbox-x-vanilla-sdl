@@ -704,6 +704,7 @@ void VGA_Reset(Section*) {
 	mainMenu.get_item("pc98_enable_egc").check(enable_pc98_egc).refresh_item(mainMenu);
 	mainMenu.get_item("pc98_enable_grcg").check(enable_pc98_grcg).refresh_item(mainMenu);
 	mainMenu.get_item("pc98_enable_analog").check(enable_pc98_16color).refresh_item(mainMenu);
+	mainMenu.get_item("pc98_enable_analog256").check(enable_pc98_256color).refresh_item(mainMenu);
 	mainMenu.get_item("pc98_enable_188user").check(enable_pc98_188usermod).refresh_item(mainMenu);
 	
 	vga_force_refresh_rate = -1;
@@ -870,7 +871,7 @@ void VGA_Reset(Section*) {
 			if (vga.vmemsize < _KB_bytes(64)) vga.vmemsize = _KB_bytes(64); /* FIXME: Right? */
 			break;
         case MCH_PC98:
-            if (vga.vmemsize < _KB_bytes(512)) vga.vmemsize = _KB_bytes(512);
+            if (vga.vmemsize < _KB_bytes(544)) vga.vmemsize = _KB_bytes(544);
             break;
 		case MCH_MCGA:
 			if (vga.vmemsize < _KB_bytes(64)) vga.vmemsize = _KB_bytes(64);
