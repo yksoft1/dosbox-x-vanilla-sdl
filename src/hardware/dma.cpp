@@ -579,7 +579,6 @@ void DMA_Reset(Section* /*sec*/) {
 	}
 
 	if (enable_1st_dma) {
-		/* install handlers for ports 0x81-0x83 (on the first DMA controller) */
 		if (IS_PC98_ARCH) {
 			/* install handlers for ports 0x21-0x27 odd */
 			for (unsigned int i=0;i < 4;i++) {
