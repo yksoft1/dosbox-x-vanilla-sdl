@@ -35,6 +35,10 @@
 
 extern ZIPFile savestate_zip;
 
+unsigned char pc98_vga_mmio[0x200] = {0}; /* PC-98 memory-mapped VGA registers at E0000h */
+uint32_t pc98_vga_banks[2] = {0x8000,0x8000}; /* bank switching offsets */
+	
+extern bool enable_pc98_256color;
 extern bool non_cga_ignore_oddeven;
 extern bool non_cga_ignore_oddeven_engage;
 
@@ -147,6 +151,34 @@ INLINE static Bit32u ModeOperation(Bit8u val) {
 	return full;
 }
 
+Bit8u pc98_vga_mmio_read(unsigned int reg) {
+	if (reg >= 0x200)	
+		return 0x00;
+
+	return pc98_vga_mmio[reg];
+}
+	
+void pc98_vga_mmio_write(unsigned int reg,Bit8u val) {
+	if (reg >= 0x200)
+		return;
+	
+	switch (reg) {
+		case 0x004: // bank 0
+			pc98_vga_banks[0] = ((val & 0xFu) + 1u) << 15u;
+			break;
+		case 0x006: // bank 1
+			pc98_vga_banks[1] = ((val & 0xFu) + 1u) << 15u;
+			break;
+		default:
+			break;
+	}
+
+	if (reg >= 0x004 && reg <= 0x007)
+		pc98_vga_mmio[reg] = val;
+	else if (reg >= 0x100 && reg <= 0x13F)
+		pc98_vga_mmio[reg] = val;
+}
+	
 /* Gonna assume that whoever maps vga memory, maps it on 32/64kb boundary */
 
 #define VGA_PAGES		(128/4)
@@ -817,6 +849,42 @@ static egc_quad &ope_xx(uint8_t ope, const PhysPt ad) {
     return pc98_egc_last_vram;
 }
 
+static egc_quad &ope_00(uint8_t ope, const PhysPt vramoff) {
+	(void)vramoff;	
+	(void)ope;
+
+	pc98_egc_data[0].w = 0;
+	pc98_egc_data[1].w = 0;
+	pc98_egc_data[2].w = 0;
+	pc98_egc_data[3].w = 0;
+
+	return pc98_egc_data;
+}
+
+static egc_quad &ope_0f(uint8_t ope, const PhysPt vramoff) {
+	(void)vramoff;
+	(void)ope;
+
+	pc98_egc_data[0].w = ~pc98_egc_src[0].w;
+	pc98_egc_data[1].w = ~pc98_egc_src[1].w;
+	pc98_egc_data[2].w = ~pc98_egc_src[2].w;
+	pc98_egc_data[3].w = ~pc98_egc_src[3].w;
+
+	return pc98_egc_data;
+}
+
+static egc_quad &ope_ff(uint8_t ope, const PhysPt vramoff) {
+	(void)vramoff;
+	(void)ope;
+
+	pc98_egc_data[0].w = ~0;
+	pc98_egc_data[1].w = ~0;
+	pc98_egc_data[2].w = ~0;
+	pc98_egc_data[3].w = ~0;
+
+	return pc98_egc_data;
+}
+	
 static egc_quad &ope_np(uint8_t ope, const PhysPt vramoff) {
 	egc_quad dst;
 
@@ -853,6 +921,75 @@ static egc_quad &ope_np(uint8_t ope, const PhysPt vramoff) {
         pc98_egc_data[1].w |= ((~pc98_egc_src[1].w) & (~dst[1].w));
         pc98_egc_data[2].w |= ((~pc98_egc_src[2].w) & (~dst[2].w));
         pc98_egc_data[3].w |= ((~pc98_egc_src[3].w) & (~dst[3].w));
+	}
+
+	(void)ope;
+	(void)vramoff;
+	return pc98_egc_data;
+}
+
+static egc_quad &ope_nd(uint8_t ope, const PhysPt vramoff) {
+	egc_quad pat;
+
+	switch(pc98_egc_fgc) {
+		case 1:
+			pat[0].w = pc98_egc_bgcm[0].w;
+			pat[1].w = pc98_egc_bgcm[1].w;
+			pat[2].w = pc98_egc_bgcm[2].w;
+			pat[3].w = pc98_egc_bgcm[3].w;
+			break;
+
+		case 2:
+			pat[0].w = pc98_egc_fgcm[0].w;
+			pat[1].w = pc98_egc_fgcm[1].w;
+			pat[2].w = pc98_egc_fgcm[2].w;
+			pat[3].w = pc98_egc_fgcm[3].w;
+			break;
+
+		default:
+			if (pc98_egc_regload & 1) {
+				pat[0].w = pc98_egc_src[0].w;
+				pat[1].w = pc98_egc_src[1].w;
+				pat[2].w = pc98_egc_src[2].w;
+				pat[3].w = pc98_egc_src[3].w;
+			}
+			else {
+				pat[0].w = pc98_gdc_tiles[0].w;
+				pat[1].w = pc98_gdc_tiles[1].w;
+				pat[2].w = pc98_gdc_tiles[2].w;
+				pat[3].w = pc98_gdc_tiles[3].w;
+			}
+			break;
+	}
+
+	pc98_egc_data[0].w = 0;
+	pc98_egc_data[1].w = 0;
+	pc98_egc_data[2].w = 0;
+	pc98_egc_data[3].w = 0;
+
+	if (ope & 0x80) {
+		pc98_egc_data[0].w |= (pat[0].w & pc98_egc_src[0].w);
+		pc98_egc_data[1].w |= (pat[1].w & pc98_egc_src[1].w);
+		pc98_egc_data[2].w |= (pat[2].w & pc98_egc_src[2].w);
+		pc98_egc_data[3].w |= (pat[3].w & pc98_egc_src[3].w);
+	}
+	if (ope & 0x40) {
+		pc98_egc_data[0].w |= ((~pat[0].w) & pc98_egc_src[0].w);
+		pc98_egc_data[1].w |= ((~pat[1].w) & pc98_egc_src[1].w);
+		pc98_egc_data[2].w |= ((~pat[2].w) & pc98_egc_src[2].w);
+		pc98_egc_data[3].w |= ((~pat[3].w) & pc98_egc_src[3].w);
+	}
+	if (ope & 0x08) {
+		pc98_egc_data[0].w |= (pat[0].w & (~pc98_egc_src[0].w));
+		pc98_egc_data[1].w |= (pat[1].w & (~pc98_egc_src[1].w));
+		pc98_egc_data[2].w |= (pat[2].w & (~pc98_egc_src[2].w));
+		pc98_egc_data[3].w |= (pat[3].w & (~pc98_egc_src[3].w));
+	}
+	if (ope & 0x04) {
+		pc98_egc_data[0].w |= ((~pat[0].w) & (~pc98_egc_src[0].w));
+		pc98_egc_data[1].w |= ((~pat[1].w) & (~pc98_egc_src[1].w));
+		pc98_egc_data[2].w |= ((~pat[2].w) & (~pc98_egc_src[2].w));
+		pc98_egc_data[3].w |= ((~pat[3].w) & (~pc98_egc_src[3].w));
 	}
 
 	(void)ope;
@@ -1007,38 +1144,38 @@ static egc_quad &ope_gg(uint8_t ope, const PhysPt vramoff) {
 }
 
 static const PC98_OPEFN pc98_egc_opfn[256] = {
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_np, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_00, ope_xx, ope_xx, ope_np, ope_xx, ope_nd, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_nd, ope_xx, ope_np, ope_xx, ope_xx, ope_0f,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_np, ope_xx, ope_xx, ope_np, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_xx, ope_xx, ope_np, ope_xx, ope_xx, ope_np,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_nd, ope_xx, ope_xx, ope_xx, ope_xx, ope_nd, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_nd, ope_xx, ope_xx, ope_xx, ope_xx, ope_nd,
+			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_gg, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_gg, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_c0, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_gg, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_nd, ope_xx, ope_xx, ope_xx, ope_xx, ope_nd, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_nd, ope_xx, ope_gg, ope_xx, ope_xx, ope_nd,
+			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_c0, ope_xx, ope_xx, ope_np, ope_xx, ope_xx, ope_xx, ope_xx,
+			ope_gg, ope_xx, ope_gg, ope_xx, ope_np, ope_gg, ope_xx, ope_np,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
 			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_f0, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx, ope_xx,
-			ope_xx, ope_xx, ope_xx, ope_xx, ope_fc, ope_xx, ope_xx, ope_xx};
+			ope_f0, ope_xx, ope_xx, ope_np, ope_xx, ope_nd, ope_xx, ope_xx,
+			ope_xx, ope_xx, ope_nd, ope_xx, ope_fc, ope_xx, ope_xx, ope_ff};
 
 template <class AWT> static egc_quad &egc_ope(const PhysPt vramoff, const AWT val) {
     *((uint16_t*)pc98_egc_maskef) = *((uint16_t*)pc98_egc_mask);
@@ -1349,10 +1486,33 @@ public:
 			}
 		}
 		
-        if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
-            addr = (addr & 0x7FFF) + 0x20000;
-        else
-            addr &= 0x1FFFF;
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
+			if (addr >= 0xE0000) {
+                if (sizeof(AWT) > 1)
+					return (pc98_vga_mmio_read(addr + 1 - 0xE0000u) << 8u) +
+							pc98_vga_mmio_read(addr     - 0xE0000u);
+
+				return pc98_vga_mmio_read(addr - 0xE0000u);
+			}
+			else if (addr >= 0xB8000) {
+				// B8000h is disconnected
+				return ~((AWT)0);
+			}
+			else if (addr >= 0xA8000) {
+				// A8000h is bank 0
+				// B0000h is bank 1
+				addr = pc98_vga_banks[(addr - 0xA8000u) >> 15u] + (addr & 0x7FFFu);
+			}
+			else {
+				addr &= 0x1FFFF;
+			}
+		}
+		else {
+			if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
+				addr = (addr & 0x7FFF) + 0x20000;
+			else
+				addr &= 0x1FFFF;
+		}
 
         switch (addr>>13) {
             case 0:     /* A0000-A1FFF Character RAM */
@@ -1437,10 +1597,33 @@ public:
         if ((addr & (~0x1F)) == 0xA3FE0)
             return;
 
-        if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
-            addr = (addr & 0x7FFF) + 0x20000;
-        else
-            addr &= 0x1FFFF;
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
+			if (addr >= 0xE0000) {
+				if (sizeof(AWT) > 1)
+					pc98_vga_mmio_write(addr + 1 - 0xE0000u,(Bit8u)(val >> 8u));
+
+				pc98_vga_mmio_write(addr - 0xE0000u,(Bit8u)val);
+				return;
+			}
+			else if (addr >= 0xB8000) {
+				// B8000h is disconnected
+				return;
+			}
+			else if (addr >= 0xA8000) {
+				// A8000h is bank 0
+				// B0000h is bank 1
+				addr = pc98_vga_banks[(addr - 0xA8000u) >> 15u] + (addr & 0x7FFFu);
+			}
+			else {
+				addr &= 0x1FFFF;
+			}
+		}
+		else {
+			if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
+				addr = (addr & 0x7FFF) + 0x20000;
+			else
+				addr &= 0x1FFFF;
+		}
 
 		/* 0xA4000-0xA4FFF is word-sized access to the character generator.
 		 *
@@ -1588,6 +1771,17 @@ public:
             writec<uint8_t>(addr+1,(uint8_t)(val >> 8U));
         }
     }
+};
+
+class VGA_PC98_LFB_Handler : public PageHandler {
+public:
+	VGA_PC98_LFB_Handler() : PageHandler(PFLAG_READABLE|PFLAG_WRITEABLE|PFLAG_NOCODE) {}
+	HostPt GetHostReadPt(Bitu phys_page) {
+		return &vga.mem.linear[(phys_page&0x7F)*4096 + 0x8000u/*Graphics RAM*/]; /* 512KB mapping */
+	}
+	HostPt GetHostWritePt(Bitu phys_page) {
+		return &vga.mem.linear[(phys_page&0x7F)*4096 + 0x8000u/*Graphics RAM*/]; /* 512KB mapping */
+	}
 };
 
 class VGA_Map_Handler : public PageHandler {
@@ -1917,6 +2111,7 @@ public:
 };
 
 static struct vg {
+	VGA_PC98_LFB_Handler		map_lfb_pc98;
 	VGA_Map_Handler				map;
 	VGA_Slow_CGA_Handler		slow;
 //	VGA_TEXT_PageHandler		text;
@@ -2064,11 +2259,15 @@ void VGA_SetupHandlers(void) {
     case M_PC98:
 		newHandler = &vgaph.pc98;
 
-        /* We need something to catch access to E0000-E7FFF IF 16/256-color mode */
-        if (pc98_gdc_vramop & (1 << VOPBIT_ANALOG))
-            MEM_SetPageHandler(0xE0, 8, newHandler );
-        else
-            MEM_ResetPageHandler_Unmapped(0xE0, 8);
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA))
+			/* 256-color mode changes A8000h-B7FFFh from planar to packed, B8000h-BFFFFh is disconnected.
+			 * A8000h is bank 0 and B0000h is bank 1, controlled by bank switching registers.
+			 * E0000h becomes "memory mapped I/O" to control bank switching */
+			MEM_SetPageHandler(0xE0, 8, newHandler );
+		else if (pc98_gdc_vramop & (1 << VOPBIT_ANALOG)) /* 16-color mode makes E000:0000 appear */
+			MEM_SetPageHandler(0xE0, 8, newHandler );
+		else
+			MEM_ResetPageHandler_Unmapped(0xE0, 8);
 
         break;
 	case M_AMSTRAD:
@@ -2244,6 +2443,21 @@ void VGA_SetupMemory() {
 		/* PCJr does not have dedicated graphics memory but uses
 		   conventional memory below 128k */
 		//TODO map?	
-	} 
+	}
+
+	if (IS_PC98_ARCH) {
+		if (enable_pc98_256color && MEM_TotalPages() <= 0xF00) {
+			/* on PC-98 systems with 256-color support, there exists a linear framebuffer
+			 * of the 256-color mode at 0xF00000 (near the top of the 16MB limit of old
+			 * 386SX CPUs). If memsize is smaller than 15MB, we can map that so games
+			 * like DOOM and Wolf98 work.
+			 *
+			 * TODO: If memsize is larger than 15MB, allow user to specify whether to
+			 *       emulate a 1MB hole at 15MB around which extended memory is wrapped,
+			 *       so these games continue to work. */
+			LOG_MSG("PC-98: Mapping 256-color mode LFB at F00000");
+			MEM_SetPageHandler(0xF00, 512/*kb*/ / 4/*kb*/, &vgaph.map_lfb_pc98 );
+		}
+	}
 }
 

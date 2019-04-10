@@ -866,7 +866,16 @@ void DOSBOX_SetupConfigSections(void) {
 	const char* joydeadzone[] = { "0.26", 0 };
 	const char* joyresponse[] = { "1.0", 0 };
 	const char* iosgus[] = { "240", "220", "260", "280", "2a0", "2c0", "2e0", "300", "210", "230", "250", 0 };
-	const char* ios[] = { "220", "240", "260", "280", "2a0", "2c0", "2e0", "300", 0 };
+	const char* mpubases[] = {
+			"0",                                                                                    /* Auto */
+			"300", "310", "320", "330", "332", "334", "336", "340", "360",                          /* IBM PC */
+			"c0d0","c8d0","d0d0","d8d0","e0d0","e8d0","f0d0","f8d0",                                /* NEC PC-98 MPU98 */
+			"80d2","80d4","80d6","80d8","80da","80dc","80de",                                       /* NEC PC-98 SB16 */
+			0 };
+	const char* ios[] = {
+		"220", "240", "260", "280", "2a0", "2c0", "2e0", "300",     /* IBM PC      (base+port i.e. 220h base, 22Ch is DSP) */
+		"d2",  "d4",  "d6",  "d8",  "da",  "dc",  "de",             /* NEC PC-98   (base+(port << 8) i.e. 00D2h base, 2CD2h is DSP) */
+		0 };
 	const char* ems_settings[] = { "true", "emsboard", "emm386", "false", 0};
 	const char* irqsgus[] = { "5", "3", "7", "9", "10", "11", "12", 0 };
 	const char* irqssb[] = { "7", "5", "3", "9", "10", "11", "12", 0 };
@@ -1206,6 +1215,9 @@ void DOSBOX_SetupConfigSections(void) {
 		"        or 386DX and 486 systems where the CPU communicated directly with the ISA bus (A24-A31 tied off)\n"
 		"    26: 64MB aliasing. Some 486s had only 26 external address bits, some motherboards tied off A26-A31");
 
+    Pbool = secprop->Add_bool("pc-98 BIOS copyright string",Property::Changeable::WhenIdle,false);
+    Pbool->Set_help("If set, the PC-98 BIOS copyright string is placed at E800:0000. Enable this for software that does \"Epson Check\".");
+
 	Pbool = secprop->Add_bool("pc-98 pic init to read isr",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("If set, the programmable interrupt controllers are initialized by default (if PC-98 mode)\n"
 					"so that the in-service interrupt status can be read immediately. There seems to be a common\n"
@@ -1238,6 +1250,9 @@ void DOSBOX_SetupConfigSections(void) {
 
 	Pbool = secprop->Add_bool("pc-98 enable egc",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Allow EGC graphics functions if set, disable if not set");
+
+	Pbool = secprop->Add_bool("pc-98 enable 256-color",Property::Changeable::WhenIdle,true);
+	Pbool->Set_help("Allow 256-color graphics mode if set, disable if not set");
 
 	Pbool = secprop->Add_bool("pc-98 enable 188 user cg",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Allow 188+ user-defined CG cells if set");
@@ -1745,6 +1760,15 @@ void DOSBOX_SetupConfigSections(void) {
 	Pstring->Set_values(mputypes);
 	Pstring->Set_help("Type of MPU-401 to emulate.");
 
+	Phex = secprop->Add_hex("mpubase",Property::Changeable::WhenIdle,0/*default*/);
+	Phex->Set_values(mpubases);
+	Phex->Set_help("The IO address of the MPU-401.\n"
+				"Set to 0 to use a default I/O address.\n"
+				"300h to 330h are for use with IBM PC mode.\n"
+				"C0D0h to F8D0h (in steps of 800h) are for use with NEC PC-98 mode (MPU98).\n"
+				"80D2h through 80DEh are for use with NEC PC-98 Sound Blaster 16 MPU-401 emulation.\n"
+				"If not assigned (0), 330h is the default for IBM PC and E0D0h is the default for PC-98.");
+	
 	Pstring = secprop->Add_string("mididevice",Property::Changeable::WhenIdle,"default");
 	Pstring->Set_values(devices);
 	Pstring->Set_help("Device that will receive the MIDI data from MPU-401.");

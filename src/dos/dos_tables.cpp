@@ -179,6 +179,22 @@ static Bit8u country_info[0x22] = {
 /* Reservered 5     */  0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+static Bit8u country_info_pc98[0x22] = {
+/* Date format      */  0x02, 0x00,
+/* Currencystring   */  0x5C, 0x00, 0x00, 0x00, 0x00,
+/* Thousands sep    */  0x2c, 0x00,
+/* Decimal sep      */  0x2e, 0x00,
+/* Date sep         */  0x2d, 0x00,
+/* time sep         */  0x3a, 0x00,
+/* currency form    */  0x00,
+/* digits after dec */  0x00,
+/* Time format      */  0x01,
+/* Casemap          */  0x00, 0x00, 0x00, 0x00,
+/* Data sep         */  0x2c, 0x00,
+/* Reservered 5     */  0x00, 0x00, 0x00, 0x00, 0x00,
+/* Reservered 5     */  0x00, 0x00, 0x00, 0x00, 0x00
+};
+
 extern bool enable_dbcs_tables;
 extern bool enable_filenamechar;
 extern bool enable_collating_uppercase;
@@ -217,10 +233,22 @@ void DOS_SetupTables(void) {
 
 
 
-	/* Allocate DCBS DOUBLE BYTE CHARACTER SET LEAD-BYTE TABLE */
+    /* Allocate DCBS DOUBLE BYTE CHARACTER SET LEAD-BYTE TABLE */
 	if (enable_dbcs_tables) {
 		dos.tables.dbcs=RealMake(DOS_GetMemory(12,"dos.tables.dbcs"),0);
-		mem_writed(Real2Phys(dos.tables.dbcs),0); //empty table
+
+		if (IS_PC98_ARCH) {
+			// write a valid table, or else Windows 3.1 is unhappy.
+			// Values are copied from INT 21h AX=6300h as returned by an MS-DOS 6.22 boot disk
+			mem_writeb(Real2Phys(dos.tables.dbcs)+0,0x81);  // low/high DBCS pair 1
+			mem_writeb(Real2Phys(dos.tables.dbcs)+1,0x9F);
+			mem_writeb(Real2Phys(dos.tables.dbcs)+2,0xE0);  // low/high DBCS pair 2
+			mem_writeb(Real2Phys(dos.tables.dbcs)+3,0xFC);
+			mem_writed(Real2Phys(dos.tables.dbcs)+4,0);
+		}
+		else {
+			mem_writed(Real2Phys(dos.tables.dbcs),0); //empty table
+		}
 	}
 	else {
 		dos.tables.dbcs=0;
@@ -297,7 +325,13 @@ void DOS_SetupTables(void) {
 	call_casemap = CALLBACK_Allocate();
 	CALLBACK_Setup(call_casemap,DOS_CaseMapFunc,CB_RETF,"DOS CaseMap");
 	/* Add it to country structure */
-	host_writed(country_info + 0x12, CALLBACK_RealPointer(call_casemap));
-	dos.tables.country=country_info;
+	if (IS_PC98_ARCH) {
+		host_writed(country_info_pc98 + 0x12, CALLBACK_RealPointer(call_casemap));
+		dos.tables.country=country_info_pc98;
+	}
+	else {
+		host_writed(country_info + 0x12, CALLBACK_RealPointer(call_casemap));
+		dos.tables.country=country_info;
+	}
 }
 

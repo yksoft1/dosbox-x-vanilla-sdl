@@ -25,6 +25,7 @@ bool                        gdc_5mhz_mode = false;
 bool                        enable_pc98_egc = true;
 bool                        enable_pc98_grcg = true;
 bool                        enable_pc98_16color = true;
+bool                        enable_pc98_256color = true;
 bool                        enable_pc98_188usermod = true;
 bool                        GDC_vsync_interrupt = false;
 uint8_t                     GDC_display_plane_wait_for_vsync = false;
@@ -149,6 +150,20 @@ void pc98_port6A_command_write(unsigned char b) {
         case 0x0B: // TODO
             // TODO
             break;
+		case 0x20: // 256-color mode disable
+			if (enable_pc98_egc && egc_enable_enable) {
+				pc98_gdc_vramop &= ~(1 << VOPBIT_VGA);
+				VGA_SetupHandlers(); // memory mapping presented to the CPU changes
+				pc98_update_palette();
+			}
+			break;
+		case 0x21: // 256-color mode enable
+			if (enable_pc98_egc && egc_enable_enable && enable_pc98_256color) {
+				pc98_gdc_vramop |= (1 << VOPBIT_VGA);
+				VGA_SetupHandlers(); // memory mapping presented to the CPU changes
+				pc98_update_palette();
+			}
+			break;
         default:
             LOG_MSG("PC-98 port 6Ah unknown command 0x%02x",b);
             break;
