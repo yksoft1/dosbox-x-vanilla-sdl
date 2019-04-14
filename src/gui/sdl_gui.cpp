@@ -951,10 +951,6 @@ public:
 		Section *sec;
 		if (arg == "Close" || arg == "Cancel" || arg == "Close") {
 			running = false;
-		} else if (arg == "Keyboard") {
-			UI_Shutdown(dynamic_cast<GUI::ScreenSDL*>(getScreen()));
-			MAPPER_RunEvent(0);
-			UI_Startup(dynamic_cast<GUI::ScreenSDL*>(getScreen()));
 		} else if (sname == "autoexec") {
 			Section_line *section = static_cast<Section_line *>(control->GetSection((const char *)sname));
 			AutoexecEditor *np = new AutoexecEditor(getScreen(), 50, 30, section);
