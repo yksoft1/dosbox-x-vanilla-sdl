@@ -65,8 +65,8 @@ static int			old_unicode;
 #endif
 static bool			mousetoggle;
 static bool			shortcut=false;
-static SDL_Surface*		screenshot;
-static SDL_Surface*		background;
+static SDL_Surface*		screenshot = NULL;
+static SDL_Surface*		background = NULL;
 
 /* Prepare screen for UI */
 void GUI_LoadFonts(void) {
@@ -161,9 +161,6 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
     assert((sx+sw_draw) <= dw);
     assert((sy+sh_draw) <= dh);
 
-    assert(sw_draw > 0);
-    assert(sh_draw > 0);
-
     assert(sw_draw <= sw);
     assert(sh_draw <= sh);
 
@@ -171,38 +168,41 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
 	old_unicode = SDL_EnableUNICODE(1);
 	SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY,SDL_DEFAULT_REPEAT_INTERVAL);
 #endif
-	screenshot = SDL_CreateRGBSurface(SDL_SWSURFACE, dw, dh, 32, GUI::Color::RedMask, GUI::Color::GreenMask, GUI::Color::BlueMask, 0);
-    SDL_FillRect(screenshot,0,0);
 
-	// create screenshot for fade effect
-	unsigned int rs = screenshot->format->Rshift, gs = screenshot->format->Gshift, bs = screenshot->format->Bshift;
-	for (unsigned int y = 0; (int)y < sh_draw; y++) {
-		Bit32u *bg = (Bit32u*)((y+sy)*(unsigned int)screenshot->pitch + (char*)screenshot->pixels) + sx;
-		for (unsigned int x = 0; (int)x < sw_draw; x++) {
-			int r = 0, g = 0, b = 0;
-			getPixel(x    *(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 0);
-			bg[x] = r << rs | g << gs | b << bs;
+	if (sw_draw > 0 && sh_draw > 0) {
+		screenshot = SDL_CreateRGBSurface(SDL_SWSURFACE, dw, dh, 32, GUI::Color::RedMask, GUI::Color::GreenMask, GUI::Color::BlueMask, 0);
+		SDL_FillRect(screenshot,0,0);
+
+		// create screenshot for fade effect
+		unsigned int rs = screenshot->format->Rshift, gs = screenshot->format->Gshift, bs = screenshot->format->Bshift;
+		for (unsigned int y = 0; (int)y < sh_draw; y++) {
+			Bit32u *bg = (Bit32u*)((y+sy)*(unsigned int)screenshot->pitch + (char*)screenshot->pixels) + sx;
+			for (unsigned int x = 0; (int)x < sw_draw; x++) {
+				int r = 0, g = 0, b = 0;
+				getPixel(x    *(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 0);
+				bg[x] = r << rs | g << gs | b << bs;
+			}
 		}
-	}
 
-	background = SDL_CreateRGBSurface(SDL_SWSURFACE, dw, dh, 32, GUI::Color::RedMask, GUI::Color::GreenMask, GUI::Color::BlueMask, 0);
-    SDL_FillRect(background,0,0);
-	for (int y = 0; y < sh_draw; y++) {
-		Bit32u *bg = (Bit32u*)((y+sy)*(unsigned int)background->pitch + (char*)background->pixels) + sx;
-		for (int x = 0; x < sw_draw; x++) {
-			int r = 0, g = 0, b = 0;
-			getPixel(x    *(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
-			getPixel((x-1)*(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
-			getPixel(x    *(int)render.src.width/sw, (y-1)*(int)render.src.height/sh, r, g, b, 3); 
-			getPixel((x-1)*(int)render.src.width/sw, (y-1)*(int)render.src.height/sh, r, g, b, 3); 
-			getPixel((x+1)*(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
-			getPixel(x    *(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
-			getPixel((x+1)*(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
-			getPixel((x-1)*(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
-			int r1 = (int)((r * 393 + g * 769 + b * 189) / 1351); // 1351 -- tweak colors 
-			int g1 = (int)((r * 349 + g * 686 + b * 168) / 1503); // 1203 -- for a nice 
-			int b1 = (int)((r * 272 + g * 534 + b * 131) / 2340); // 2140 -- golden hue 
-			bg[x] = r1 << rs | g1 << gs | b1 << bs; 
+		background = SDL_CreateRGBSurface(SDL_SWSURFACE, dw, dh, 32, GUI::Color::RedMask, GUI::Color::GreenMask, GUI::Color::BlueMask, 0);
+		SDL_FillRect(background,0,0);
+		for (int y = 0; y < sh_draw; y++) {
+			Bit32u *bg = (Bit32u*)((y+sy)*(unsigned int)background->pitch + (char*)background->pixels) + sx;
+			for (int x = 0; x < sw_draw; x++) {
+				int r = 0, g = 0, b = 0;
+				getPixel(x    *(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
+				getPixel((x-1)*(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
+				getPixel(x    *(int)render.src.width/sw, (y-1)*(int)render.src.height/sh, r, g, b, 3); 
+				getPixel((x-1)*(int)render.src.width/sw, (y-1)*(int)render.src.height/sh, r, g, b, 3); 
+				getPixel((x+1)*(int)render.src.width/sw, y    *(int)render.src.height/sh, r, g, b, 3); 
+				getPixel(x    *(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
+				getPixel((x+1)*(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
+				getPixel((x-1)*(int)render.src.width/sw, (y+1)*(int)render.src.height/sh, r, g, b, 3); 
+				int r1 = (int)((r * 393 + g * 769 + b * 189) / 1351); // 1351 -- tweak colors 
+				int g1 = (int)((r * 349 + g * 686 + b * 168) / 1503); // 1203 -- for a nice 
+				int b1 = (int)((r * 272 + g * 534 + b * 131) / 2340); // 2140 -- golden hue 
+				bg[x] = r1 << rs | g1 << gs | b1 << bs; 
+			}
 		}
 	}
 
@@ -223,40 +223,44 @@ static GUI::ScreenSDL *UI_Startup(GUI::ScreenSDL *screen) {
     SDL_Surface* sdlscreen = SDL_GetWindowSurface(window);
     if (sdlscreen == NULL) E_Exit("Could not initialize video mode for mapper: %s",SDL_GetError());
 
-	// fade out
- 	// Jonathan C: do it FASTER!
- 	SDL_Event event;
-    SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_BLEND);
- 	for (int i = 0xff; i > 0; i -= 0x40) { 
- 		SDL_SetSurfaceAlphaMod(screenshot, i); 
- 		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
- 		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
-        SDL_Window* GFX_GetSDLWindow(void);
-        SDL_UpdateWindowSurface(GFX_GetSDLWindow());
- 		while (SDL_PollEvent(&event)); 
- 		SDL_Delay(40); 
- 	} 
-    SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_NONE);
-
+	if (screenshot != NULL && background != NULL) {
+		// fade out
+		// Jonathan C: do it FASTER!
+		SDL_Event event;
+		SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_BLEND);
+		for (int i = 0xff; i > 0; i -= 0x40) { 
+			SDL_SetSurfaceAlphaMod(screenshot, i); 
+			SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
+			SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
+			SDL_Window* GFX_GetSDLWindow(void);
+			SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+			while (SDL_PollEvent(&event)); 
+			SDL_Delay(40); 
+		} 
+		SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_NONE);
+	}
     void GFX_SetResizeable(bool enable);
     GFX_SetResizeable(true);	 
 #else	
 	SDL_Surface* sdlscreen = SDL_SetVideoMode(dw, dh, 32, SDL_SWSURFACE|(fs?SDL_FULLSCREEN:0));
 	if (sdlscreen == NULL) E_Exit("Could not initialize video mode %ix%ix32 for UI: %s", dw, dh, SDL_GetError());
  
-	// fade out
-	// Jonathan C: do it FASTER!
-	SDL_Event event; 
-	for (int i = 0xff; i > 0; i -= 0x40) { 
-		SDL_SetAlpha(screenshot, SDL_SRCALPHA, i); 
-		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
-		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL); 
-		SDL_UpdateRect(sdlscreen, 0, 0, 0, 0); 
-		while (SDL_PollEvent(&event)); 
-		SDL_Delay(40); 
-	} 
+	if (screenshot != NULL && background != NULL) {
+		// fade out
+		// Jonathan C: do it FASTER!
+		SDL_Event event; 
+		for (int i = 0xff; i > 0; i -= 0x40) { 
+			SDL_SetAlpha(screenshot, SDL_SRCALPHA, i); 
+			SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
+			SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL); 
+			SDL_UpdateRect(sdlscreen, 0, 0, 0, 0); 
+			while (SDL_PollEvent(&event)); 
+			SDL_Delay(40); 
+		} 
+	}
 #endif
-	SDL_BlitSurface(background, NULL, sdlscreen, NULL);
+	if (screenshot != NULL && background != NULL)
+		SDL_BlitSurface(background, NULL, sdlscreen, NULL);
 #if defined(C_SDL2)
     SDL_Window* GFX_GetSDLWindow(void);
     SDL_UpdateWindowSurface(GFX_GetSDLWindow());
@@ -279,39 +283,49 @@ static void UI_Shutdown(GUI::ScreenSDL *screen) {
 	render.src.bpp = saved_bpp;
 
 #if defined(C_SDL2)
-	// fade in
- 	// Jonathan C: do it FASTER!
- 	SDL_Event event;
-    SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_BLEND);
- 	for (unsigned int i = 0x00; i < 0xff; i += 0x60) {
- 		SDL_SetSurfaceAlphaMod(screenshot, i); 
- 		SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
- 		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
-        SDL_Window* GFX_GetSDLWindow(void);
-        SDL_UpdateWindowSurface(GFX_GetSDLWindow());
- 		while (SDL_PollEvent(&event)); 
- 		SDL_Delay(40); 
- 	} 
-    SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_NONE);
+	if (screenshot != NULL && background != NULL) {
+		// fade in
+		// Jonathan C: do it FASTER!
+		SDL_Event event;
+		SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_BLEND);
+		for (unsigned int i = 0x00; i < 0xff; i += 0x60) {
+			SDL_SetSurfaceAlphaMod(screenshot, i); 
+			SDL_BlitSurface(background, NULL, sdlscreen, NULL); 
+			SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
+			SDL_Window* GFX_GetSDLWindow(void);
+			SDL_UpdateWindowSurface(GFX_GetSDLWindow());
+			while (SDL_PollEvent(&event)); 
+			SDL_Delay(40); 
+		} 
+		SDL_SetSurfaceBlendMode(screenshot, SDL_BLENDMODE_NONE);
+	}
 #else	
-	// fade in
-	// Jonathan C: do it FASTER!
-	SDL_Event event;
-	for (int i = 0x00; i < 0xff; i += 0x60) {
-		SDL_SetAlpha(screenshot, SDL_SRCALPHA, i);
-		SDL_BlitSurface(background, NULL, sdlscreen, NULL);
-		SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
-		SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
-		while (SDL_PollEvent(&event)) {};
-		SDL_Delay(40); 
+	if (screenshot != NULL && background != NULL) {
+		// fade in
+		// Jonathan C: do it FASTER!
+		SDL_Event event;
+		for (int i = 0x00; i < 0xff; i += 0x60) {
+			SDL_SetAlpha(screenshot, SDL_SRCALPHA, i);
+			SDL_BlitSurface(background, NULL, sdlscreen, NULL);
+			SDL_BlitSurface(screenshot, NULL, sdlscreen, NULL);
+			SDL_UpdateRect(sdlscreen, 0, 0, 0, 0);
+			while (SDL_PollEvent(&event)) {};
+			SDL_Delay(40); 
+		}
 	}
 #endif
 
 	// clean up
 	if (mousetoggle) GFX_CaptureMouse();
 	SDL_ShowCursor(cursor);
-	SDL_FreeSurface(background);
-	SDL_FreeSurface(screenshot);
+    if (background != NULL) {
+		SDL_FreeSurface(background);
+		background = NULL;
+	}
+	if (screenshot != NULL) {
+		SDL_FreeSurface(screenshot);
+		screenshot = NULL;
+	}
 	SDL_FreeSurface(sdlscreen);
 	screen->setSurface(NULL);
 #ifdef WIN32
@@ -501,7 +515,11 @@ public:
 	};
 };
 
+static std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* > cfg_windows_active;
+
 class HelpWindow : public GUI::MessageBox2 {
+public:
+	std::vector<GUI::Char> cfg_sname;
 public:
 	HelpWindow(GUI::Screen *parent, int x, int y, Section *section) :
 		MessageBox2(parent, x, y, 580, "", "") { // 740
@@ -531,11 +549,20 @@ public:
 		setText(MSG_Get(name.c_str()));
 		}
 	};
+
+	~HelpWindow() {
+		if (!cfg_sname.empty()) {
+			std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* >::iterator i = cfg_windows_active.find(cfg_sname);
+			if (i != cfg_windows_active.end()) cfg_windows_active.erase(i);
+		}
+	}
 };
 
 class SectionEditor : public GUI::ToplevelWindow {
 	Section_prop * section;
 	GUI::Button * closeButton;
+public:
+	std::vector<GUI::Char> cfg_sname;
 public:
 	SectionEditor(GUI::Screen *parent, int x, int y, Section_prop *section) :
 		ToplevelWindow(parent, x, y, 510, 442, ""), section(section) {
@@ -619,10 +646,43 @@ public:
 		}
 		b->addActionHandler(this);
 	}
+
+	~SectionEditor() {
+		if (!cfg_sname.empty()) {
+			std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* >::iterator i = cfg_windows_active.find(cfg_sname);
+			if (i != cfg_windows_active.end()) cfg_windows_active.erase(i);
+		}
+	}
+		
 	void actionExecuted(GUI::ActionEventSource *b, const GUI::String &arg) {
 		if (arg == "OK" || arg == "Cancel" || arg == "Close") { close(); if(shortcut) running=false; }
-		else if (arg == "Help") new HelpWindow(static_cast<GUI::Screen*>(parent), getX()-10, getY()-10, section);
-		else ToplevelWindow::actionExecuted(b, arg);
+        else if (arg == "Help") {
+			std::vector<GUI::Char> new_cfg_sname;
+
+			if (!cfg_sname.empty()) {
+//				new_cfg_sname = "help_";
+				new_cfg_sname.resize(5);
+				new_cfg_sname[0] = 'h';
+				new_cfg_sname[1] = 'e';
+				new_cfg_sname[2] = 'l';
+				new_cfg_sname[3] = 'p';
+				new_cfg_sname[4] = '_';
+				new_cfg_sname.insert(new_cfg_sname.end(),cfg_sname.begin(),cfg_sname.end());
+			}
+	
+			std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* >::iterator lookup = cfg_windows_active.find(new_cfg_sname);
+			if (lookup == cfg_windows_active.end()) {
+				HelpWindow *np = new HelpWindow(static_cast<GUI::Screen*>(parent), getX()-10, getY()-10, section);
+				cfg_windows_active[new_cfg_sname] = np;
+				np->cfg_sname = new_cfg_sname;
+				np->raise();
+			}
+			else {
+				lookup->second->raise();
+			}
+		}
+		else
+			ToplevelWindow::actionExecuted(b, arg);
 	}
 	
 	virtual bool keyDown(const GUI::Key &key) {
@@ -647,6 +707,8 @@ class AutoexecEditor : public GUI::ToplevelWindow {
 	Section_line * section;
 	GUI::Input *content;
 public:
+	std::vector<GUI::Char> cfg_sname;
+public:
 	AutoexecEditor(GUI::Screen *parent, int x, int y, Section_line *section) :
 		ToplevelWindow(parent, x, y, 450, 300, ""), section(section) {
 		if (section == NULL) {
@@ -666,6 +728,13 @@ public:
 		(new GUI::Button(this, 360, 220, "OK", 70))->addActionHandler(this);
 	}
 
+	~AutoexecEditor() {
+		if (!cfg_sname.empty()) {
+			std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* >::iterator i = cfg_windows_active.find(cfg_sname);
+			if (i != cfg_windows_active.end()) cfg_windows_active.erase(i);
+		}
+	}
+		
 	void actionExecuted(GUI::ActionEventSource *b, const GUI::String &arg) {
 		if (arg == "OK") section->data = *(std::string*)content->getText();
 		if (arg == "OK" || arg == "Cancel" || arg == "Close") { close(); if(shortcut) running=false; }
@@ -893,9 +962,8 @@ class ConfigurationWindow : public GUI::ToplevelWindow {
 public:
 	GUI::Button *closeButton;
 	ConfigurationWindow(GUI::Screen *parent, GUI::Size x, GUI::Size y, GUI::String title) :
-		GUI::ToplevelWindow(parent, x, y, 580, 380, title) {
-
-		(closeButton = new GUI::Button(this, 240, 305, "Close", 80))->addActionHandler(this);
+		GUI::ToplevelWindow(parent, (int)x, (int)y, 30/*initial*/, 30/*initial*/, title) {
+		cfg_windows_active.clear();
 
 		GUI::Menubar *bar = new GUI::Menubar(this, 0, 0, getWidth());
 		bar->addMenu("Configuration");
@@ -916,18 +984,39 @@ public:
 		new GUI::Label(this, 10, 30, "Choose a settings group to configure:");
 
 		Section *sec;
+		int gridbtnwidth = 130;
+		int gridbtnheight = 28;
+		int gridbtnx = 12;
+		int gridbtny = 50;
+		int btnperrow = 4;
 		int i = 0;
+		
+		// std::function< std::pair<int,int>(const int) > gridfunc = [&/*access to locals here*/](const int i){
+		//	return std::pair<int,int>(gridbtnx+(i%btnperrow)*gridbtnwidth, gridbtny+(i/btnperrow)*gridbtnheight);
+		//};
+
 		while ((sec = control->GetSection(i))) {
 			std::string name = sec->GetName();
 			name[0] = std::toupper(name[0]);
-			GUI::Button *b = new GUI::Button(this, 12+(i/7)*110, 50+(i%7)*35, name, 100);
+			//const std::pair<int,int> sz = gridfunc(i);
+			GUI::Button *b = new GUI::Button(this, gridbtnx+(i%btnperrow)*gridbtnwidth, gridbtny+(i/btnperrow)*gridbtnheight, name, gridbtnwidth, gridbtnheight);
 			b->addActionHandler(this);
 			bar->addItem(1, name);
 			i++;
 		}
+		
+		//const std::pair<int,int> finalgridpos = gridfunc(i);
+		int closerow_y = gridbtny+(i/btnperrow)*gridbtnheight + 12;
+
+		(closeButton = new GUI::Button(this, 240, closerow_y, "Close", 80))->addActionHandler(this);
+
+		resize(gridbtnx + (gridbtnwidth * btnperrow) + 12 + border_left + border_right,
+				closerow_y + closeButton->getHeight() + 12 + border_top + border_bottom);
+				
+		bar->resize(gridbtnx + (gridbtnwidth * btnperrow) + 12 + border_left + border_right, bar->getHeight());
 	}
 
-	~ConfigurationWindow() { running = false; }
+	~ConfigurationWindow() { running = false; cfg_windows_active.clear(); }
 
 	virtual bool keyDown(const GUI::Key &key) {
         if (GUI::ToplevelWindow::keyDown(key)) return true;
@@ -952,17 +1041,36 @@ public:
 		if (arg == "Close" || arg == "Cancel" || arg == "Close") {
 			running = false;
 		} else if (sname == "autoexec") {
-			Section_line *section = static_cast<Section_line *>(control->GetSection((const char *)sname));
-			AutoexecEditor *np = new AutoexecEditor(getScreen(), 50, 30, section);
-            np->raise();
+			//Section_line *section = static_cast<Section_line *>(control->GetSection((const char *)sname));
+			//AutoexecEditor *np = new AutoexecEditor(getScreen(), 50, 30, section);
+            //np->raise();
+			std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* >::iterator lookup = cfg_windows_active.find(sname);
+			if (lookup == cfg_windows_active.end()) {
+				Section_line *section = static_cast<Section_line *>(control->GetSection((const char *)sname));
+				AutoexecEditor *np = new AutoexecEditor(getScreen(), 50, 30, section);
+				cfg_windows_active[sname] = np;
+				np->cfg_sname = sname;
+				np->raise();
+			}
+			else {
+				lookup->second->raise();
+			}
 		} else if ((sec = control->GetSection((const char *)sname))) {
-			Section_prop *section = static_cast<Section_prop *>(sec);
-			SectionEditor *np = new SectionEditor(getScreen(), 50, 30, section);
-            np->raise();
+			std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* >::iterator lookup = cfg_windows_active.find(sname);
+			if (lookup == cfg_windows_active.end()) {
+				Section_prop *section = static_cast<Section_prop *>(sec);
+				SectionEditor *np = new SectionEditor(getScreen(), 50, 30, section);
+				cfg_windows_active[sname] = np;
+				np->cfg_sname = sname;
+				np->raise();
+			}
+			else {
+				lookup->second->raise();
+			}
 		} else if (arg == "About") {
             const char *msg = PACKAGE_STRING " (C) 2002-2018 The DOSBox Team\nA fork of DOSBox 0.74 by TheGreatCodeholio\nFor more info visit http://dosbox-x.com\nBased on DOSBox (http://dosbox.com)\n"
 #ifdef __VERSION__
-								"\nThis build is for use of YKSOFT Systems only. Built with GCC " __VERSION__ "\n"
+								"\nThis build is for use of YKSOFT Systems only. \nBuilt with GCC " __VERSION__ "\n"
 #endif
 #ifdef EMTERPRETER_SYNC
 								"Built for Emscripten with Emterpretify\n"
@@ -1017,7 +1125,12 @@ static void UI_Execute(GUI::ScreenSDL *screen) {
 		//Selecting keyboard will create a new surface.
 		screen->watchTime();
 		sdlscreen = screen->getSurface();
-		SDL_BlitSurface(background, NULL, sdlscreen, NULL);
+
+        if (background)
+			SDL_BlitSurface(background, NULL, sdlscreen, NULL);
+		else
+			SDL_FillRect(sdlscreen,0,0);
+
 		screen->update(screen->getTime());
 		
 #if defined(C_SDL2)
@@ -1139,7 +1252,12 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 				if (event.type == SDL_QUIT) running = false;
 			}
 		}
-		SDL_BlitSurface(background, NULL, sdlscreen, NULL);
+
+		if (background)
+			SDL_BlitSurface(background, NULL, sdlscreen, NULL);
+		else
+			SDL_FillRect(sdlscreen,0,0);
+
 		screen->update(4);
 #if defined(C_SDL2)
         SDL_Window* GFX_GetSDLWindow(void);
