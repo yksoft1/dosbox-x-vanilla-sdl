@@ -1006,7 +1006,7 @@ public:
 		}
 		
 		//const std::pair<int,int> finalgridpos = gridfunc(i);
-		int closerow_y = gridbtny+(i/btnperrow)*gridbtnheight + 12;
+		int closerow_y = gridbtny+((i > 0 ? (i - 1) : 0)/btnperrow)*gridbtnheight + 12 + gridbtnheight;
 
 		(closeButton = new GUI::Button(this, 240, closerow_y, "Close", 80))->addActionHandler(this);
 
