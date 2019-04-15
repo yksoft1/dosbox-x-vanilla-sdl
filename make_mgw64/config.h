@@ -66,6 +66,8 @@
 
 #define C_FPU_X86 1
 
+//#define HAS_LONG_DOUBLE 1
+
 /* Determines if the compilers supports attributes for structures. */
 #define C_HAS_ATTRIBUTE 1
 
