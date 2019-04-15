@@ -64,6 +64,8 @@
 /* Define to 1 to enable floating point emulation */
 #define C_FPU 1
 
+#define C_FPU_X86 1
+
 /* Determines if the compilers supports attributes for structures. */
 #define C_HAS_ATTRIBUTE 1
 
