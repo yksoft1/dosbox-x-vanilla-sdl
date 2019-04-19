@@ -148,6 +148,11 @@ extern ZIPFile savestate_zip;
 
 using namespace std;
 
+/* current dosplay page (controlled by A4h) */
+unsigned char*                      pc98_pgraph_current_display_page;
+/* current CPU page (controlled by A6h) */
+unsigned char*                      pc98_pgraph_current_cpu_page;
+
 extern int                          vga_memio_delay_ns;
 extern bool                         gdc_5mhz_mode;
 extern bool                         enable_pc98_egc;

@@ -18,6 +18,8 @@
 #include "pc98_gdc_const.h"
 #include "mixer.h"
 
+void pc98_update_page_ptrs(void);
+
 extern bool                 pc98_attr4_graphic;
 extern bool                 pc98_graphics_hide_odd_raster_200line;
 
@@ -155,6 +157,7 @@ void pc98_port6A_command_write(unsigned char b) {
 				pc98_gdc_vramop &= ~(1 << VOPBIT_VGA);
 				VGA_SetupHandlers(); // memory mapping presented to the CPU changes
 				pc98_update_palette();
+				pc98_update_page_ptrs();
 			}
 			break;
 		case 0x21: // 256-color mode enable
@@ -162,8 +165,14 @@ void pc98_port6A_command_write(unsigned char b) {
 				pc98_gdc_vramop |= (1 << VOPBIT_VGA);
 				VGA_SetupHandlers(); // memory mapping presented to the CPU changes
 				pc98_update_palette();
+				pc98_update_page_ptrs();
 			}
 			break;
+		// TODO: 0x68/0x69 VRAM configuration setting. 0=128KB boundary (32kB per plane)  1=256KB boundary (64kB per plane)
+		//              ^  Needed for 480-line modes, or else there is not enough memory.
+		// TODO: 0x82/0x83 GDC Clock #1   0=2.5MHz   1=5MHz
+		// TODO: 0x84/0x85 GDC Clock #2   0=2.5MHz   1=5MHz
+		// TODO: 0x8E/0x8F VRAM use selection  0=PC-98 graphics  1=Cirrus Logic CL-GD graphics   (VRAM is shared?)
         default:
             LOG_MSG("PC-98 port 6Ah unknown command 0x%02x",b);
             break;

@@ -35,6 +35,38 @@ double                      gdc_proc_delay = 0.001; /* time from FIFO to process
 bool                        gdc_proc_delay_set = false;
 struct PC98_GDC_state       pc98_gdc[2];
 
+void pc98_update_display_page_ptr(void) {
+	if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
+		pc98_pgraph_current_display_page = vga.mem.linear +
+			PC98_VRAM_GRAPHICS_OFFSET +
+			(GDC_display_plane * PC98_VRAM_PAGEFLIP256_SIZE);
+	}
+	else {
+		pc98_pgraph_current_display_page = vga.mem.linear +
+			PC98_VRAM_GRAPHICS_OFFSET +
+			(GDC_display_plane * PC98_VRAM_PAGEFLIP_SIZE);
+	}
+}
+
+void pc98_update_cpu_page_ptr(void) {
+	/* "Drawing screen selection register" is not valid in extended modes
+	 * [http://hackipedia.org/browse.cgi/Computer/Platform/PC%2c%20NEC%20PC%2d98/Collections/Undocumented%209801%2c%209821%20Volume%202%20%28webtech.co.jp%29/io%5fdisp%2etxt] */
+	if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
+		pc98_pgraph_current_cpu_page = vga.mem.linear +
+			PC98_VRAM_GRAPHICS_OFFSET;
+	}
+	else {
+		pc98_pgraph_current_cpu_page = vga.mem.linear +
+			PC98_VRAM_GRAPHICS_OFFSET +
+			((pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? PC98_VRAM_PAGEFLIP_SIZE : 0);
+	}
+}
+
+void pc98_update_page_ptrs(void) {
+	pc98_update_display_page_ptr();
+	pc98_update_cpu_page_ptr();
+}
+
 void gdc_proc_schedule_delay(void);
 void gdc_proc_schedule_cancel(void);
 void gdc_proc_schedule_done(void);
@@ -609,8 +641,10 @@ void pc98_gdc_write(Bitu port,Bitu val,Bitu iolen) {
                  * But: For the user's preference, we do offer a hack to delay display plane
                  *      change until vsync to try to alleviate tearlines. */
                 GDC_display_plane_pending = (val&1);
-                if (!GDC_display_plane_wait_for_vsync)
-                    GDC_display_plane = GDC_display_plane_pending;
+				if (!GDC_display_plane_wait_for_vsync) {
+ 					GDC_display_plane = GDC_display_plane_pending;
+					pc98_update_display_page_ptr();
+				}
             }
             break;
         case 0x06:      /* 0x66: ??
@@ -618,6 +652,7 @@ void pc98_gdc_write(Bitu port,Bitu val,Bitu iolen) {
             if (port == 0xA6) {
                 pc98_gdc_vramop &= ~(1 << VOPBIT_ACCESS);
                 pc98_gdc_vramop |=  (val&1) << VOPBIT_ACCESS;
+				pc98_update_cpu_page_ptr();
             }
             else {
                 goto unknown;

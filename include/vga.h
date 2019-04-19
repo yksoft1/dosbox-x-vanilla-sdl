@@ -587,4 +587,69 @@ extern unsigned char GFX_Ashift;
 
 extern unsigned char GFX_bpp;
 
+/* current dosplay page (controlled by A4h) */
+extern unsigned char *pc98_pgraph_current_display_page;
+/* current CPU page (controlled by A6h) */
+extern unsigned char *pc98_pgraph_current_cpu_page;
+	
+/* functions to help cleanup memory map access instead of hardcoding offsets.
+ * your C++ compiler should be smart enough to inline these into the body of this function. */
+
+/* TODO: Changes to memory layout relative to vga.mem.linear:
+ *
+ *       Text to take 0x00000-0x03FFF instead of 0x00000-0x07FFF.
+ *
+ *       Graphics to start at 0x04000
+ *
+ *       Each bitplane will be 64KB (0x10000) bytes long, and the page flip bit in 0xA6
+ *       will select which 32KB half within the 64KB block to use, or if another bit is
+ *       set as documented in Undocumented PC-98, the full 64KB block.
+ *
+ *       The 512KB + 32KB will be reduced slightly to 512KB + 16KB to match the layout.
+ *
+ *       The bitplane layout change will permit emulating an 8 bitplane 256-color mode
+ *       suggested by Yksoft1 that early PC-9821 systems supported and that the 256-color
+ *       driver shipped with Windows 3.1 (for PC-98) uses. Based on Windows 3.1 behavior
+ *       that also means the linear framebuffer at 0xF00000 must also change in planar
+ *       mode to spread all 8 bits across the planes on write and gather all 8 bits
+ *       on read. As far as I can tell the Windows 3.1 256-color driver uses planar
+ *       and EGC functions as it would in 16-color mode, but draws bitmaps using the
+ *       LFB. The picture is wrong EXCEPT when Windows icons and bitmaps are drawn.
+ *
+ *       256-color packed mode will be retained as direct LFB mapping from the start of
+ *       graphics RAM.
+ *
+ *       On a real PC-9821 laptop, contents accessible to the CPU noticeably shift order
+ *       and position when you switch on/off 256-color packed mode, suggesting that the
+ *       planar mode is simply reordered memory access in hardware OR that 256-color
+ *       mode is "chained" (much like 256-color packed mode on IBM VGA hardware) across
+ *       bitplanes. */
+
+#define PC98_VRAM_TEXT_OFFSET           ( 0x00000u )        /* 16KB memory (8KB text + 8KB attributes) */
+#define PC98_VRAM_GRAPHICS_OFFSET       ( 0x04000u )        /* where graphics memory begins */
+
+#define PC98_VRAM_BITPLANE_SIZE         ( 0x10000u )        /* one bitplane */
+
+#define PC98_VRAM_PAGEFLIP_SIZE         ( 0x08000u )        /* add this amount for the second page in 8/16/256-color planar mode */
+#define PC98_VRAM_PAGEFLIP256_SIZE      ( 0x40000u )        /* add this amount for the second page in 256-color packed mode */
+
+#define PC98_VRAM_256BANK_SIZE          ( 0x08000u )        /* window/bank size (256-color packed) */
+
+extern uint32_t pc98_vga_banks[2];
+
+static inline unsigned char *pc98_vram_text(void) {
+	return vga.mem.linear + PC98_VRAM_TEXT_OFFSET;
+}
+
+static inline unsigned int pc98_pgram_bitplane_offset(const unsigned int b) {
+	/* WARNING: b is not range checked for performance! Do not call with b >= 8 if memsize = 512KB or b >= 4 if memsize >= 256KB */
+	return (b * PC98_VRAM_BITPLANE_SIZE);
+}
+
+static inline unsigned char *pc98_vram_256bank_from_window(const unsigned int b) {
+	/* WARNING: b is not range checked for performance! Do not call with b >= 2 */
+	return vga.mem.linear + PC98_VRAM_GRAPHICS_OFFSET + pc98_vga_banks[b];
+}
+#define VRAM98_TEXT         ( pc98_vram_text() )
+
 #endif
