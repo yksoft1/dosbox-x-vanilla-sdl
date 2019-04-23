@@ -2514,7 +2514,13 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 		if (vga.seq.clocking_mode & 1 ) clock = oscclock/8; else clock = oscclock/9;
 		if (vga.mode==M_LIN15 || vga.mode==M_LIN16) clock *= 2;
 		/* Check for pixel doubling, master clock/2 */
-		if (vga.seq.clocking_mode & 0x8) clock /=2;
+        /* NTS: VGA 256-color mode has a dot clock NOT divided by two, because real hardware reveals
+		 *      that internally the card processes pixels 4 bits per cycle through a 8-bit shift
+		 *      register and a bit is set to latch the 8-bit value out to the DAC every other cycle. */
+		if (vga.seq.clocking_mode & 0x8) {
+			clock /=2;
+			oscclock /= 2;
+		}
 
 		if (svgaCard==SVGA_S3Trio) {
 			// support for interlacing used by the S3 BIOS and possibly other drivers
@@ -2579,20 +2585,33 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 		case MCH_CGA:
 		case TANDY_ARCH_CASE:
 			clock = (PIT_TICK_RATE*12)/8;
-			if (!(vga.tandy.mode_control & 1)) clock /= 2;
+			// FIXME: This is wrong for Tandy/PCjr 16-color modes and 640-wide 4-color mode
+			if (vga.mode != M_TANDY2) {
+				if (!(vga.tandy.mode_control & 1)) clock /= 2;
+			}
+			oscclock = clock * 8;
 			break;
         case MCH_MCGA:
             clock = 25175000 / 2 / 8;//FIXME: Guess. Verify
-            if (!(vga.tandy.mode_control & 1)) clock /= 2;
+			if (vga.mode != M_TANDY2) {
+				if (!(vga.tandy.mode_control & 1)) clock /= 2;
+			}
+			oscclock = clock * 2 * 8;
             break;
 		case MCH_MDA:
 		case MCH_HERC:
-			clock=16000000/8;
-			if (vga.herc.mode_control & 0x2) clock/=2;
+			oscclock=16257000;
+			if (vga.mode == M_HERC_GFX)
+				clock=oscclock/8;
+			else
+				clock=oscclock/9;
+
+			if (vga.herc.mode_control & 0x2) clock /= 2;
 
 			break;
 		default:
-			clock = (PIT_TICK_RATE*12);
+            clock = (PIT_TICK_RATE*12)/8;
+			oscclock = clock * 8;
 			break;
 		}
 		vga.draw.delay.hdend = hdend*1000.0/clock; //in milliseconds
