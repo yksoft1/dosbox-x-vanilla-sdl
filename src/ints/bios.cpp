@@ -3848,18 +3848,41 @@ static Bitu INTDC_PC98_Handler(void) {
                 mem_writeb(0x73C,reg_dx);   /* 60:13C */
                 goto done;
             }
-            else if (reg_ah == 0x03) { /* CL=0x10 AH=0x03 CL=Y-coord CH=X-coord set cursor position */
-                /* Reverse engineered from INT DCh. Note that the code path is the same taken for ESC = */
-                goto unknown; /* TODO: */
+            else if (reg_ah == 0x03) { /* CL=0x10 AH=0x03 DL=X-coord DH=Y-coord set cursor position */
+				void INTDC_CL10h_AH03h(Bit16u raw);
+				INTDC_CL10h_AH03h(reg_dx);
+				goto done;
             }
             else if (reg_ah == 0x04) { /* CL=0x10 AH=0x04 Move cursor down one line */
-                /* Reverse engineered from INT DCh. Note that the code path is the same taken for ESC E */
-                goto unknown; /* TODO: */
+                void INTDC_CL10h_AH04h(void);
+				INTDC_CL10h_AH04h();
+				goto done;
             }
             else if (reg_ah == 0x05) { /* CL=0x10 AH=0x05 Move cursor up one line */
-                /* Reverse engineered from INT DCh. Note that the code path is the same taken for ESC M */
-                goto unknown; /* TODO: */
+                void INTDC_CL10h_AH05h(void);
+				INTDC_CL10h_AH05h();
+				goto done;
             }
+            else if (reg_ah == 0x06) { /* CL=0x10 AH=0x06 DX=count Move cursor up multiple lines */
+				void INTDC_CL10h_AH06h(Bit16u count);
+				INTDC_CL10h_AH06h(reg_dx);
+				goto done;
+			}
+			else if (reg_ah == 0x07) { /* CL=0x10 AH=0x07 DX=count Move cursor down multiple lines */
+				void INTDC_CL10h_AH07h(Bit16u count);
+				INTDC_CL10h_AH07h(reg_dx);
+				goto done;
+			}
+			else if (reg_ah == 0x08) { /* CL=0x10 AH=0x08 DX=count Move cursor right multiple lines */
+				void INTDC_CL10h_AH08h(Bit16u count);
+				INTDC_CL10h_AH08h(reg_dx);
+				goto done;
+			}
+			else if (reg_ah == 0x09) { /* CL=0x10 AH=0x09 DX=count Move cursor left multiple lines */
+				void INTDC_CL10h_AH09h(Bit16u count);
+				INTDC_CL10h_AH09h(reg_dx);
+				goto done;
+			}
 			goto unknown;
 		default: /* some compilers don't like not having a default case */
 			goto unknown;
