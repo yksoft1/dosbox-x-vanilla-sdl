@@ -738,6 +738,7 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
 					break;
                 case '7': /* save cursor pos + attr TODO */
                 case '8': /* restore this TODO */
+					break;
                 case 'D':/* cursor DOWN (with scrolling) */
 					ESC_D();
 					break;
