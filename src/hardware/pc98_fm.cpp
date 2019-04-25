@@ -73,6 +73,17 @@ void getbiospath(OEMCHAR *path, const OEMCHAR *fname, int maxlen) {
 	*(strrchr(exe_directory, separator)+1)='\0'; //NTS: Beware of "XuGongGai" on Windows and Codepage 950/932!
 	
 	snprintf(path,maxlen,"%s%s",exe_directory,fname);
+#ifdef EMSCRIPTEN
+	//Try current path first, then try Emularity path
+	{
+		FILE* fp;
+		fp=fopen(path, "rb");
+		if(!fp)
+			snprintf(path, maxlen, "/emulator/pc98bios/%s", fname);
+		else
+			fclose(fp);
+	}
+#endif
     LOG_MSG("PC98FM getbiospath fname='%s' path='%s'",fname, path);
 }
 
