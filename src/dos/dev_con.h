@@ -27,16 +27,23 @@
 #define NUMBER_ANSI_DATA 10
 
 extern bool DOS_BreakFlag;
+extern unsigned char pc98_function_row_mode;
 
 Bitu INT10_Handler(void);
 Bitu INT16_Handler_Wrap(void);
+
+void pc98_function_row_user_toggle(void);
+void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
+void PC98_GetFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
+void PC98_GetShiftFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
+void PC98_GetEditorKeyEscape(size_t &len,unsigned char buf[16],const unsigned int scan);
 
 ShiftJISDecoder con_sjis;
 
 Bit16u last_int16_code = 0;
 
 static size_t dev_con_pos=0,dev_con_max=0;
-static char dev_con_readbuf[64];
+static unsigned char dev_con_readbuf[64];
 
 Bit8u DefaultANSIAttr() {
 	return IS_PC98_ARCH ? 0xE1 : 0x07;
@@ -210,55 +217,63 @@ private:
      * the CON driver, therefore even though the BIOS says there is key data, Read()
      * will not return anything and will block. */
     bool CommonPC98ExtScanConversionToReadBuf(unsigned char code) {
+		size_t esclen;
+
         switch (code) {
+			case 0x36: // ROLL UP
+			case 0x37: // ROLL DOWN
 			case 0x38: // INS
-				dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x50; dev_con_pos=0; dev_con_max=2;
-				break;
             case 0x39: // DEL
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x44; dev_con_pos=0; dev_con_max=2;
-                return true;
-            case 0x3A: // up arrow
-                dev_con_readbuf[0] = 0x0B; dev_con_pos=0; dev_con_max=1;
-                return true;
-            case 0x3B: // left arrow
-                dev_con_readbuf[0] = 0x08; dev_con_pos=0; dev_con_max=1;
-                return true;
-            case 0x3C: // right arrow
-                dev_con_readbuf[0] = 0x0C; dev_con_pos=0; dev_con_max=1;
-                return true;
-            case 0x3D: // down arrow
-                dev_con_readbuf[0] = 0x0A; dev_con_pos=0; dev_con_max=1;
-                return true;
+            case 0x3A: // UP ARROW
+			case 0x3B: // LEFT ARROW
+			case 0x3C: // RIGHT ARROW
+			case 0x3D: // DOWN ARROW
+			case 0x3E: // HOME/CLR
+			case 0x3F: // HELP
+			case 0x40: // KEYPAD -
+				PC98_GetEditorKeyEscape(/*&*/esclen,dev_con_readbuf,code); dev_con_pos=0; dev_con_max=esclen;
+				return (dev_con_max != 0)?true:false;
             case 0x62: // F1
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x53; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x63: // F2
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x54; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x64: // F3
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x55; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x65: // F4
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x56; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x66: // F5
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x57; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x67: // F6
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x45; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x68: // F7
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x4A; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x69: // F8
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x50; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x6A: // F9
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x51; dev_con_pos=0; dev_con_max=2;
-                return true;
             case 0x6B: // F10
-                dev_con_readbuf[0] = 0x1B; dev_con_readbuf[1] = 0x5A; dev_con_pos=0; dev_con_max=2;
-                return true;
+				PC98_GetFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0x62); dev_con_pos=0; dev_con_max=esclen;
+				return (dev_con_max != 0)?true:false;
+			case 0x82: // Shift+F1
+			case 0x83: // Shift+F2
+			case 0x84: // Shift+F3
+			case 0x85: // Shift+F4
+			case 0x86: // Shift+F5
+			case 0x87: // Shift+F6
+			case 0x88: // Shift+F7
+			case 0x89: // Shift+F8
+			case 0x8A: // Shift+F9
+			case 0x8B: // Shift+F10
+				PC98_GetShiftFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0x82); dev_con_pos=0; dev_con_max=esclen;
+				return (dev_con_max != 0)?true:false;
+            case 0x98: // CTRL+F7   Toggle function key row     HANDLED INTERNALLY, NEVER RETURNED TO CONSOLE
+				void pc98_function_row_user_toggle(void);
+				pc98_function_row_user_toggle();
+				break;
+			case 0x99: // CTRL+F8   Clear screen, home cursor   HANDLED INTERNALLY, NEVER RETURNED TO CONSOLE
+				{
+					Bit8u page = real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
+
+					/* it also redraws the function key row */
+					update_pc98_function_row(pc98_function_row_mode,true);
+
+					INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
+					Real_INT10_SetCursorPos(0,0,page);
+					ClearAnsi();
+				}
+				break;
+
 #if 0
                 // ROLL UP  --          --          --
                 // POLL DOWN--          --          --
@@ -626,7 +641,7 @@ bool device_CON::Read(Bit8u * data,Bit16u * size) {
             if (IS_PC98_ARCH) {
                 /* PC-98 does NOT return scan code, but instead returns nothing or
                  * control/escape code */
-                CommonPC98ExtScanConversionToReadBuf(reg_ah);
+				CommonPC98ExtScanConversionToReadBuf(reg_ah);
             }
             else {
                 /* IBM PC/XT/AT signals extended code by entering AL, AH.
@@ -653,13 +668,11 @@ bool device_CON::Read(Bit8u * data,Bit16u * size) {
 bool log_dev_con = false;
 std::string log_dev_con_str;
 
-extern bool pc98_function_row;
-
 bool device_CON::Write(Bit8u * data,Bit16u * size) {
     Bit16u count=0;
     Bitu i;
     Bit8u col,row;
-    Bit8u tempdata;
+
     INT10_SetCurMode();
 	
     if (IS_PC98_ARCH) {
@@ -690,8 +703,7 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
 				Bit8u page = real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
 
 				/* it also redraws the function key row */
-				void update_pc98_function_row(bool enable);
-				update_pc98_function_row(pc98_function_row);
+				update_pc98_function_row(pc98_function_row_mode,true);
 
 				INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
 				Real_INT10_SetCursorPos(0,0,page);
@@ -720,8 +732,7 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
                         Bit8u page = real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
 						
                         /* it also redraws the function key row */
-                        void update_pc98_function_row(bool enable);
-						update_pc98_function_row(pc98_function_row);
+                        update_pc98_function_row(pc98_function_row_mode,true);
 
                         INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
                         Real_INT10_SetCursorPos(0,0,page);
@@ -780,7 +791,6 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
                 case 'l': /* RESET MODE */
                     switch (ansi.data[0]) {
                         case 1: // show/hide function key row
-                            void update_pc98_function_row(bool enable);
                             update_pc98_function_row(data[count] == 'l');
 							ansi.nrows = real_readb(0x60,0x112)+1;
                             break;
