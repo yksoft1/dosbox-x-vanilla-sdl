@@ -1240,6 +1240,22 @@ static Bitu IRQ1_Handler_PC98(void) {
                     add_key(scan_add + '.');
                 }
                 break;
+				
+			case 0x52: // VF1           vf･1    ???     ???     ???     ???
+			case 0x53: // VF2           vf･2    ???     ???     ???     ???
+			case 0x54: // VF3           vf･3    ???     ???     ???     ???
+			case 0x55: // VF4           vf･4    ???     ???     ???     ???
+			case 0x56: // VF5           vf･5    ???     ???     ???     ???
+				if (pressed) {
+					if (modflags & 0x10) /* CTRL */
+						add_key(scan_add + 0x8000); /* 0xD2-0xD6 */
+					else if (modflags & 1) /* SHIFT */
+						add_key(scan_add + 0x7000); /* 0xC2-0xC6 */
+					else
+						add_key(scan_add + 0x0000); /* 0x52-0x56 */
+				}
+				break;
+
             case 0x60: // STOP
                 // does not pass it on
                 break;

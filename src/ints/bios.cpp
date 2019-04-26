@@ -2383,9 +2383,11 @@ struct pc98_func_key_shortcut_def {
 };                                          /* =0x10 */
 #pragma pack(pop)
 
-struct pc98_func_key_shortcut_def            pc98_func_key[10];
-struct pc98_func_key_shortcut_def   pc98_func_key_shortcut[10];
-struct pc98_func_key_shortcut_def   pc98_editor_key_escapes[11];
+struct pc98_func_key_shortcut_def   pc98_func_key[10];                  /* F1-F10 */
+struct pc98_func_key_shortcut_def   pc98_vfunc_key[5];                  /* VF1-VF5 */
+struct pc98_func_key_shortcut_def   pc98_func_key_shortcut[10];         /* Shift+F1 - Shift-F10 */
+struct pc98_func_key_shortcut_def   pc98_vfunc_key_shortcut[5];         /* Shift+VF1 - Shift-VF5 */
+struct pc98_func_key_shortcut_def   pc98_editor_key_escapes[11];        /* Editor keys */
 
 // FIXME: This is STUPID. Cleanup is needed in order to properly use std::min without causing grief.
 #ifdef _MSC_VER
@@ -2424,6 +2426,35 @@ void PC98_GetEditorKeyEscape(size_t &len,unsigned char buf[16],const unsigned in
 		const pc98_func_key_shortcut_def &def = pc98_editor_key_escapes[scan-0x36];
 		unsigned int j=0,o=0;
 
+        /* if the shortcut starts with 0xFE then the next 5 chars are intended for display only
+		 * and the shortcut starts after that. Else the entire string is stuffed into the CON
+		 * device. */
+		if (def.shortcut[0] == 0xFE)
+			j = 6;
+
+		while (j < MIN(0x0Eu,(unsigned int)def.length))
+			buf[o++] = def.shortcut[j++];
+
+		len = (size_t)o;
+		buf[o] = 0;
+	}
+	else {
+		len = 0;
+		buf[0] = 0;
+	}
+}
+
+void PC98_GetVFKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i,const struct pc98_func_key_shortcut_def *keylist) {
+	if (i >= 1 && i <= 5) {
+		const pc98_func_key_shortcut_def &def = keylist[i-1];
+		unsigned int j=0,o=0;
+
+		/* if the shortcut starts with 0xFE then the next 5 chars are intended for display only
+		 * and the shortcut starts after that. Else the entire string is stuffed into the CON
+		 * device. */
+		if (def.shortcut[0] == 0xFE)
+			j = 6;
+
 		while (j < MIN(0x0Eu,(unsigned int)def.length))
 			buf[o++] = def.shortcut[j++];
 
@@ -2444,6 +2475,14 @@ void PC98_GetShiftFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned
 	PC98_GetFuncKeyEscape(len,buf,i,pc98_func_key_shortcut);
 }
 
+void PC98_GetVFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i) {
+	PC98_GetVFKeyEscape(len,buf,i,pc98_vfunc_key);
+}
+
+void PC98_GetShiftVFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i) {
+	PC98_GetVFKeyEscape(len,buf,i,pc98_vfunc_key_shortcut);
+}
+
 void PC98_InitDefFuncRow(void) {
 	for (unsigned int i=0;i < 10;i++) {
 		pc98_func_key_shortcut_def &def = pc98_func_key[i];
@@ -2462,6 +2501,19 @@ void PC98_InitDefFuncRow(void) {
 
 		def.pad = 0x00;
 		def.set_shortcut(pc98_editor_key_escapes_default[i]);
+	}
+	/* MS-DOS by default does not assign the VFn keys anything */
+	for (unsigned int i=0;i < 5;i++) {
+		pc98_func_key_shortcut_def &def = pc98_vfunc_key[i];
+
+		def.pad = 0x00;
+		def.set_shortcut("");
+	}
+	for (unsigned int i=0;i < 5;i++) {
+		pc98_func_key_shortcut_def &def = pc98_vfunc_key_shortcut[i];
+
+		def.pad = 0x00;
+		def.set_shortcut("");
 	}
 }
 
@@ -4084,10 +4136,10 @@ static Bitu INTDC_PC98_Handler(void) {
 			if (reg_ax == 0xFF) { /* Extended version of the API when AX == 0, DS:DX = data to store to */
 				/* DS:DX contains
 				 *       16*10 bytes, 16 bytes per entry for function keys F1-F10
-				 *       16*5 bytes, 16 bytes per entry of unknown relevence (GUESS: VF1-VF5 keys?)
+				 *       16*5 bytes, 16 bytes per entry of for VF1-VF5
 				 *       16*10 bytes, 16 bytes per entry for function key shortcuts Shift+F1 to Shift+F10
-				 *       16*5 bytes, 16 bytes per entry of unknown relevence (GUESS: Shift+VF1 to Shift+VF5?)
-				 *       6*11 bytes, 6 bytes per entry of unknown relevence (GUESS: Escapes for other keys like INS, DEL?)
+				 *       16*5 bytes, 16 bytes per entry of for shift VF1-VF5
+				 *       6*11 bytes, 6 bytes per entry of for editor keys
 				 *       16*15 bytes, 16 bytes per entry of unknown relevence
 				 *
 				 * For whatever reason, the buffer is copied to the DOS buffer +1, meaning that on write it skips the 0x08 byte. */
@@ -4096,13 +4148,15 @@ static Bitu INTDC_PC98_Handler(void) {
 				/* function keys F1-F10 */
 				for (unsigned int f=0;f < 10;f++,ofs += 16)
 					INTDC_STORE_FUNCDEC(ofs,pc98_func_key[f]);
-				/* ??? */
-				ofs += 16*5;
+				/* VF1-VF5 */
+				for (unsigned int f=0;f < 5;f++,ofs += 16)
+					INTDC_STORE_FUNCDEC(ofs,pc98_vfunc_key[f]);
 				/* function keys Shift+F1 - Shift+F10 */
 				for (unsigned int f=0;f < 10;f++,ofs += 16)
 					INTDC_STORE_FUNCDEC(ofs,pc98_func_key_shortcut[f]);
-				/* ??? */
-				ofs += 16*5;
+				/* VF1-VF5 */
+				for (unsigned int f=0;f < 5;f++,ofs += 16)
+					INTDC_STORE_FUNCDEC(ofs,pc98_vfunc_key_shortcut[f]);
 				/* editor keys */
 				for (unsigned int f=0;f < 11;f++,ofs += 6)
 					INTDC_STORE_EDITDEC(ofs,pc98_editor_key_escapes[f]);
@@ -4154,6 +4208,16 @@ static Bitu INTDC_PC98_Handler(void) {
 				INTDC_STORE_EDITDEC(ofs,pc98_editor_key_escapes[reg_ax - 0x15]);
 				goto done;
 			}
+			else if (reg_ax >= 0x20 && reg_ax <= 0x24) { /* Read VF1-VF5 keys, DS:DX = data to store to */
+				Bitu ofs = (Bitu)(SegValue(ds) << 4ul) + (Bitu)reg_dx;
+				INTDC_STORE_FUNCDEC(ofs,pc98_vfunc_key[reg_ax - 0x20]);
+				goto done;
+			}
+			else if (reg_ax >= 0x25 && reg_ax <= 0x29) { /* Read shift VF1-VF5 keys, DS:DX = data to store to */
+				Bitu ofs = (Bitu)(SegValue(ds) << 4ul) + (Bitu)reg_dx;
+				INTDC_STORE_FUNCDEC(ofs,pc98_vfunc_key_shortcut[reg_ax - 0x25]);
+				goto done;
+			}
 			else if (reg_ax == 0x00) { /* Read all state, DS:DX = data to store to */
 				/* DS:DX contains
 				 *       16*10 bytes, 16 bytes per entry for function keys F1-F10
@@ -4180,10 +4244,10 @@ static Bitu INTDC_PC98_Handler(void) {
 			if (reg_ax == 0xFF) { /* Extended version of the API when AX == 0, DS:DX = data to set */
 				/* DS:DX contains
 				 *       16*10 bytes, 16 bytes per entry for function keys F1-F10
-				 *       16*5 bytes, 16 bytes per entry of unknown relevence (GUESS: VF1-VF5 keys?)
+				 *       16*5 bytes, 16 bytes per entry for VF1-VF5
 				 *       16*10 bytes, 16 bytes per entry for function key shortcuts Shift+F1 to Shift+F10
-				 *       16*5 bytes, 16 bytes per entry of unknown relevence (GUESS: Shift+VF1 to Shift+VF5?)
-				 *       6*11 bytes, 6 bytes per entry of unknown relevence (GUESS: Escapes for other keys like INS, DEL?)
+				 *       16*5 bytes, 16 bytes per entry for shift VF1-VF5
+				 *       6*11 bytes, 6 bytes per entry for editor keys
 				 *       16*15 bytes, 16 bytes per entry of unknown relevence
 				 *
 				 * For whatever reason, the buffer is copied to the DOS buffer +1, meaning that on write it skips the 0x08 byte. */
@@ -4192,13 +4256,15 @@ static Bitu INTDC_PC98_Handler(void) {
 				/* function keys F1-F10 */
 				for (unsigned int f=0;f < 10;f++,ofs += 16)
 					INTDC_LOAD_FUNCDEC(pc98_func_key[f],ofs);
-				/* ??? */
-				ofs += 16*5;
+				/* VF1-VF5 */
+				for (unsigned int f=0;f < 5;f++,ofs += 16)
+					INTDC_LOAD_FUNCDEC(pc98_vfunc_key[f],ofs);
 				/* function keys Shift+F1 - Shift+F10 */
 				for (unsigned int f=0;f < 10;f++,ofs += 16)
 					INTDC_LOAD_FUNCDEC(pc98_func_key_shortcut[f],ofs);
-				/* ??? */
-				ofs += 16*5;
+				/* Shift+VF1 - Shift+VF5 */
+				for (unsigned int f=0;f < 5;f++,ofs += 16)
+					INTDC_LOAD_FUNCDEC(pc98_vfunc_key_shortcut[f],ofs);
 				/* editor keys */
 				for (unsigned int f=0;f < 11;f++,ofs += 6)
 					INTDC_LOAD_EDITDEC(pc98_editor_key_escapes[f],ofs);
@@ -4219,6 +4285,16 @@ static Bitu INTDC_PC98_Handler(void) {
 			else if (reg_ax >= 0x15 && reg_ax <= 0x1F) { /* Read individual editor keys, DS:DX = data to set */
 				Bitu ofs = (Bitu)(SegValue(ds) << 4ul) + (Bitu)reg_dx;
 				INTDC_LOAD_EDITDEC(pc98_editor_key_escapes[reg_ax - 0x15],ofs);
+				goto done;
+			}
+			else if (reg_ax >= 0x20 && reg_ax <= 0x24) { /* Read VF1-VF5 keys, DS:DX = data to store to */
+				Bitu ofs = (Bitu)(SegValue(ds) << 4ul) + (Bitu)reg_dx;
+				INTDC_LOAD_FUNCDEC(pc98_vfunc_key[reg_ax - 0x20],ofs);
+				goto done;
+			}
+			else if (reg_ax >= 0x25 && reg_ax <= 0x29) { /* Read shift VF1-VF5 keys, DS:DX = data to store to */
+				Bitu ofs = (Bitu)(SegValue(ds) << 4ul) + (Bitu)reg_dx;
+				INTDC_LOAD_FUNCDEC(pc98_vfunc_key_shortcut[reg_ax - 0x25],ofs);
 				goto done;
 			}
 			else if (reg_ax == 0x00) { /* Read all state, DS:DX = data to set */
