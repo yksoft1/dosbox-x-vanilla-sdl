@@ -45,7 +45,7 @@ Bit16u FPU_GetTag(void){
 	return tag;
 }
 
-#if C_FPU_X86
+#if C_FPU_X86 && !defined(EMSCRIPTEN)
 #include "fpu_instructions_x86.h"
 #else
 #include "fpu_instructions.h"
