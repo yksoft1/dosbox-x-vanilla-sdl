@@ -45,7 +45,7 @@ Bit16u FPU_GetTag(void){
 	return tag;
 }
 
-#if C_FPU_X86
+#if C_FPU_X86 && !defined(EMSCRIPTEN)
 #include "fpu_instructions_x86.h"
 #else
 #include "fpu_instructions.h"
@@ -1009,6 +1009,14 @@ void FPU_Selftest() {
 	}
 #endif
 
+#if C_FPU_X86
+	LOG(LOG_FPU,LOG_NORMAL)("FPU core: x86 FPU");
+/*#elif defined(HAS_LONG_DOUBLE)
+	LOG(LOG_FPU,LOG_NORMAL)("FPU core: long double FPU");*/
+#else
+	LOG(LOG_FPU,LOG_NORMAL)("FPU core: double FPU (caution: possible precision errors)");
+#endif
+	
 	FPU_Selftest_32();
 	FPU_Selftest_64();
 	FPU_Selftest_80();

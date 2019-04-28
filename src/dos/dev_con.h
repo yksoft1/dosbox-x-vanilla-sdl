@@ -38,7 +38,11 @@ void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
 void PC98_GetFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
 void PC98_GetShiftFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
 void PC98_GetEditorKeyEscape(size_t &len,unsigned char buf[16],const unsigned int scan);
-
+void PC98_GetVFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
+void PC98_GetShiftVFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
+void PC98_GetCtrlFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
+void PC98_GetCtrlVFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
+	
 ShiftJISDecoder con_sjis;
 
 Bit16u last_int16_code = 0;
@@ -234,6 +238,13 @@ private:
 			case 0x40: // KEYPAD -
 				PC98_GetEditorKeyEscape(/*&*/esclen,dev_con_readbuf,code); dev_con_pos=0; dev_con_max=esclen;
 				return (dev_con_max != 0)?true:false;
+			case 0x52: // VF1
+			case 0x53: // VF2
+			case 0x54: // VF3
+			case 0x55: // VF4
+			case 0x56: // VF5
+				PC98_GetVFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0x52); dev_con_pos=0; dev_con_max=esclen;
+				return (dev_con_max != 0)?true:false;
             case 0x62: // F1
             case 0x63: // F2
             case 0x64: // F3
@@ -258,8 +269,21 @@ private:
 			case 0x8B: // Shift+F10
 				PC98_GetShiftFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0x82); dev_con_pos=0; dev_con_max=esclen;
 				return (dev_con_max != 0)?true:false;
-			case 0x97: // CTRL+F7   Toggle 20/25-line text      HANDLED INTERNALLY, NEVER RETURNED TO CONSOLE
-				if (!inhibited_ControlFn()) {
+			case 0x92: // Control+F1
+			case 0x93: // Control+F2
+			case 0x94: // Control+F3
+			case 0x95: // Control+F4
+			case 0x96: // Control+F5
+			case 0x97: // Control+F6
+			case 0x98: // Control+F7
+			case 0x99: // Control+F8
+			case 0x9A: // Control+F9
+			case 0x9B: // Control+F10
+				if (inhibited_ControlFn()) {
+					PC98_GetCtrlFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0x92); dev_con_pos=0; dev_con_max=esclen;
+					return (dev_con_max != 0)?true:false;
+				}
+				else if (code == 0x97) {// CTRL+F6   Toggle 20/25-line text      HANDLED INTERNALLY, NEVER RETURNED TO CONSOLE
 					/* toggle the bit and change the text layer */
 					{
 						Bit8u b = real_readb(0x60,0x113);
@@ -284,15 +308,11 @@ private:
 						Real_INT10_SetCursorPos(0,0,page);
 					}
 				}
-				break;
-            case 0x98: // CTRL+F7   Toggle function key row     HANDLED INTERNALLY, NEVER RETURNED TO CONSOLE
-				if (!inhibited_ControlFn()) {
+				else if (code == 0x98) {// CTRL+F7   Toggle function key row     HANDLED INTERNALLY, NEVER RETURNED TO CONSOLE
 					void pc98_function_row_user_toggle(void);
 					pc98_function_row_user_toggle();
 				}
-				break;
-			case 0x99: // CTRL+F8   Clear screen, home cursor   HANDLED INTERNALLY, NEVER RETURNED TO CONSOLE
-				if (!inhibited_ControlFn()) {
+				else if (code == 0x99) {// CTRL+F8   Clear screen, home cursor   HANDLED INTERNALLY, NEVER RETURNED TO CONSOLE
 					Bit8u page = real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
 
 					/* it also redraws the function key row */
@@ -301,6 +321,23 @@ private:
 					INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
 					Real_INT10_SetCursorPos(0,0,page);
 					ClearAnsi();
+				}
+				break;
+			case 0xC2: // VF1
+			case 0xC3: // VF2
+			case 0xC4: // VF3
+			case 0xC5: // VF4
+			case 0xC6: // VF5
+				PC98_GetShiftVFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0xC2); dev_con_pos=0; dev_con_max=esclen;
+				return (dev_con_max != 0)?true:false;
+			case 0xD2: // VF1
+			case 0xD3: // VF2
+			case 0xD4: // VF3
+			case 0xD5: // VF4
+			case 0xD6: // VF5
+				if (inhibited_ControlFn()) {
+					PC98_GetCtrlVFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0xD2); dev_con_pos=0; dev_con_max=esclen;
+					return (dev_con_max != 0)?true:false;
 				}
 				break;
 
