@@ -2738,6 +2738,18 @@ void pc98_update_text_lineheight_from_bda(void) {
     mem_writeb(0x53B,lineheight - 1);
 }
 
+/* TODO: The text and graphics code that talks to the GDC will need to be converted
+ *       to CPU I/O read and write calls. I think the reason Windows 3.1's 16-color
+ *       driver is causing screen distortion when going fullscreen with COMMAND.COM,
+ *       and the reason COMMAND.COM windowed doesn't show anything, has to do with
+ *       the fact that Windows 3.1 expects this BIOS call to use I/O so it can trap
+ *       and virtualize the GDC and display state.
+ *
+ *       Obviously for the same reason VGA INT 10h emulation in IBM PC mode needs to
+ *       do the same to prevent display and virtualization problems with the IBM PC
+ *       version of Windows 3.1.
+ *
+ *       See also: [https://github.com/joncampbell123/dosbox-x/issues/1066] */
 static Bitu INT18_PC98_Handler(void) {
     Bit16u temp16;
 
@@ -6368,7 +6380,11 @@ private:
              *              01 = COMPLEMENT
              *              10 = CLEAR
              *              11 = SET */
-            mem_writeb(0x54D,(enable_pc98_egc ? 0x40 : 0x00) | (gdc_5mhz_mode ? 0x20 : 0x00) | (gdc_5mhz_mode ? 0x04 : 0x00)); // EGC
+            mem_writeb(0x54D,
+					  (enable_pc98_256color ? 0x80 : 0x00) |
+					  (enable_pc98_egc ? 0x40 : 0x00) |
+					  (gdc_5mhz_mode ? 0x20 : 0x00) |
+					  (gdc_5mhz_mode ? 0x04 : 0x00)); // EGC
 
             /* BIOS flags */
             /* bit[7:7] = INT 18h AH=30h/31h support enabled
