@@ -2730,14 +2730,19 @@ void pc98_update_text_lineheight_from_bda(void) {
     unsigned char c = mem_readb(0x53C);
     unsigned char lineheight;
 
-    if (c & 0x01)/*20-line mode*/
+    if (c & 0x10)/*30-line mode (30x16 = 640x480)*/
         lineheight = 20;
-    else         /*25-line mode*/
+    else if (c & 0x01)/*20-line mode (20x20 = 640x400)*/
+		lineheight = 20;
+	else/*25-line mode (25x16 = 640x400)*/
         lineheight = 16;
 
     mem_writeb(0x53B,lineheight - 1);
 }
 
+bool gdc_5mhz_according_to_bios(void);
+void pc98_update_cpu_page_ptr(void);
+void pc98_update_display_page_ptr(void);
 /* TODO: The text and graphics code that talks to the GDC will need to be converted
  *       to CPU I/O read and write calls. I think the reason Windows 3.1's 16-color
  *       driver is causing screen distortion when going fullscreen with COMMAND.COM,
@@ -2880,7 +2885,7 @@ static Bitu INT18_PC98_Handler(void) {
 			//Attribute bit (bit 2)
 			pc98_attr4_graphic = !!(reg_al & 0x04);
 
-            mem_writeb(0x53C,reg_al);
+            mem_writeb(0x53C,(mem_readb(0x53C) & 0xF0u) | (reg_al & 0x0Fu));
 
             if (reg_al & 2)
                 LOG_MSG("INT 18H AH=0Ah warning: 40-column PC-98 text mode not supported");
@@ -3023,10 +3028,110 @@ static Bitu INT18_PC98_Handler(void) {
                 }
             }
             break;
+        case 0x30: /* Set display mode */
+			if (enable_pc98_egc) {
+				unsigned char b597 = mem_readb(0x597);
+				unsigned char tstat = mem_readb(0x53C);
+				unsigned char b54C = mem_readb(0x54C);
+				unsigned char ret = 0x00;
+
+                // assume the same as AH=42h
+				while (!(IO_ReadB(0x60) & 0x20/*vertical retrace*/)) {
+					void CALLBACK_Idle(void);
+					CALLBACK_Idle();
+				}
+
+				LOG_MSG("PC-98 INT 18 AH=30h AL=%02Xh BH=%02Xh",reg_al,reg_bh);
+
+				if ((reg_bh & 0x30) == 0x30) { // 640x480
+					if (reg_al & 4) { // 31KHz sync
+						LOG_MSG("PC-98 INT 18h AH=30h attempt to set unsupported 640x480 mode");
+					}
+					else {
+						// according to Neko Project II, this case is ignored
+						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 640x480 mode with 24KHz hsync which is not supported");
+					}
+				}
+				else {
+					if ((reg_al & 0x0C) < 0x08) { /* bits [3:2] == 0x */
+						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 15KHz hsync which is not yet supported");
+					}
+					else {
+						if ((reg_al ^ (((b54C & 0x20) ? 3 : 2) << 2)) & 0x0C) { /* change in bits [3:2] */
+							LOG_MSG("PC-98 change in hsync frequency to %uHz",(reg_al & 0x04) ? 31 : 24);
+
+							if (reg_al & 4) {
+								extern bool pc98_31khz_mode;
+								void PC98_Set31KHz(void);
+								pc98_31khz_mode = true;
+								PC98_Set31KHz();
+							}
+							else {
+								extern bool pc98_31khz_mode;
+								void PC98_Set24KHz(void);
+								pc98_31khz_mode = false;
+								PC98_Set24KHz();
+							}
+
+							b54C = (b54C & (~0x20)) + ((reg_al & 0x04) ? 0x20 : 0x00);
+						}
+					}
+
+					pc98_gdc[GDC_MASTER].force_fifo_complete();
+					pc98_gdc[GDC_SLAVE].force_fifo_complete();
+					
+                    /* clear PRAM, graphics */
+					for (unsigned int i=0;i < 16;i++)
+						pc98_gdc[GDC_SLAVE].param_ram[i] = 0x00;
+
+					/* reset scroll area of graphics */
+					if ((reg_bh & 0x30) == 0x10) { /* 640x200 upper half    bits [5:4] == 1 */
+						pc98_gdc[GDC_SLAVE].param_ram[0] = (200*40) & 0xFF;
+						pc98_gdc[GDC_SLAVE].param_ram[1] = (200*40) >> 8;
+					}
+					else {
+						pc98_gdc[GDC_SLAVE].param_ram[0] = 0;
+						pc98_gdc[GDC_SLAVE].param_ram[1] = 0;
+					}
+
+					pc98_gdc[GDC_SLAVE].param_ram[2] = 0xF0;
+					pc98_gdc[GDC_SLAVE].param_ram[3] = 0x3F + (gdc_5mhz_according_to_bios()?0x40:0x00/*IM bit*/);
+					pc98_gdc[GDC_SLAVE].display_pitch = gdc_5mhz_according_to_bios() ? 80u : 40u;
+
+					if ((reg_bh & 0x20) == 0x00) { /* 640x200 */
+						pc98_gdc[GDC_SLAVE].doublescan = true;
+						pc98_gdc[GDC_SLAVE].row_height = pc98_gdc[GDC_SLAVE].doublescan ? 2 : 1;
+					}
+					else {
+						pc98_gdc[GDC_SLAVE].doublescan = false;
+						pc98_gdc[GDC_SLAVE].row_height = 1;
+					}
+
+					b597 = (b597 & ~3u) + ((reg_bh >> 4u) & 3u);
+
+					pc98_gdc_vramop &= ~(1 << VOPBIT_ACCESS);
+					pc98_update_cpu_page_ptr();
+					
+					GDC_display_plane = GDC_display_plane_pending = 0;
+					pc98_update_display_page_ptr();
+				}
+
+				mem_writeb(0x597,b597);
+				mem_writeb(0x53C,tstat);
+				mem_writeb(0x54C,b54C);
+
+				reg_ah = ret;
+			}
+			break;
         case 0x31: /* Return display mode and status */
             if (enable_pc98_egc) { /* FIXME: INT 18h AH=31/30h availability is tied to EGC enable */
                 unsigned char b597 = mem_readb(0x597);
                 unsigned char tstat = mem_readb(0x53C);
+				unsigned char b54C = mem_readb(0x54C);
+	
+				/* 54Ch:
+				 * bit[5:5] = Horizontal sync rate                      1=31.47KHz      0=24.83KHz */
+
                 /* Return values:
                  *
                  * AL =
@@ -3058,7 +3163,7 @@ static Bitu INT18_PC98_Handler(void) {
                  *                   11 = ?
                  */
                 reg_al =
-                    ((pc98_31khz_mode ? 3 : 2) << 2)/*hsync*/;
+                    (((b54C & 0x20) ? 3 : 2) << 2)/*hsync*/;
                 reg_bh =
                     ((b597 & 3) << 4)/*graphics video mode*/;
                 if (tstat & 0x10)
@@ -3107,6 +3212,11 @@ static Bitu INT18_PC98_Handler(void) {
 
             pc98_gdc[GDC_MASTER].force_fifo_complete();
             pc98_gdc[GDC_SLAVE].force_fifo_complete();
+
+            /* clear PRAM, graphics */
+			for (unsigned int i=0;i < 16;i++)
+				pc98_gdc[GDC_SLAVE].param_ram[i] = 0x00;
+
             /* reset scroll area of graphics */
             if ((reg_ch & 0xC0) == 0x40) { /* 640x200 G-RAM upper half */
                 pc98_gdc[GDC_SLAVE].param_ram[0] = (200*40) & 0xFF;
@@ -3117,8 +3227,8 @@ static Bitu INT18_PC98_Handler(void) {
                 pc98_gdc[GDC_SLAVE].param_ram[1] = 0;
             }
             pc98_gdc[GDC_SLAVE].param_ram[2] = 0xF0;
-            pc98_gdc[GDC_SLAVE].param_ram[3] = 0x3F;
-            pc98_gdc[GDC_SLAVE].display_pitch = 40; /* 40 x 16 = 640 pixel wide graphics */
+            pc98_gdc[GDC_SLAVE].param_ram[3] = 0x3F + (gdc_5mhz_according_to_bios()?0x40:0x00/*IM bit*/);
+            pc98_gdc[GDC_SLAVE].display_pitch = gdc_5mhz_according_to_bios() ? 80u : 40u;
 
             // CH
             //   [7:6] = G-RAM setup
@@ -3161,7 +3271,10 @@ static Bitu INT18_PC98_Handler(void) {
             }
 
             pc98_gdc_vramop &= ~(1 << VOPBIT_ACCESS);
+			pc98_update_cpu_page_ptr();
+
             GDC_display_plane = GDC_display_plane_pending = (reg_ch & 0x10) ? 1 : 0;
+			pc98_update_display_page_ptr();
 
             prev_pc98_mode42 = reg_ch;
 

@@ -26,6 +26,7 @@
 using namespace std;
 
 extern bool                 gdc_5mhz_mode;
+extern bool                 gdc_5mhz_mode_initial;
 extern bool                 GDC_vsync_interrupt;
 extern bool                 pc98_256kb_boundary;
 extern uint8_t              GDC_display_plane;
@@ -92,6 +93,7 @@ PC98_GDC_state::PC98_GDC_state() {
     param_ram[2] = 0xF0;        // LEN=3FF
     param_ram[3] = 0x3F;        // LEN=3FF WD1=0
 
+	IM_bit = false;
     display_partition_mask = 3;
     doublescan = false;
     param_ram_wptr = 0;
@@ -409,7 +411,7 @@ Bit16u PC98_GDC_state::read_fifo(void) {
 void PC98_GDC_state::next_line(void) {
     row_line++;
     if (row_line == row_height) {
-        scan_address += display_pitch;
+        scan_address += display_pitch >> (IM_bit ? 1u : 0u);
         row_line = 0;
     }
     else if (row_line & 0x20) {
@@ -452,6 +454,7 @@ void PC98_GDC_state::load_display_partition(void) {
      *
      * RAM+3 = WD1 0 LEN1 (H) [5:0] */
         scan_address &= 0x1FFF;
+		IM_bit = false;
     }
     else { /* graphics mode */
     /* RAM+0 = SAD1 (L)
@@ -461,6 +464,7 @@ void PC98_GDC_state::load_display_partition(void) {
      * RAM+2 = LEN1 (L) [7:4]  0 0   SAD1 (H) [1:0]
      *
      * RAM+3 = WD1 IM LEN1 (H) [5:0] */
+		IM_bit = !!(pram[3] & 0x40); /* increment the address every other cycle if set, mixed text/graphics only */
     }
 }
 
@@ -613,9 +617,29 @@ void GDC_ProcDelay(Bitu /*val*/) {
         pc98_gdc[i].idle_proc(); // may schedule another delayed proc
 }
 
+bool gdc_5mhz_according_to_bios(void) {
+	return !!(mem_readb(0x54D) & 0x20);
+}
+
 void gdc_5mhz_mode_update_vars(void) {
-// FIXME: Is this right?
-    mem_writeb(0x54D,(mem_readb(0x54D) & (~0x20)) | (gdc_5mhz_mode ? 0x20 : 0x00));
+    unsigned char b;
+	
+	b = mem_readb(0x54D);
+
+	/* bit[5:5] = GDC at 5.0MHz at boot up (copy of DIP switch 2-8 at startup)      1=yes 0=no
+	 * bit[2:2] = GDC clock                                                         1=5MHz 0=2.5MHz */
+
+	if (gdc_5mhz_mode_initial)
+		b |=  0x20;
+	else
+		b &= ~0x20;
+
+	if (gdc_5mhz_mode)
+		b |=  0x04;
+	else
+		b &= ~0x04;
+ 
+	mem_writeb(0x54D,b);
 }
 
 /*==================================================*/

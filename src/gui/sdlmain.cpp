@@ -7193,9 +7193,19 @@ bool vid_pc98_5mhz_gdc_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * 
 	if (IS_PC98_ARCH) {
 		void gdc_5mhz_mode_update_vars(void);
 		extern bool gdc_5mhz_mode;
+		extern bool gdc_5mhz_mode_initial;
+		extern bool gdc_clock_1;
+		extern bool gdc_clock_2;
 
 		gdc_5mhz_mode = !gdc_5mhz_mode;
 		gdc_5mhz_mode_update_vars();
+
+		// this is the user's command to change GDC setting, so it should appear
+		// as if the initial setting in the dip switches
+		gdc_5mhz_mode_initial = gdc_5mhz_mode;
+
+		gdc_clock_1 = gdc_5mhz_mode;
+		gdc_clock_2 = gdc_5mhz_mode;
 
 		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 		if (gdc_5mhz_mode)

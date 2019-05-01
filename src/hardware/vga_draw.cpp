@@ -1208,6 +1208,7 @@ struct Text_Draw_State {
 Text_Draw_State pc98_text_draw;
 
 extern bool                 pc98_256kb_boundary;
+extern bool                 gdc_5mhz_mode;
 
 static Bit8u* VGA_PC98_Xlat32_Draw_Line(Bitu vidstart, Bitu line) {
 	// keep it aligned:
