@@ -4193,7 +4193,7 @@ void PC98_EXTMEMCPY(void) {
     PhysPt source	= (mem_readd(data+0x12) & 0x00FFFFFF) + (mem_readb(data+0x17)<<24);
     PhysPt dest		= (mem_readd(data+0x1A) & 0x00FFFFFF) + (mem_readb(data+0x1F)<<24);
 
-    LOG_MSG("PC-98 memcpy: src=0x%x dst=0x%x data=0x%x count=0x%x",
+    LOG(LOG_MISC,LOG_DEBUG)("PC-98 memcpy: src=0x%x dst=0x%x data=0x%x count=0x%x",
         (unsigned int)source,(unsigned int)dest,(unsigned int)data,(unsigned int)bytes);
 
     MEM_BlockCopy(dest,source,bytes);
