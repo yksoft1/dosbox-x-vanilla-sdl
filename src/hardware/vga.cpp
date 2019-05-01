@@ -156,6 +156,9 @@ unsigned char*                      pc98_pgraph_current_display_page;
 /* current CPU page (controlled by A6h) */
 unsigned char*                      pc98_pgraph_current_cpu_page;
 
+bool                                pc98_crt_mode = false;      // see port 6Ah command 40h/41h.
+																// this boolean is the INVERSE of the bit.
+																	
 extern int                          vga_memio_delay_ns;
 extern bool                         gdc_5mhz_mode;
 extern bool                         gdc_5mhz_mode_initial;
