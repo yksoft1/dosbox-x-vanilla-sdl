@@ -100,7 +100,7 @@ void pc98_a1_write(Bitu port,Bitu val,Bitu iolen) {
             if ((a1_font_load_addr & 0x007E) == 0x0056 && (a1_font_load_addr & 0xFF00) != 0x0000)
                 pc98_font_char_write(a1_font_load_addr,a1_font_char_offset & 0xF,(a1_font_char_offset & 0x20) ? 0 : 1,val);
             else
-                LOG_MSG("A1 port attempt to write FONT ROM char 0x%x",a1_font_load_addr);
+                LOG(LOG_MISC,LOG_WARN)("A1 port attempt to write FONT ROM char 0x%x",a1_font_load_addr);
             break;
         default:
             LOG_MSG("A1 port %lx val %lx unexpected",port,val);

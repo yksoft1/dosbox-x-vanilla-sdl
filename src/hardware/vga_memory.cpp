@@ -1308,7 +1308,7 @@ unsigned char pc98_mem_msw(unsigned char which) {
 }
 
 void pc98_mem_msw_write(unsigned char which,unsigned char val) {
-	LOG_MSG("WARNING: PC-98 NVRAM write to 0x%x value 0x%x, not implemented yet",which,val);
+	LOG(LOG_MISC,LOG_WARN)("WARNING: PC-98 NVRAM write to 0x%x value 0x%x, not implemented yet",which,val);
 	// TODO: Add code to write NVRAM.
 	//       According to documentation writing is only enabled if a register is written elsewhere to allow it.
 }

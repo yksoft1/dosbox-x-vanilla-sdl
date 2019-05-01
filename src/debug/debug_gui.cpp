@@ -553,6 +553,13 @@ void DEBUG_ShowMsg(char const* format,...) {
 	va_list msg;
 	size_t len;
 
+    // in case of runaway error from the CPU core, user responsiveness can be helpful
+	CPU_CycleLeft += CPU_Cycles;
+	CPU_Cycles = 0;
+
+	void GFX_Events();
+	GFX_Events();
+		
 	va_start(msg,format);
 	len = vsnprintf(buf,sizeof(buf)-2,format,msg); /* <- NTS: Did you know sprintf/vsnprintf returns number of chars written? */
 	va_end(msg);
@@ -637,12 +644,13 @@ void LOG::operator() (char const* format, ...){
 		default: break;
 	};
 
+	if (d_type>=LOG_MAX) return;
+	if (d_severity < loggrp[d_type].min_severity) return;
+	
 	va_start(msg,format);
 	vsnprintf(buf,sizeof(buf)-1,format,msg);
 	va_end(msg);
 
-	if (d_type>=LOG_MAX) return;
-	if (d_severity < loggrp[d_type].min_severity) return;
 	DEBUG_ShowMsg("%10u%s %s:%s\n",static_cast<Bit32u>(cycle_count),s_severity,loggrp[d_type].front,buf);
 }
 

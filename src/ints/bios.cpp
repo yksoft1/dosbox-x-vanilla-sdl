@@ -3278,7 +3278,7 @@ static Bitu INT18_PC98_Handler(void) {
 
             prev_pc98_mode42 = reg_ch;
 
-            LOG_MSG("PC-98 INT 18 AH=42h CH=0x%02X",reg_ch);
+            LOG(LOG_MISC,LOG_WARN)("PC-98 INT 18 AH=42h CH=0x%02X",reg_ch);
             break;
         case 0x43:  // Palette register settings? Only works in digital mode? --leonier
                     //

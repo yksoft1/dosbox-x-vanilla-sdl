@@ -190,6 +190,9 @@ void pc98_port6A_command_write(unsigned char b) {
 				pc98_update_page_ptrs();
 			}
 			break;
+		case 0x40:
+		case 0x41: // TODO, "Set Plasma/LCD mode"
+			break;
 		case 0x68: // 128KB VRAM boundary
 			// TODO: Any conditions?
 			pc98_256kb_boundary = false;

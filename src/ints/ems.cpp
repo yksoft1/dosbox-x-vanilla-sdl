@@ -1152,7 +1152,7 @@ static Bitu INT67_Handler(void) {
 		}
 		break;
 	default:
-		LOG(LOG_MISC,LOG_ERROR)("EMS:Call %2X not supported",reg_ah);
+		LOG(LOG_MISC,LOG_WARN)("EMS:Call %2X not supported",reg_ah);
 		reg_ah=EMM_FUNC_NOSUP;
 		break;
 	}
