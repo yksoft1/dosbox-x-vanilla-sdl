@@ -2704,7 +2704,12 @@ void pc98_update_text_layer_lineheight_from_bda(void) {
     pc98_gdc[GDC_MASTER].force_fifo_complete();
     pc98_gdc[GDC_MASTER].row_height = lineheight;
 
-	if (lineheight > 16) { // usually 20
+	if (lineheight > 20) { // usually 24
+		pc98_text_first_row_scanline_start = 0x1C;
+		pc98_text_first_row_scanline_end = lineheight - 5;
+		pc98_text_row_scanline_blank_at = 16;
+	}
+	else if (lineheight > 16) { // usually 20
 		pc98_text_first_row_scanline_start = 0x1E;
 		pc98_text_first_row_scanline_end = lineheight - 3;
 		pc98_text_row_scanline_blank_at = 16;
@@ -2727,15 +2732,26 @@ void pc98_update_text_layer_lineheight_from_bda(void) {
 }
 
 void pc98_update_text_lineheight_from_bda(void) {
+	unsigned char b597 = mem_readb(0x597);
     unsigned char c = mem_readb(0x53C);
     unsigned char lineheight;
 
-    if (c & 0x10)/*30-line mode (30x16 = 640x480)*/
-        lineheight = 20;
-    else if (c & 0x01)/*20-line mode (20x20 = 640x400)*/
-		lineheight = 20;
-	else/*25-line mode (25x16 = 640x400)*/
-        lineheight = 16;
+	if ((b597 & 0x3) == 0x3) {//WARNING: This could be wrong
+		if (c & 0x10)/*30-line mode (30x16 = 640x480)*/
+			lineheight = 16;
+		else if (c & 0x01)/*20-line mode (20x24 = 640x480)*/
+			lineheight = 24;
+		else/*25-line mode (25x19 = 640x480)*/
+			lineheight = 19;
+	}
+	else {
+		if (c & 0x10)/*30-line mode (30x13 = 640x400)*/
+			lineheight = 13;//??
+		else if (c & 0x01)/*20-line mode (20x20 = 640x400)*/
+			lineheight = 20;
+		else/*25-line mode (25x16 = 640x400)*/
+			lineheight = 16;
+	}
 
     mem_writeb(0x53B,lineheight - 1);
 }
@@ -3045,12 +3061,46 @@ static Bitu INT18_PC98_Handler(void) {
 
 				if ((reg_bh & 0x30) == 0x30) { // 640x480
 					if (reg_al & 4) { // 31KHz sync
-						LOG_MSG("PC-98 INT 18h AH=30h attempt to set unsupported 640x480 mode");
+                        extern bool pc98_31khz_mode;
+						void PC98_Set31KHz_480line(void);
+						pc98_31khz_mode = true;
+						PC98_Set31KHz_480line();
+
+						void pc98_port6A_command_write(unsigned char b);
+						pc98_port6A_command_write(0x69); // disable 128KB wrap
 					}
 					else {
 						// according to Neko Project II, this case is ignored
-						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 640x480 mode with 24KHz hsync which is not supported");
+						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 640x480 mode with 24KHz hsync which is not supported by the platform");
 					}
+
+					b54C = (b54C & (~0x20)) + ((reg_al & 0x04) ? 0x20 : 0x00);
+
+					pc98_gdc[GDC_MASTER].force_fifo_complete();
+					pc98_gdc[GDC_SLAVE].force_fifo_complete();
+
+					/* clear PRAM, graphics */
+					for (unsigned int i=0;i < 16;i++)
+						pc98_gdc[GDC_SLAVE].param_ram[i] = 0x00;
+
+					/* reset scroll area of graphics */
+					pc98_gdc[GDC_SLAVE].param_ram[0] = 0;
+					pc98_gdc[GDC_SLAVE].param_ram[1] = 0;
+
+					pc98_gdc[GDC_SLAVE].param_ram[2] = 0xF0;
+					pc98_gdc[GDC_SLAVE].param_ram[3] = 0x3F + (gdc_5mhz_according_to_bios()?0x40:0x00/*IM bit*/);
+					pc98_gdc[GDC_SLAVE].display_pitch = gdc_5mhz_according_to_bios() ? 80u : 40u;
+
+					pc98_gdc[GDC_SLAVE].doublescan = false;
+					pc98_gdc[GDC_SLAVE].row_height = 1;
+
+					b597 = (b597 & ~3u) + ((reg_bh >> 4u) & 3u);
+
+					pc98_gdc_vramop &= ~(1 << VOPBIT_ACCESS);
+					pc98_update_cpu_page_ptr();
+
+					GDC_display_plane = GDC_display_plane_pending = 0;
+					pc98_update_display_page_ptr();
 				}
 				else {
 					if ((reg_al & 0x0C) < 0x08) { /* bits [3:2] == 0x */
@@ -3076,6 +3126,9 @@ static Bitu INT18_PC98_Handler(void) {
 							b54C = (b54C & (~0x20)) + ((reg_al & 0x04) ? 0x20 : 0x00);
 						}
 					}
+
+					void pc98_port6A_command_write(unsigned char b);
+					pc98_port6A_command_write(0x68); // restore 128KB wrap
 
 					pc98_gdc[GDC_MASTER].force_fifo_complete();
 					pc98_gdc[GDC_SLAVE].force_fifo_complete();
@@ -3116,9 +3169,18 @@ static Bitu INT18_PC98_Handler(void) {
 					pc98_update_display_page_ptr();
 				}
 
+				tstat &= ~(0x10 | 0x01);
+				if (reg_bh & 2)
+					tstat |= 0x10;
+				else if ((reg_bh & 1) == 0)
+					tstat |= 0x01;
+
 				mem_writeb(0x597,b597);
 				mem_writeb(0x53C,tstat);
 				mem_writeb(0x54C,b54C);
+
+				pc98_update_text_lineheight_from_bda();
+				pc98_update_text_layer_lineheight_from_bda();
 
 				reg_ah = ret;
 			}
