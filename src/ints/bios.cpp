@@ -3067,6 +3067,7 @@ static Bitu INT18_PC98_Handler(void) {
 					else {
 						// according to Neko Project II, this case is ignored
 						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 640x480 mode with 24KHz hsync which is not supported by the platform");
+						ret = 1;
 					}
 
 					void PC98_Set31KHz_480line(void);
@@ -3080,6 +3081,9 @@ static Bitu INT18_PC98_Handler(void) {
 					pc98_gdc[GDC_MASTER].force_fifo_complete();
 					pc98_gdc[GDC_SLAVE].force_fifo_complete();
 
+					// according to real hardware, this also hides the text layer for some reason
+					pc98_gdc[GDC_MASTER].display_enable = false;
+						
 					/* clear PRAM, graphics */
 					for (unsigned int i=0;i < 16;i++)
 						pc98_gdc[GDC_SLAVE].param_ram[i] = 0x00;
@@ -3133,7 +3137,10 @@ static Bitu INT18_PC98_Handler(void) {
 
 					pc98_gdc[GDC_MASTER].force_fifo_complete();
 					pc98_gdc[GDC_SLAVE].force_fifo_complete();
-					
+
+					// according to real hardware, this also hides the text layer for some reason
+					pc98_gdc[GDC_MASTER].display_enable = false;
+
                     /* clear PRAM, graphics */
 					for (unsigned int i=0;i < 16;i++)
 						pc98_gdc[GDC_SLAVE].param_ram[i] = 0x00;
