@@ -6557,7 +6557,7 @@ private:
              *              10 = CLEAR
              *              11 = SET */
             mem_writeb(0x54D,
-					  (enable_pc98_256color ? 0x80 : 0x00) |
+					  //(enable_pc98_256color ? 0x80 : 0x00) |
 					  (enable_pc98_egc ? 0x40 : 0x00) |
 					  (gdc_5mhz_mode ? 0x20 : 0x00) |
 					  (gdc_5mhz_mode ? 0x04 : 0x00)); // EGC
