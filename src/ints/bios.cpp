@@ -3061,19 +3061,20 @@ static Bitu INT18_PC98_Handler(void) {
 
 				if ((reg_bh & 0x30) == 0x30) { // 640x480
 					if (reg_al & 4) { // 31KHz sync
-                        extern bool pc98_31khz_mode;
-						void PC98_Set31KHz_480line(void);
+                        extern bool pc98_31khz_mode;						
 						pc98_31khz_mode = true;
-						PC98_Set31KHz_480line();
-
-						void pc98_port6A_command_write(unsigned char b);
-						pc98_port6A_command_write(0x69); // disable 128KB wrap
 					}
 					else {
 						// according to Neko Project II, this case is ignored
 						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 640x480 mode with 24KHz hsync which is not supported by the platform");
 					}
 
+					void PC98_Set31KHz_480line(void);
+					PC98_Set31KHz_480line();
+
+					void pc98_port6A_command_write(unsigned char b);
+					pc98_port6A_command_write(0x69); // disable 128KB wrap
+						
 					b54C = (b54C & (~0x20)) + ((reg_al & 0x04) ? 0x20 : 0x00);
 
 					pc98_gdc[GDC_MASTER].force_fifo_complete();
@@ -3107,7 +3108,7 @@ static Bitu INT18_PC98_Handler(void) {
 						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 15KHz hsync which is not yet supported");
 					}
 					else {
-						if ((reg_al ^ (((b54C & 0x20) ? 3 : 2) << 2)) & 0x0C) { /* change in bits [3:2] */
+						if (((reg_al ^ (((b54C & 0x20) ? 3 : 2) << 2)) & 0x0C) || ((b54C & 0x40)^(reg_bl & 0x30))) { /* change in bits [3:2] */
 							LOG_MSG("PC-98 change in hsync frequency to %uHz",(reg_al & 0x04) ? 31 : 24);
 
 							if (reg_al & 4) {
