@@ -3060,7 +3060,7 @@ static Bitu INT18_PC98_Handler(void) {
 				LOG_MSG("PC-98 INT 18 AH=30h AL=%02Xh BH=%02Xh",reg_al,reg_bh);
 
 				if ((reg_bh & 0x30) == 0x30) { // 640x480
-					if (reg_al & 4) { // 31KHz sync
+					if ((reg_al & 0xC) == 0x0C) { // 31KHz sync
                         extern bool pc98_31khz_mode;						
 						pc98_31khz_mode = true;
 						
@@ -3145,7 +3145,7 @@ static Bitu INT18_PC98_Handler(void) {
 					pc98_gdc[GDC_SLAVE].force_fifo_complete();
 
 					// according to real hardware, this also hides the text layer for some reason
-					pc98_gdc[GDC_MASTER].display_enable = false;
+					//pc98_gdc[GDC_MASTER].display_enable = false;
 
                     /* clear PRAM, graphics */
 					for (unsigned int i=0;i < 16;i++)
