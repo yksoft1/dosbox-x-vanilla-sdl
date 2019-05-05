@@ -3145,7 +3145,7 @@ static Bitu INT18_PC98_Handler(void) {
 					pc98_gdc[GDC_SLAVE].force_fifo_complete();
 
 					// according to real hardware, this also hides the text layer for some reason
-					//pc98_gdc[GDC_MASTER].display_enable = false;
+					pc98_gdc[GDC_MASTER].display_enable = false;
 
                     /* clear PRAM, graphics */
 					for (unsigned int i=0;i < 16;i++)
