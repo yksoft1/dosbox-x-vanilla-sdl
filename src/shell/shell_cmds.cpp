@@ -903,20 +903,6 @@ struct copysource {
 
 
 void DOS_Shell::CMD_COPY(char * args) {
-	extern Bitu ZDRIVE_NUM;
-	const char root[4] = {(char)('A'+ZDRIVE_NUM),':','\\',0};
-	char cmd[20];
-	strcpy(cmd,root);
-	strcat(cmd,"COPY.EXE");
-	if (DOS_FindFirst(cmd,0xffff & ~DOS_ATTR_VOLUME)) {
-		StripSpaces(args);
-		while(ScanCMDBool(args,"T")) ; //Shouldn't this be A ?
-		ScanCMDBool(args,"Y");
-		ScanCMDBool(args,"-Y");
-		Execute(cmd,args);
-		return;
-	}
-
 	HELP("COPY");
 	static char defaulttarget[] = ".";
 	StripSpaces(args);
@@ -1138,6 +1124,12 @@ void DOS_Shell::CMD_COPY(char * args) {
 								failed |= DOS_ReadFile(sourceHandle,buffer,&toread);
 								failed |= DOS_WriteFile(targetHandle,buffer,&toread);
 							} while (toread==0x8000);
+
+							//Update target file timestamp.
+							Bit16u ftime, fdate;
+							if(DOS_GetFileDate(sourceHandle, &ftime, &fdate))
+								DOS_SetFileDate(targetHandle, ftime, fdate);
+
 							failed |= DOS_CloseFile(sourceHandle);
 							failed |= DOS_CloseFile(targetHandle);
 							WriteOut(" %s\n",name);
