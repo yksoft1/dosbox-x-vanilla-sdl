@@ -7039,13 +7039,13 @@ bool VM_Boot_DOSBox_Kernel() {
 		Reflect_Menu();
 #endif
 
-        void update_pc98_function_row(bool enable);
+        void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
 
 		void DRIVES_Startup(Section *s);
 		DRIVES_Startup(NULL);
 
         /* NEC's function key row seems to be deeply embedded in the CON driver. Am I wrong? */
-        if (IS_PC98_ARCH) update_pc98_function_row(true);
+        if (IS_PC98_ARCH) update_pc98_function_row(1);
 
 		DispatchVMEvent(VM_EVENT_DOS_INIT_KERNEL_READY); // <- kernel is ready
 
@@ -7193,9 +7193,19 @@ bool vid_pc98_5mhz_gdc_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * 
 	if (IS_PC98_ARCH) {
 		void gdc_5mhz_mode_update_vars(void);
 		extern bool gdc_5mhz_mode;
+		extern bool gdc_5mhz_mode_initial;
+		extern bool gdc_clock_1;
+		extern bool gdc_clock_2;
 
 		gdc_5mhz_mode = !gdc_5mhz_mode;
 		gdc_5mhz_mode_update_vars();
+
+		// this is the user's command to change GDC setting, so it should appear
+		// as if the initial setting in the dip switches
+		gdc_5mhz_mode_initial = gdc_5mhz_mode;
+
+		gdc_clock_1 = gdc_5mhz_mode;
+		gdc_clock_2 = gdc_5mhz_mode;
 
 		Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 		if (gdc_5mhz_mode)
@@ -7577,7 +7587,7 @@ void toggle_always_on_top(void) {
 }
 
 bool showdetails_menu_callback(DOSBoxMenu * const xmenu, DOSBoxMenu::item * const menuitem) {
-	menu.hidecycles = !menu.hidecycles;
+	menu.showrt = !(menu.hidecycles = !menu.hidecycles);
 	GFX_SetTitle(CPU_CycleMax, -1, -1, false);
 	mainMenu.get_item("showdetails").check(!menu.hidecycles).refresh_item(mainMenu);
 	return true;
@@ -8417,7 +8427,7 @@ int main(int argc, char* argv[]) {
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"sendkey_cad").set_text("Ctrl+Alt+Del").set_callback_function(sendkey_preset_menu_callback);
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"doublebuf").set_text("Double Buffering (Fullscreen)").set_callback_function(doublebuf_menu_callback).check(!!GetSetSDLValue(1, "desktop.doublebuf", 0));
 		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"alwaysontop").set_text("Always on top").set_callback_function(alwaysontop_menu_callback).check(is_always_on_top());
-		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"showdetails").set_text("Show details").set_callback_function(showdetails_menu_callback).check(!menu.hidecycles);
+		mainMenu.alloc_item(DOSBoxMenu::item_type_id,"showdetails").set_text("Show details").set_callback_function(showdetails_menu_callback).check(!menu.hidecycles && !menu.showrt);
 		
 		bool MENU_get_swapstereo(void);
 		mainMenu.get_item("mixer_swapstereo").check(MENU_get_swapstereo()).refresh_item(mainMenu);

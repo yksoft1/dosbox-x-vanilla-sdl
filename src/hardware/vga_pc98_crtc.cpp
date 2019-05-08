@@ -10,6 +10,7 @@
 #include "setup.h"
 #include "timer.h"
 #include "mem.h"
+#include "menu.h"
 #include "util_units.h"
 #include "control.h"
 #include "pc98_cg.h"
@@ -18,16 +19,28 @@
 #include "pc98_gdc_const.h"
 #include "mixer.h"
 
+void pc98_update_page_ptrs(void);
+
+extern bool                 pc98_31khz_mode;
 extern bool                 pc98_attr4_graphic;
+extern bool                 pc98_display_enable;
 extern bool                 pc98_graphics_hide_odd_raster_200line;
+extern bool                 pc98_crt_mode;      // see port 6Ah command 40h/41h.
+
+// TODO: Other parts that change gdc_5mhz_mode should update these too!
+bool                        gdc_clock_1 = false;
+bool                        gdc_clock_2 = false;
 
 bool                        gdc_5mhz_mode = false;
 bool                        enable_pc98_egc = true;
 bool                        enable_pc98_grcg = true;
 bool                        enable_pc98_16color = true;
 bool                        enable_pc98_256color = true;
+bool                        enable_pc98_256color_planar = true;
 bool                        enable_pc98_188usermod = true;
+bool                        pc98_256kb_boundary = false;         /* port 6Ah command 68h/69h */
 bool                        GDC_vsync_interrupt = false;
+bool                        gdc_5mhz_mode_initial = false;
 uint8_t                     GDC_display_plane_wait_for_vsync = false;
 uint8_t                     GDC_display_plane_pending = false;
 uint8_t                     GDC_display_plane = false;
@@ -43,7 +56,19 @@ extern unsigned char 		pc98_text_row_scanline_blank_at; 			/* port 74h */
 extern unsigned char        pc98_text_row_scroll_lines;        			/* port 76h */
 extern unsigned char        pc98_text_row_scroll_count_start;  			/* port 78h */
 extern unsigned char        pc98_text_row_scroll_num_lines;   		    /* port 7Ah */
-	
+
+// the guest can change the GDC to 5MHz by setting both GDC clock bits.
+// NTS: For whatever reason, Windows 3.1 will set the GDC to 5MHz when entering a DOS application fullscreen.
+void gdc_clock_check(void) {
+	bool nresult = gdc_clock_1 && gdc_clock_2;
+
+	if (gdc_5mhz_mode != nresult) {
+		gdc_5mhz_mode = nresult;
+		LOG_MSG("PC-98: Guest changed GDC clock to %s",gdc_5mhz_mode?"5MHz":"2.5MHz");
+		mainMenu.get_item("pc98_5mhz_gdc").check(gdc_5mhz_mode).refresh_item(mainMenu);
+	}
+}
+
 void pc98_crtc_write(Bitu port,Bitu val,Bitu iolen) {
     switch (port&0xE) {
 		case 0x00: // 0x70: Character row, CG start scanline
@@ -155,6 +180,7 @@ void pc98_port6A_command_write(unsigned char b) {
 				pc98_gdc_vramop &= ~(1 << VOPBIT_VGA);
 				VGA_SetupHandlers(); // memory mapping presented to the CPU changes
 				pc98_update_palette();
+				pc98_update_page_ptrs();
 			}
 			break;
 		case 0x21: // 256-color mode enable
@@ -162,8 +188,34 @@ void pc98_port6A_command_write(unsigned char b) {
 				pc98_gdc_vramop |= (1 << VOPBIT_VGA);
 				VGA_SetupHandlers(); // memory mapping presented to the CPU changes
 				pc98_update_palette();
+				pc98_update_page_ptrs();
 			}
 			break;
+		case 0x40: // CRT mode
+		case 0x41: // Plasma/LCD mode
+			pc98_crt_mode = (b&1)==0;
+			break;
+		case 0x68: // 128KB VRAM boundary
+			// TODO: Any conditions?
+			pc98_256kb_boundary = false;
+			VGA_SetupHandlers(); // memory mapping presented to the CPU changes
+			break;
+		 case 0x69: // 256KB VRAM boundary
+			// TODO: Any conditions?
+			pc98_256kb_boundary = true;
+			VGA_SetupHandlers(); // memory mapping presented to the CPU changes
+			break;
+		case 0x82: // GDC Clock #1   0=2.5MHz   1=5MHz
+		case 0x83:
+			gdc_clock_1 = !!(b&1);
+			gdc_clock_check();
+			break;
+		case 0x84: // GDC Clock #2   0=2.5MHz   1=5MHz
+		case 0x85:
+			gdc_clock_2 = !!(b&1);
+			gdc_clock_check();
+			break;
+		// TODO: 0x8E/0x8F VRAM use selection  0=PC-98 graphics  1=Cirrus Logic CL-GD graphics   (VRAM is shared?)
         default:
             LOG_MSG("PC-98 port 6Ah unknown command 0x%02x",b);
             break;
@@ -185,9 +237,74 @@ void pc98_port68_command_write(unsigned char b) {
         case 0x0B: // TODO
             // TODO
             break;
+		case 0x0E: // Display enable
+		case 0x0F:
+			pc98_display_enable = !!(b&1);
+			break;
         default:
             LOG_MSG("PC-98 port 68h unknown command 0x%02x",b);
             break;
     };
 }
 
+unsigned char sel_9a0 = 0;
+
+/* Port 0x9A0 readback.
+ * This is needed to report the GDC setting so that Windows 3.1 doesn't change the
+ * GDC to 5MHz arbitrarily and leave PC-98 games confused afterward */
+Bitu pc98_read_9a0(Bitu /*port*/,Bitu /*iolen*/) {
+	Bitu retval = 0;
+
+	/* bit 0 depends on what was selected by writing to port 9a0.
+	 * according to undocumented 9821 (not verified), unknown registers and 0x00 will return 0xff here. */
+	switch (sel_9a0) {
+		case 0x01:      // color/monochrome
+			if (true) retval |= 1u;//FIXME
+			break;
+		case 0x02:      // odd raster mask
+			if (pc98_graphics_hide_odd_raster_200line) retval |= 1u;
+			break;
+		case 0x03:      // display on/off
+			if (pc98_display_enable) retval |= 1u;
+			break;
+		case 0x04:      // palette mode (used by Sim City 2000)
+			if (pc98_gdc_vramop & (1 << VOPBIT_ANALOG)) retval |= 1u;
+			break;
+		default:
+			retval |= 0xFF;//FIXME: Is this true?
+			break;
+	};
+
+	/* bit 1: graphic GDC clock frequency as set in hardware at this moment */
+	if (gdc_5mhz_mode)
+		retval |= 0x02;
+
+	return retval;
+}
+
+void pc98_write_9a0(Bitu port,Bitu val,Bitu iolen) {
+	sel_9a0 = (unsigned char)val; // what to read back in bit 0
+}
+
+/* Port 0x9A8
+ *
+ * bit[1:0]
+ *     11 = invalid
+ *     10 = invalid
+ *     01 = 31.47KHz
+ *     00 = 24.83KHz */
+Bitu pc98_read_9a8(Bitu /*port*/,Bitu /*iolen*/) {
+	Bitu retval = 0;
+
+	if (pc98_31khz_mode)
+		retval |= 0x01;/*31khz*/
+
+	return retval;
+}
+
+void pc98_write_9a8(Bitu /*port*/,Bitu val,Bitu /*iolen*/) {
+	if ((val&1) != (pc98_31khz_mode?1:0)) {
+		pc98_31khz_mode = !!(val&1);
+		VGA_SetupDrawing(0);
+	}
+}

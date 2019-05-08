@@ -442,7 +442,7 @@ VideoModeBlock ModeList_MCGA[]={
 
 
 VideoModeBlock Hercules_Mode=
-{ 0x007  ,M_TEXT   ,640 ,400 ,80 ,25 ,8 ,14 ,1 ,0xB0000 ,0x1000 ,97 ,25  ,80 ,25  ,0	};
+{ 0x007  ,M_TEXT   ,640 ,350 ,80 ,25 ,8 ,14 ,1 ,0xB0000 ,0x1000 ,97 ,25  ,80 ,25  ,0	};
 
 VideoModeBlock PC98_Mode=
 { 0x000  ,M_PC98   ,640 ,400 ,80 ,25 ,8 ,14 ,1 ,0xA0000 ,0x1000 ,97 ,25  ,80 ,25  ,0	};
@@ -642,10 +642,19 @@ bool INT10_SetCurMode(void) {
 static void FinishSetMode(bool clearmem) {
 	/* Clear video memory if needs be */
 	if (clearmem) {
-		switch (CurMode->type) {
+        switch (CurMode->type) {
+		case M_TANDY16:
+			if ((machine==MCH_PCJR) && (CurMode->mode >= 9)) {
+				// PCJR cannot access the full 32k at 0xb800
+				for (Bit16u ct=0;ct<16*1024;ct++) {
+					// 0x1800 is the last 32k block in 128k, as set in the CRTCPU_PAGE register 
+					real_writew(0x1800,ct*2,0x0000);
+				}
+				break;
+			}
+			// fall-through
 		case M_CGA4:
 		case M_CGA2:
-		case M_TANDY16:
 			if (machine == MCH_MCGA && CurMode->mode == 0x11) {
 				for (Bit16u ct=0;ct<32*1024;ct++) {
 					real_writew( 0xa000,ct*2,0x0000);

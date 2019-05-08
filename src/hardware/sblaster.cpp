@@ -411,7 +411,7 @@ static INLINE void DSP_FlushData(void) {
 }
 
 static void DSP_DMA_CallBack(DmaChannel * chan, DMAEvent event) {
-	if (event==DMA_REACHED_TC) return;
+	if (chan!=sb.dma.chan || event==DMA_REACHED_TC) return;
 	else if (event==DMA_MASKED) {
 		if (sb.mode==MODE_DMA) {
 			sb.mode=MODE_DMA_MASKED;
@@ -1137,6 +1137,7 @@ static void DSP_Reset(void) {
 
 	DSP_ChangeMode(MODE_NONE);
 	DSP_FlushData();
+	sb.dsp.cmd=DSP_NO_COMMAND;
 	sb.dsp.cmd_len=0;
 	sb.dsp.in.pos=0;
 	sb.dsp.out.pos=0;
@@ -1198,6 +1199,16 @@ static void DSP_E2_DMA_CallBack(DmaChannel * /*chan*/, DMAEvent event) {
 		chan->Register_Callback(0);
 		chan->Write(1,&val);
 	}
+}
+
+static void DSP_ChangeRate(Bitu freq) {
+	if (sb.freq!=freq && sb.dma.mode!=DSP_DMA_NONE) {
+		sb.chan->FillUp();
+		sb.chan->SetFreq(freq / (sb.mixer.stereo ? 2 : 1));
+		sb.dma.rate=(freq*sb.dma.mul) >> SB_SH;
+		sb.dma.min=(sb.dma.rate*3)/1000;
+	}
+	sb.freq=freq;
 }
 
 Bitu DEBUG_EnableDebugger(void);
@@ -1664,14 +1675,9 @@ static void DSP_DoCommand(void) {
 		if (sb.midi == true) MIDI_RawOutByte(sb.dsp.in.data[0]);
 		break;
 	case 0x40:	/* Set Timeconstant */
-		sb.chan->FillUp();
-		sb.freq=(256000000 / (65536 - (sb.dsp.in.data[0] << 8)));
+		DSP_ChangeRate(256000000ul / (65536ul - ((unsigned int)sb.dsp.in.data[0] << 8u)));
 		sb.timeconst=sb.dsp.in.data[0];
         sb.freq_derived_from_tc=true;
-
-		/* Nasty kind of hack to allow runtime changing of frequency */
-		if (sb.dma.mode != DSP_DMA_NONE && sb.mode != MODE_DMA_PAUSE && sb.dma.autoinit)
-			DSP_PrepareDMA_Old(sb.dma.mode,sb.dma.autoinit,sb.dma.sign,sb.dsp.highspeed);
 
 		if (sb.ess_type != ESS_NONE) ESSUpdateFilterFromSB();
 		break;
@@ -1684,7 +1690,7 @@ static void DSP_DoCommand(void) {
 			DSP_SB16_ONLY;
 		}
 
-		sb.freq=(sb.dsp.in.data[0] << 8)  | sb.dsp.in.data[1];
+		DSP_ChangeRate(((unsigned int)sb.dsp.in.data[0] << 8u) | (unsigned int)sb.dsp.in.data[1]);
         sb.freq_derived_from_tc=false;
         sb16_8051_mem[0x13] = sb.freq & 0xffu;                  // rate low
         sb16_8051_mem[0x14] = (sb.freq >> 8u) & 0xffu;          // rate high
@@ -1915,7 +1921,8 @@ static void DSP_DoCommand(void) {
 		DSP_AddData(sb.dsp.test_register);;
 		break;
 	case 0xf2:	/* Trigger 8bit IRQ */
-		SB_RaiseIRQ(SB_IRQ_8);
+		//Small delay in order to emulate the slowness of the DSP, fixes Llamatron 2012 and Lemmings 3D
+		PIC_AddEvent(&DSP_RaiseIRQEvent,0.01f); 
 		break;
 	case 0xf3:   /* Trigger 16bit IRQ */
 		DSP_SB16_ONLY; 

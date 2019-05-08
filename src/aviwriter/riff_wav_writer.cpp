@@ -22,6 +22,14 @@
 #include "riff_wav_writer.h"
 #include "rawint.h"
 
+/* FIXME: I made the mistake of putting critical calls in assert() calls, which under MSVC++ may evaluate to nothing in Release builds */
+#if defined (_MSC_VER) || defined (__MINGW32__) 
+# ifdef NDEBUG
+#  undef assert
+#  define assert(x) x
+# endif
+#endif
+
 riff_wav_writer *riff_wav_writer_create() {
 	riff_wav_writer *w = (riff_wav_writer*)malloc(sizeof(riff_wav_writer));
 	if (w == NULL) return NULL;

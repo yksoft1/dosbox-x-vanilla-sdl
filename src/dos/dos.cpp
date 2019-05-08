@@ -35,6 +35,8 @@
 #include "serialport.h"
 #include "dos_network.h"
 
+Bitu INT29_HANDLER(void);
+
 int ascii_toupper(int c) {
     if (c >= 'a' && c <= 'z')
         return c + 'A' - 'a';
@@ -1847,28 +1849,6 @@ static Bitu DOS_27Handler(void) {
 	return CBRET_NONE;
 }
 
-extern DOS_Device *DOS_CON;
-
-/* PC-98 INT DC CL=0x10 AH=0x00 DL=char */
-void PC98_INTDC_WriteChar(unsigned char b) {
-	if (DOS_CON != NULL) {
-		Bit16u sz = 1;
-
-		DOS_CON->Write(&b,&sz);
-	}
-}
-
-static Bitu INT29_HANDLER(void) {
-    if (DOS_CON != NULL) {
-        unsigned char b = reg_al;
-        Bit16u sz = 1;
-
-        DOS_CON->Write(&b,&sz);
-    }
-
-    return CBRET_NONE;
-}
-
 static Bitu DOS_25Handler(void) {
 	if (Drives[reg_al] == 0){
 		reg_ax = 0x8002;
@@ -2387,6 +2367,13 @@ public:
 						dos.version.major, dos.version.minor);
 			}
 		}
+
+		if (IS_PC98_ARCH) {
+			void PC98_InitDefFuncRow(void);
+			PC98_InitDefFuncRow();
+			
+			real_writeb(0x60,0x113,0x01); /* 25-line mode */
+		}
 	}
 	~DOS(){
 		/* NTS: We do NOT free the drives! The OS may use them later! */
@@ -2431,7 +2418,7 @@ void DOS_ShutdownDrives() {
 	}
 }
 
-void update_pc98_function_row(bool enable);
+void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
 void DOS_UnsetupMemory();
 void DOS_Casemap_Free();
 
@@ -2441,7 +2428,7 @@ void DOS_DoShutDown() {
 		test = NULL;
 	}
 
-    if (IS_PC98_ARCH) update_pc98_function_row(false);
+    if (IS_PC98_ARCH) update_pc98_function_row(0);
 
     DOS_UnsetupMemory();
     DOS_Casemap_Free();

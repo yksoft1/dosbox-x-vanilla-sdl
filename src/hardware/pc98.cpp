@@ -4,11 +4,14 @@
 #include "video.h"
 #include "pic.h"
 #include "vga.h"
+#include "regs.h"
+#include "menu.h"
 #include "programs.h"
 #include "support.h"
 #include "setup.h"
 #include "timer.h"
 #include "mem.h"
+#include "callback.h"
 #include "util_units.h"
 #include "control.h"
 #include "mixer.h"
@@ -21,6 +24,7 @@
 using namespace std;
 
 extern bool gdc_5mhz_mode;
+extern bool gdc_5mhz_mode_initial;
 extern bool enable_pc98_egc;
 extern bool enable_pc98_grcg;
 
@@ -65,7 +69,7 @@ public:
 #endif
             }
             else if (arg == "gdc25") {
-                gdc_5mhz_mode = false;
+                gdc_5mhz_mode_initial = gdc_5mhz_mode = false;
                 gdc_5mhz_mode_update_vars();
                 LOG_MSG("PC-98: GDC is running at %.1fMHz.",gdc_5mhz_mode ? 5.0 : 2.5);
                 WriteOut("GDC is now running at 2.5MHz\n");
@@ -73,9 +77,10 @@ public:
 				int Reflect_Menu(void);
 				Reflect_Menu();
 #endif
+				mainMenu.get_item("pc98_5mhz_gdc").check(gdc_5mhz_mode).refresh_item(mainMenu);
             }
             else if (arg == "gdc50") {
-                gdc_5mhz_mode = true;
+                gdc_5mhz_mode_initial = gdc_5mhz_mode = true;
                 gdc_5mhz_mode_update_vars();
                 LOG_MSG("PC-98: GDC is running at %.1fMHz.",gdc_5mhz_mode ? 5.0 : 2.5);
                 WriteOut("GDC is now running at 5MHz\n");
@@ -83,7 +88,43 @@ public:
 				int Reflect_Menu(void);
 				Reflect_Menu();
 #endif
+				mainMenu.get_item("pc98_5mhz_gdc").check(gdc_5mhz_mode).refresh_item(mainMenu);
             }
+			else if (arg == "24khz") {
+				// use the BIOS INT 18h
+				reg_ah = 0x31;//get
+				CALLBACK_RunRealInt(0x18);
+
+				reg_ah = 0x30;//set
+				reg_al &= ~(3u << 2u);// clear bits [3:2]
+				reg_al |=   0x08;//24khz  bits [3:2] = 10
+				CALLBACK_RunRealInt(0x18);
+
+				reg_ah = 0x0c;//show text layer
+				CALLBACK_RunRealInt(0x18);
+
+				reg_ah = 0x11;//show cursor
+				CALLBACK_RunRealInt(0x18);
+
+				WriteOut("Hsync is now 24khz");
+			}
+			else if (arg == "31khz") {
+				// use the BIOS INT 18h
+				reg_ah = 0x31;//get
+				CALLBACK_RunRealInt(0x18);
+
+				reg_ah = 0x30;//set
+				reg_al |= 0x0C;//31khz  bits [3:2] = 11
+				CALLBACK_RunRealInt(0x18);
+
+				reg_ah = 0x0c;//show text layer
+				CALLBACK_RunRealInt(0x18);
+
+				reg_ah = 0x11;//show cursor
+				CALLBACK_RunRealInt(0x18);
+
+				WriteOut("Hsync is now 31khz");
+			}
             else {
                 WriteOut("Unknown switch %s",arg.c_str());
                 break;
@@ -98,6 +139,8 @@ public:
         WriteOut("  /gdc50     Set GDC to 5.0MHz\n");
         WriteOut("  /egc       Enable EGC\n");
         WriteOut("  /noegc     Disable EGC\n");
+		WriteOut("  /24khz     Set hsync to 24KHz\n");
+		WriteOut("  /31khz     Set hsync to 31KHz\n");
     }
 };
 

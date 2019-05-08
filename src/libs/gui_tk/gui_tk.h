@@ -2192,10 +2192,20 @@ public:
 	}
 
 	/// Handle keyboard input.
-	virtual bool keyDown(const Key &key) { return true; };
+	virtual bool keyDown(const Key &key) {
+		if (key.special == Key::Tab)
+			return false;
+
+		return true;
+	}
 
 	/// Handle keyboard input.
-	virtual bool keyUp(const Key &key) { return true; };
+	virtual bool keyUp(const Key &key) {
+		if (key.special == Key::Tab)
+			return false;
+
+		return true;
+	}
 
 	virtual void actionExecuted(ActionEventSource *src, const String &arg) {
 		std::list<ActionEventSource_Callback*>::iterator i = actionHandlers.begin();

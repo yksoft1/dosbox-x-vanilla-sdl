@@ -148,8 +148,20 @@ extern ZIPFile savestate_zip;
 
 using namespace std;
 
+Bitu pc98_read_9a8(Bitu /*port*/,Bitu /*iolen*/);
+void pc98_write_9a8(Bitu port,Bitu val,Bitu iolen);
+
+/* current dosplay page (controlled by A4h) */
+unsigned char*                      pc98_pgraph_current_display_page;
+/* current CPU page (controlled by A6h) */
+unsigned char*                      pc98_pgraph_current_cpu_page;
+
+bool                                pc98_crt_mode = false;      // see port 6Ah command 40h/41h.
+																// this boolean is the INVERSE of the bit.
+																	
 extern int                          vga_memio_delay_ns;
 extern bool                         gdc_5mhz_mode;
+extern bool                         gdc_5mhz_mode_initial;
 extern bool                         enable_pc98_egc;
 extern bool                         enable_pc98_grcg;
 extern bool                         enable_pc98_16color;
@@ -157,6 +169,7 @@ extern bool                         enable_pc98_256color;
 extern bool 						enable_pc98_188usermod;
 extern bool                         GDC_vsync_interrupt;
 extern uint8_t                      GDC_display_plane;
+extern bool                         pc98_256kb_boundary;
 
 extern uint8_t                      pc98_gdc_tile_counter;
 extern uint8_t                      pc98_gdc_modereg;
@@ -220,6 +233,8 @@ void pc98_port6A_command_write(unsigned char b);
 void pc98_wait_write(Bitu port,Bitu val,Bitu iolen);
 void pc98_crtc_write(Bitu port,Bitu val,Bitu iolen);
 void pc98_port68_command_write(unsigned char b);
+Bitu pc98_read_9a0(Bitu /*port*/,Bitu /*iolen*/);
+void pc98_write_9a0(Bitu port,Bitu val,Bitu iolen);
 Bitu pc98_crtc_read(Bitu port,Bitu iolen);
 Bitu pc98_a1_read(Bitu port,Bitu iolen);
 void pc98_a1_write(Bitu port,Bitu val,Bitu iolen);
@@ -650,6 +665,12 @@ void VGA_Reset(Section*) {
     gdc_5mhz_mode = section->Get_bool("pc-98 start gdc at 5mhz");
 	mainMenu.get_item("pc98_5mhz_gdc").check(gdc_5mhz_mode).refresh_item(mainMenu);
 	
+	// record the initial setting.
+	// the guest can change it later.
+	// however the 8255 used to hold dip switch settings needs to reflect the
+	// initial setting.
+	gdc_5mhz_mode_initial = gdc_5mhz_mode;
+
     enable_pc98_egc = section->Get_bool("pc-98 enable egc");
     enable_pc98_grcg = section->Get_bool("pc-98 enable grcg");
     enable_pc98_16color = section->Get_bool("pc-98 enable 16-color");
@@ -1052,6 +1073,7 @@ void VGA_OnEnterPC98(Section *sec) {
 
     /* 200-line tradition on PC-98 seems to be to render only every other scanline */
     pc98_graphics_hide_odd_raster_200line = true;
+	pc98_256kb_boundary = false;         /* port 6Ah command 68h/69h */
 
     // as a transition to PC-98 GDC emulation, move VGA alphanumeric buffer
     // down to A0000-AFFFFh.
@@ -1114,6 +1136,55 @@ void updateGDCpartitions4(bool enable) {
 	pc98_gdc[GDC_SLAVE].display_partition_mask = pc98_allow_4_display_partitions ? 3 : 1;
 }
 
+/* source: Neko Project II  GDC SYNC parameters for each mode */
+static const UINT8 gdc_defsyncm15[8] = {0x10,0x4e,0x07,0x25,0x0d,0x0f,0xc8,0x94};
+static const UINT8 gdc_defsyncs15[8] = {0x06,0x26,0x03,0x11,0x86,0x0f,0xc8,0x94};
+
+static const UINT8 gdc_defsyncm24[8] = {0x10,0x4e,0x07,0x25,0x07,0x07,0x90,0x65};
+static const UINT8 gdc_defsyncs24[8] = {0x06,0x26,0x03,0x11,0x83,0x07,0x90,0x65};
+
+static const UINT8 gdc_defsyncm31[8] = {0x10,0x4e,0x47,0x0c,0x07,0x0d,0x90,0x89};
+static const UINT8 gdc_defsyncs31[8] = {0x06,0x26,0x41,0x0c,0x83,0x0d,0x90,0x89};
+
+static const UINT8 gdc_defsyncm31_480[8] = {0x10,0x4e,0x4b,0x0c,0x03,0x06,0xe0,0x95};
+static const UINT8 gdc_defsyncs31_480[8] = {0x06,0x4e,0x4b,0x0c,0x83,0x06,0xe0,0x95};
+
+void PC98_Set24KHz(void) {
+	pc98_gdc[GDC_MASTER].write_fifo_command(0x0F/*sync DE=1*/);
+	for (unsigned int i=0;i < 8;i++)
+		pc98_gdc[GDC_MASTER].write_fifo_param(gdc_defsyncm24[i]);
+	pc98_gdc[GDC_MASTER].force_fifo_complete();
+
+	pc98_gdc[GDC_SLAVE].write_fifo_command(0x0F/*sync DE=1*/);
+	for (unsigned int i=0;i < 8;i++)
+		pc98_gdc[GDC_SLAVE].write_fifo_param(gdc_defsyncs24[i]);
+	pc98_gdc[GDC_SLAVE].force_fifo_complete();
+}
+
+void PC98_Set31KHz(void) {
+	pc98_gdc[GDC_MASTER].write_fifo_command(0x0F/*sync DE=1*/);
+	for (unsigned int i=0;i < 8;i++)
+		pc98_gdc[GDC_MASTER].write_fifo_param(gdc_defsyncm31[i]);
+	pc98_gdc[GDC_MASTER].force_fifo_complete();
+
+	pc98_gdc[GDC_SLAVE].write_fifo_command(0x0F/*sync DE=1*/);
+	for (unsigned int i=0;i < 8;i++)
+		pc98_gdc[GDC_SLAVE].write_fifo_param(gdc_defsyncs31[i]);
+	pc98_gdc[GDC_SLAVE].force_fifo_complete();
+}
+
+void PC98_Set31KHz_480line(void) {
+	pc98_gdc[GDC_MASTER].write_fifo_command(0x0F/*sync DE=1*/);
+	for (unsigned int i=0;i < 8;i++)
+		pc98_gdc[GDC_MASTER].write_fifo_param(gdc_defsyncm31_480[i]);
+	pc98_gdc[GDC_MASTER].force_fifo_complete();
+
+	pc98_gdc[GDC_SLAVE].write_fifo_command(0x0F/*sync DE=1*/);
+	for (unsigned int i=0;i < 8;i++)
+		pc98_gdc[GDC_SLAVE].write_fifo_param(gdc_defsyncs31_480[i]);
+	pc98_gdc[GDC_SLAVE].force_fifo_complete();
+}
+
 void VGA_OnEnterPC98_phase2(Section *sec) {
     VGA_SetupHandlers();
 
@@ -1131,6 +1202,14 @@ void VGA_OnEnterPC98_phase2(Section *sec) {
             IO_RegisterReadHandler(i+j,pc98_gdc_read,IO_MB);
         }
     }
+
+    /* initial implementation of I/O ports 9A0h-9AEh even */
+	IO_RegisterReadHandler(0x9A0,pc98_read_9a0,IO_MB);
+	IO_RegisterWriteHandler(0x9A0,pc98_write_9a0,IO_MB);
+
+    /* 9A8h which controls 24khz/31khz mode */
+	IO_RegisterReadHandler(0x9A8,pc98_read_9a8,IO_MB);
+	IO_RegisterWriteHandler(0x9A8,pc98_write_9a8,IO_MB);
 
     /* There are some font character RAM controls at 0xA1-0xA5 (odd)
      * combined with A4000-A4FFF. Found by unknown I/O tracing in DOSBox-X
@@ -1171,72 +1250,38 @@ void VGA_OnEnterPC98_phase2(Section *sec) {
     pc98_gdc[GDC_MASTER].master_sync = true;
     pc98_gdc[GDC_MASTER].display_enable = true;
     pc98_gdc[GDC_MASTER].row_height = 16;
-    pc98_gdc[GDC_MASTER].display_pitch = 80;
-    pc98_gdc[GDC_MASTER].active_display_words_per_line = 80;
+	pc98_gdc[GDC_MASTER].display_pitch = 80;
+	pc98_gdc[GDC_MASTER].active_display_words_per_line = 80;
     pc98_gdc[GDC_MASTER].display_partition_mask = 3;
-
-	//TODO: Find the correct GDC SYNC parameters in 31-KHz mode by inspecting a real PC-9821.
-	if(!pc98_31khz_mode) { 
-		pc98_gdc[GDC_MASTER].force_fifo_complete();
-		pc98_gdc[GDC_MASTER].write_fifo_command(0x0F/*sync DE=1*/);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x10);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x4E);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x07);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x25);
-		pc98_gdc[GDC_MASTER].force_fifo_complete();
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x07);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x07);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x90);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x65);
-		pc98_gdc[GDC_MASTER].force_fifo_complete();
-	} else { //Use 31KHz HS, VS, VFP, VBP
-		pc98_gdc[GDC_MASTER].force_fifo_complete();
-		pc98_gdc[GDC_MASTER].write_fifo_command(0x0F/*sync DE=1*/);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x10);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x4E);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x41);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x24);
-		pc98_gdc[GDC_MASTER].force_fifo_complete();
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x07); 
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x0C); 
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x90);
-		pc98_gdc[GDC_MASTER].write_fifo_param(0x8D);
-		pc98_gdc[GDC_MASTER].force_fifo_complete();		
-	}
 
     pc98_gdc[GDC_SLAVE].master_sync = false;
     pc98_gdc[GDC_SLAVE].display_enable = false;//FIXME
     pc98_gdc[GDC_SLAVE].row_height = 1;
-    pc98_gdc[GDC_SLAVE].display_pitch = 40;
-    pc98_gdc[GDC_SLAVE].active_display_words_per_line = 40; /* 40 16-bit WORDs per line */
+	pc98_gdc[GDC_SLAVE].display_pitch = gdc_5mhz_mode ? 80u : 40u;
     pc98_gdc[GDC_SLAVE].display_partition_mask = pc98_allow_4_display_partitions ? 3 : 1;
 
-	if(!pc98_31khz_mode) {
-		pc98_gdc[GDC_SLAVE].force_fifo_complete();
-		pc98_gdc[GDC_SLAVE].write_fifo_command(0x0F/*sync DE=1*/);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x02);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x26);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x03);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x11);
-		pc98_gdc[GDC_SLAVE].force_fifo_complete();
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x83);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x07);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x90);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x65);
-		pc98_gdc[GDC_SLAVE].force_fifo_complete();
-	} else { //Use 31KHz HS, VS, VFP, VBP
-		pc98_gdc[GDC_SLAVE].write_fifo_command(0x0F/*sync DE=1*/);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x02);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x26);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x40);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x10);
-		pc98_gdc[GDC_SLAVE].force_fifo_complete();
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x83);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x0C);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x90);
-		pc98_gdc[GDC_SLAVE].write_fifo_param(0x8D);
-		pc98_gdc[GDC_SLAVE].force_fifo_complete();
+	const unsigned char *gdcsync_m;
+	const unsigned char *gdcsync_s;
+
+	if (!pc98_31khz_mode) {
+		gdcsync_m = gdc_defsyncm24;
+		gdcsync_s = gdc_defsyncs24;
 	}
+	
+	else {
+		gdcsync_m = gdc_defsyncm31;
+		gdcsync_s = gdc_defsyncs31;
+	}
+
+	pc98_gdc[GDC_MASTER].write_fifo_command(0x0F/*sync DE=1*/);
+	for (unsigned int i=0;i < 8;i++)
+		pc98_gdc[GDC_MASTER].write_fifo_param(gdcsync_m[i]);
+	pc98_gdc[GDC_MASTER].force_fifo_complete();
+
+	pc98_gdc[GDC_SLAVE].write_fifo_command(0x0F/*sync DE=1*/);
+	for (unsigned int i=0;i < 8;i++)
+		pc98_gdc[GDC_SLAVE].write_fifo_param(gdcsync_s[i]);
+	pc98_gdc[GDC_SLAVE].force_fifo_complete();
 
     VGA_StartResize();
 }
