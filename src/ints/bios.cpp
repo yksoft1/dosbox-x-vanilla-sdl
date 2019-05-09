@@ -7194,7 +7194,7 @@ private:
 			LOG(LOG_MISC,LOG_DEBUG)("Registered ISA PnP read port at 0x%03x",ISA_PNP_WPORT);
 		}
 
-		if (!IS_PC98_ARCH && enable_integration_device) {
+		if (enable_integration_device) {
             /* integration device callout */
             if (dosbox_int_iocallout == IO_Callout_t_none)
                 dosbox_int_iocallout = IO_AllocateCallout(IO_TYPE_MB);
@@ -7204,12 +7204,16 @@ private:
             {
                 IO_CalloutObject *obj = IO_GetCallout(dosbox_int_iocallout);
                 if (obj == NULL) E_Exit("Failed to get dosbox integration IO callout");
-                obj->Install(0x28,IOMASK_Combine(IOMASK_FULL,IOMASK_Range(4)),dosbox_integration_cb_port_r,dosbox_integration_cb_port_w);
+
+				/* NTS: Ports 28h-2Bh conflict with extended DMA control registers in PC-98 mode.
+				 *      TODO: Move again, if DB28h-DB2Bh are taken by something standard on PC-98. */
+				obj->Install(IS_PC98_ARCH ? 0xDB28 : 0x28,
+					IOMASK_Combine(IOMASK_FULL,IOMASK_Range(4)),dosbox_integration_cb_port_r,dosbox_integration_cb_port_w);
                 IO_PutCallout(obj);
             }
 
             /* DOSBox integration device */
-            if (isapnpigdevice == NULL && enable_integration_device_pnp) {
+            if (!IS_PC98_ARCH && isapnpigdevice == NULL && enable_integration_device_pnp) {
                 isapnpigdevice = new ISAPnPIntegrationDevice;
                 ISA_PNP_devreg(isapnpigdevice);
             }
