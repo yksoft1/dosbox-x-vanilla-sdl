@@ -1116,6 +1116,12 @@ void DOS_Shell::CMD_COPY(char * args) {
 						//In concat mode. Open the target and seek to the eof
 						if (!oldsource.concat || (DOS_OpenFile(nameTarget,OPEN_READWRITE,&targetHandle) && 
 					        	                  DOS_SeekFile(targetHandle,&dummy,DOS_SEEK_END))) {
+
+							//Update target file timestamp.
+							Bit16u ftime, fdate;
+							if(DOS_GetFileDate(sourceHandle, &ftime, &fdate))
+								DOS_SetFileDate(targetHandle, ftime, fdate);
+
 							// Copy 
 							static Bit8u buffer[0x8000]; // static, otherwise stack overflow possible.
 							bool	failed = false;
@@ -1124,11 +1130,6 @@ void DOS_Shell::CMD_COPY(char * args) {
 								failed |= DOS_ReadFile(sourceHandle,buffer,&toread);
 								failed |= DOS_WriteFile(targetHandle,buffer,&toread);
 							} while (toread==0x8000);
-
-							//Update target file timestamp.
-							Bit16u ftime, fdate;
-							if(DOS_GetFileDate(sourceHandle, &ftime, &fdate))
-								DOS_SetFileDate(targetHandle, ftime, fdate);
 
 							failed |= DOS_CloseFile(sourceHandle);
 							failed |= DOS_CloseFile(targetHandle);
