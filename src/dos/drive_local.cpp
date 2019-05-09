@@ -1184,8 +1184,8 @@ bool localFile::Close() {
 //		Dos_SpecoalChar(fullname, true);
 		CROSS_FILENAME(fullname);
 		if (utime(fullname, &ftim)) {
-//			extern int errno; 
-//			LOG_MSG("Set time failed for %s (%s)", fullname, strerror(errno));
+			extern int errno; 
+			LOG_MSG("Set time failed for %s (%s)", fullname, strerror(errno));
 			return false;
 		}
 	}
