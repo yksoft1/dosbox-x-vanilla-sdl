@@ -1118,9 +1118,13 @@ void DOS_Shell::CMD_COPY(char * args) {
 					        	                  DOS_SeekFile(targetHandle,&dummy,DOS_SEEK_END))) {
 
 							//Update target file timestamp.
-							Bit16u ftime, fdate;
-							if(DOS_GetFileDate(sourceHandle, &ftime, &fdate))
-								DOS_SetFileDate(targetHandle, ftime, fdate);
+							Bit16u ftime=0, fdate=0;
+							if(DOS_GetFileDate(sourceHandle, &ftime, &fdate)) {
+								if(!DOS_SetFileDate(targetHandle, ftime, fdate))
+									LOG_MSG("Failed to set timestamp for %s", nameTarget);
+							}
+							else
+								LOG_MSG("Failed to get timestamp for %s", nameSource);
 
 							// Copy 
 							static Bit8u buffer[0x8000]; // static, otherwise stack overflow possible.
