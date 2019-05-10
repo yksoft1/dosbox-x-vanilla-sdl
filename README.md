@@ -18,3 +18,5 @@ Please refer to build_em.txt for instructions using Autoconf to build.
 Or use makefiles located in make_em and make_em-sdl1 directories. Remember to use "html" target to compile .bc file to HTML, JS and WASM files.
 
 Make sure that your Emscripten environment had SDL2 port installed, and its emcc supports -s USE_SDL argument before trying to build this code.
+
+Please note that this code may have some serious problems (resizing browser window destroys SDL surface) under Emscripten 1.38.20 or later with SDL2. Use older versions instead.
