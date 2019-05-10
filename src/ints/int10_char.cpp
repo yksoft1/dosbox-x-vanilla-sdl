@@ -272,7 +272,8 @@ void INT10_ScrollWindow(Bit8u rul,Bit8u cul,Bit8u rlr,Bit8u clr,Bit8s nlines,Bit
 				(real_readb(BIOSMEM_SEG, BIOSMEM_CRTCPU_PAGE) >> 3) & 0x7;
 
 			base = cpupage << 14;
-			base += page*real_readw(BIOSMEM_SEG,BIOSMEM_PAGE_SIZE);
+			if (page!=0xff)
+				base += page*real_readw(BIOSMEM_SEG,BIOSMEM_PAGE_SIZE);
 		}
 	}
 
@@ -610,10 +611,18 @@ void WriteChar(Bit16u col,Bit16u row,Bit8u page,Bit16u chr,Bit8u attr,bool useat
 			if (useattr) {
 				mem_writeb(where+0x2000,attr);
 			}
-#if 0
-            // seems to reenable the cursor, too
-            pc98_gdc[GDC_MASTER].cursor_enable = true;
-#endif
+
+			// some chars are double-wide and need to fill both cells.
+			// however xx08h-xx0Bh are single-wide encodings such as the
+			// single-wide box characters used by DOSBox-X's introductory
+			// message.
+			if ((chr & 0xFF00u) != 0u && (chr & 0xFCu) != 0x08u) {
+				where += 2u;
+				mem_writew(where,chr);
+				if (useattr) {
+					mem_writeb(where+0x2000,attr);
+				}
+			}
         }
         return;
 	case M_CGA4:

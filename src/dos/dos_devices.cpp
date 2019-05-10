@@ -217,8 +217,6 @@ void DOS_DelDevice(DOS_Device * dev) {
 	delete dev;
 }
 
-void update_pc98_function_row(bool enable);
-
 void DOS_ShutdownDevices(void) {
 	for (Bitu i=0;i < DOS_DEVICES;i++) {
 		if (Devices[i] != NULL) {
@@ -229,15 +227,15 @@ void DOS_ShutdownDevices(void) {
 	}
 
     /* NTS: CON counts as a device */
-    if (IS_PC98_ARCH) update_pc98_function_row(false);
+    if (IS_PC98_ARCH) update_pc98_function_row(0);
 }
 
 // INT 29h emulation needs to keep track of CON
-DOS_Device *DOS_CON = NULL;
+device_CON *DOS_CON = NULL;
 
 void DOS_SetupDevices(void) {
 	DOS_Device * newdev;
-	newdev=new device_CON(); DOS_CON = newdev;
+	DOS_CON=new device_CON(); newdev=DOS_CON;
 	DOS_AddDevice(newdev);
 	DOS_Device * newdev2;
 	newdev2=new device_NUL();
@@ -247,3 +245,57 @@ void DOS_SetupDevices(void) {
 	DOS_AddDevice(newdev3);
 }
 
+/* PC-98 INT DC CL=0x10 AH=0x00 DL=cjar */
+void PC98_INTDC_WriteChar(unsigned char b) {
+	if (DOS_CON != NULL) {
+		Bit16u sz = 1;
+
+		DOS_CON->Write(&b,&sz);
+	}
+}
+
+void INTDC_CL10h_AH03h(Bit16u raw) {
+	if (DOS_CON != NULL)
+		DOS_CON->INTDC_CL10h_AH03h(raw);
+}
+
+void INTDC_CL10h_AH04h(void) {
+	if (DOS_CON != NULL)
+		DOS_CON->INTDC_CL10h_AH04h();
+}
+
+void INTDC_CL10h_AH05h(void) {
+	if (DOS_CON != NULL)
+		DOS_CON->INTDC_CL10h_AH05h();
+}
+
+void INTDC_CL10h_AH06h(Bit16u count) {
+	if (DOS_CON != NULL)
+		DOS_CON->INTDC_CL10h_AH06h(count);
+}
+
+void INTDC_CL10h_AH07h(Bit16u count) {
+	if (DOS_CON != NULL)
+		DOS_CON->INTDC_CL10h_AH07h(count);
+}
+
+void INTDC_CL10h_AH08h(Bit16u count) {
+	if (DOS_CON != NULL)
+		DOS_CON->INTDC_CL10h_AH08h(count);
+}
+
+void INTDC_CL10h_AH09h(Bit16u count) {
+	if (DOS_CON != NULL)
+		DOS_CON->INTDC_CL10h_AH09h(count);
+}
+
+Bitu INT29_HANDLER(void) {
+	if (DOS_CON != NULL) {
+		unsigned char b = reg_al;
+		Bit16u sz = 1;
+
+		DOS_CON->Write(&b,&sz);
+	}
+
+	return CBRET_NONE;
+}

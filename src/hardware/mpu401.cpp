@@ -40,7 +40,7 @@ static void MPU401_EOIHandlerDispatch(void);
 #define MPU401_REVISION	0x01
 #define MPU401_QUEUE 32
 #define MPU401_TIMECONSTANT (60000000/1000.0f)
-#define MPU401_RESETBUSY 27.0f
+#define MPU401_RESETBUSY 14.0f
 
 enum MpuMode { M_UART,M_INTELLIGENT };
 enum MpuDataType {T_OVERFLOW,T_MARK,T_MIDI_SYS,T_MIDI_NORM,T_COMMAND};
@@ -642,19 +642,58 @@ public:
 		if (!MIDI_Available()) return;
 		/*Enabled and there is a Midi */
 		installed = true;
+		
+		Bitu baseio = section->Get_hex("mpubase");
+		if (baseio == 0) {
+			if (IS_PC98_ARCH)
+				baseio = 0xE0D0; // NTS: This is based on MMD.COM I/O probing behavior
+			else
+				baseio = 0x330;
+		}
 
+		if (baseio >= 0x80D2 && baseio <= 0x80DE) {
+			/* TODO: Replace low 8 bits with low 8 bits of Sound Blaster 16 I/O base */
+		}
+
+		if (IS_PC98_ARCH) {
+			if (baseio >= 0x80D2 && baseio <= 0x80DE)
+				{ /* OK */ }
+			else if (baseio >= 0xC000u || baseio <= 0xF8D0u)
+				{ /* OK */ }
+			else
+				baseio = 0xE0D0u;
+		}
+		else {
+			if (baseio < 0x300 || baseio > 0x360)
+				baseio = 0x330;
+		}
+
+		if (baseio >= 0x80D2 && baseio <= 0x80DE) {
+			LOG_MSG("MPU-401 Registering I/O ports as if SB16 MPU-401 at base %xh",(unsigned int)baseio);
+			/* SB16 mapping
+			 * C8D2h, C9D2h (PC-98) */
+			assert(IS_PC98_ARCH);
+			WriteHandler[0].Install(baseio       ,&MPU401_WriteData,IO_MB);
+			WriteHandler[1].Install(baseio+0x100u,&MPU401_WriteCommand,IO_MB);
+			ReadHandler[0].Install(baseio       ,&MPU401_ReadData,IO_MB);
+			ReadHandler[1].Install(baseio+0x100u,&MPU401_ReadStatus,IO_MB);
+		}
+		else {
+			if (IS_PC98_ARCH)
+				LOG_MSG("MPU-401 Registering I/O ports as if PC-98 MPU-401 at base %xh",(unsigned int)baseio);
+			else
+				LOG_MSG("MPU-401 Registering I/O ports as if IBM PC MPU-401 at base %xh",(unsigned int)baseio);
+			/* 330h, 331h (IBM PC)
+			 * E0D0h, E0D2h (PC-98) */
+			WriteHandler[0].Install(baseio                     ,&MPU401_WriteData,IO_MB);
+			WriteHandler[1].Install(baseio+(IS_PC98_ARCH?2u:1u),&MPU401_WriteCommand,IO_MB);
+			ReadHandler[0].Install(baseio                     ,&MPU401_ReadData,IO_MB);
+			ReadHandler[1].Install(baseio+(IS_PC98_ARCH?2u:1u),&MPU401_ReadStatus,IO_MB);
+		}
+	
         if (IS_PC98_ARCH) {
-            // NTS: This is based on MMD.COM I/O probing behavior
-            WriteHandler[0].Install(0xE0D0,&MPU401_WriteData,IO_MB);
-            WriteHandler[1].Install(0xE0D2,&MPU401_WriteCommand,IO_MB);
-            ReadHandler[0].Install(0xE0D0,&MPU401_ReadData,IO_MB);
-            ReadHandler[1].Install(0xE0D2,&MPU401_ReadStatus,IO_MB);
         }
         else {
-            WriteHandler[0].Install(0x330,&MPU401_WriteData,IO_MB);
-            WriteHandler[1].Install(0x331,&MPU401_WriteCommand,IO_MB);
-            ReadHandler[0].Install(0x330,&MPU401_ReadData,IO_MB);
-            ReadHandler[1].Install(0x331,&MPU401_ReadStatus,IO_MB);
             /*
                IO_RegisterWriteHandler(0x280,&IMF_Write,IO_MB);
                IO_RegisterWriteHandler(0x281,&IMF_Write,IO_MB);

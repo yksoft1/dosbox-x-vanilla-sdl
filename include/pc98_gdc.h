@@ -21,7 +21,8 @@ enum {
 	VOPBIT_EGC		= 1,
 	VOPBIT_GRCG		= 2,
 	VOPBIT_ANALOG	= 4,
-	VOPBIT_VGA		= 5
+	VOPBIT_VGA		= 5,
+	VOPBIT_PEGC_PLANAR = 6
 };
 
 union pc98_tile {
@@ -114,6 +115,7 @@ struct PC98_GDC_state {
     bool                    display_enable;
     bool                    cursor_enable;
     bool                    cursor_blink;
+    bool                    IM_bit;                     /* display partition, IM bit */
     bool                    idle;
 
     bool                    doublescan;                 /* 200-line as 400-line */

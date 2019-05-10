@@ -447,38 +447,43 @@ void DOS_Shell::CMD_HELP(char * args){
 void DOS_Shell::CMD_RENAME(char * args){
 	HELP("RENAME");
 	StripSpaces(args);
-	if(!*args) {SyntaxError();return;}
-	if((strchr(args,'*')!=NULL) || (strchr(args,'?')!=NULL) ) { WriteOut(MSG_Get("SHELL_CMD_NO_WILD"));return;}
+	if (!*args) {SyntaxError();return;}
+	if ((strchr(args,'*')!=NULL) || (strchr(args,'?')!=NULL) ) { WriteOut(MSG_Get("SHELL_CMD_NO_WILD"));return;}
 	char * arg1=StripWord(args);
+	StripSpaces(args);
+	if (!*args) {SyntaxError();return;}
 	char* slash = strrchr(arg1,'\\');
-	if(slash) { 
-		slash++;
+	if (slash) { 
 		/* If directory specified (crystal caves installer)
 		 * rename from c:\X : rename c:\abc.exe abc.shr. 
-		 * File must appear in C:\ */ 
+		 * File must appear in C:\ 
+		 * Ren X:\A\B C => ren X:\A\B X:\A\C */ 
 		
-		char dir_source[DOS_PATHLENGTH]={0};
+		char dir_source[DOS_PATHLENGTH + 4] = {0}; //not sure if drive portion is included in pathlength
 		//Copy first and then modify, makes GCC happy
-		strcpy(dir_source,arg1);
+		safe_strncpy(dir_source,arg1,DOS_PATHLENGTH + 4);
 		char* dummy = strrchr(dir_source,'\\');
-		*dummy=0;
-
-		if((strlen(dir_source) == 2) && (dir_source[1] == ':')) 
-			strcat(dir_source,"\\"); //X: add slash
-
-		char dir_current[DOS_PATHLENGTH + 1];
-		dir_current[0] = '\\'; //Absolute addressing so we can return properly
-		DOS_GetCurrentDir(0,dir_current + 1);
-		if(!DOS_ChangeDir(dir_source)) {
+		if (!dummy) { //Possible due to length
 			WriteOut(MSG_Get("SHELL_ILLEGAL_PATH"));
 			return;
 		}
-		DOS_Rename(slash,args);
-		DOS_ChangeDir(dir_current);
+		dummy++;
+		*dummy = 0;
+
+		//Maybe check args for directory, as I think that isn't allowed
+
+		//dir_source and target are introduced for when we support multiple files being renamed.
+		char target[DOS_PATHLENGTH+CROSS_LEN + 5] = {0};
+		strcpy(target,dir_source);
+		strncat(target,args,CROSS_LEN);
+
+		DOS_Rename(arg1,target);
+
 	} else {
 		DOS_Rename(arg1,args);
 	}
 }
+
 
 void DOS_Shell::CMD_ECHO(char * args){
 	if (!*args) {
@@ -905,20 +910,6 @@ struct copysource {
 
 
 void DOS_Shell::CMD_COPY(char * args) {
-	extern Bitu ZDRIVE_NUM;
-	const char root[4] = {(char)('A'+ZDRIVE_NUM),':','\\',0};
-	char cmd[20];
-	strcpy(cmd,root);
-	strcat(cmd,"COPY.EXE");
-	if (DOS_FindFirst(cmd,0xffff & ~DOS_ATTR_VOLUME)) {
-		StripSpaces(args);
-		while(ScanCMDBool(args,"T")) ; //Shouldn't this be A ?
-		ScanCMDBool(args,"Y");
-		ScanCMDBool(args,"-Y");
-		Execute(cmd,args);
-		return;
-	}
-
 	HELP("COPY");
 	static char defaulttarget[] = ".";
 	StripSpaces(args);
@@ -1031,13 +1022,16 @@ void DOS_Shell::CMD_COPY(char * args) {
 		if(temp && (temp == pathTarget || temp[-1] == '\\')) *temp = 0;//strip off *.* from target
 	
 		// add '\\' if target is a directory
+		bool target_is_file = true;
 		if (pathTarget[strlen(pathTarget)-1]!='\\') {
 			if (DOS_FindFirst(pathTarget,0xffff & ~DOS_ATTR_VOLUME)) {
 				dta.GetResult(name,size,date,time,attr);
-				if (attr & DOS_ATTR_DIRECTORY)	
+				if (attr & DOS_ATTR_DIRECTORY) {
 					strcat(pathTarget,"\\");
+					target_is_file = false;
+				}
 			}
-		};
+		} else target_is_file = false;
 
 		//Find first sourcefile
 		bool ret = DOS_FindFirst(const_cast<char*>(source.filename.c_str()),0xffff & ~DOS_ATTR_VOLUME);
@@ -1095,6 +1089,7 @@ void DOS_Shell::CMD_COPY(char * args) {
 			}
 		}
 
+		bool second_file_of_current_source = false;
 		while (ret) {
 			dta.GetResult(name,size,date,time,attr);
 
@@ -1117,12 +1112,18 @@ void DOS_Shell::CMD_COPY(char * args) {
 					}
 					
 					if (nameTarget[pathTargetLen-1]=='\\') strcat(nameTarget,name);
+
+					//Special variable to ensure that copy * a_file, where a_file is not a directory concats.
+					bool special = second_file_of_current_source && target_is_file;
+					second_file_of_current_source = true; 
+					if (special) oldsource.concat = true;
 					//Don't create a new file when in concat mode
 					if (oldsource.concat || DOS_CreateFile(nameTarget,0,&targetHandle)) {
 						Bit32u dummy=0;
 						//In concat mode. Open the target and seek to the eof
 						if (!oldsource.concat || (DOS_OpenFile(nameTarget,OPEN_READWRITE,&targetHandle) && 
 					        	                  DOS_SeekFile(targetHandle,&dummy,DOS_SEEK_END))) {
+
 							// Copy 
 							static Bit8u buffer[0x8000]; // static, otherwise stack overflow possible.
 							bool	failed = false;
@@ -1131,10 +1132,20 @@ void DOS_Shell::CMD_COPY(char * args) {
 								failed |= DOS_ReadFile(sourceHandle,buffer,&toread);
 								failed |= DOS_WriteFile(targetHandle,buffer,&toread);
 							} while (toread==0x8000);
+
+							//Update target file timestamp.
+							Bit16u ftime=0, fdate=0;
+							if(DOS_GetFileDate(sourceHandle, &ftime, &fdate)) {
+								if(!DOS_SetFileDate(targetHandle, ftime, fdate))
+									LOG_MSG("Failed to set timestamp for %s", nameTarget);
+							}
+							else
+								LOG_MSG("Failed to get timestamp for %s", nameSource);
+
 							failed |= DOS_CloseFile(sourceHandle);
 							failed |= DOS_CloseFile(targetHandle);
 							WriteOut(" %s\n",name);
-							if(!source.concat) count++; //Only count concat files once
+							if(!source.concat && !special) count++; //Only count concat files once
 						} else {
 							DOS_CloseFile(sourceHandle);
 							WriteOut(MSG_Get("SHELL_CMD_COPY_FAILURE"),const_cast<char*>(target.filename.c_str()));

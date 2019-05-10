@@ -154,12 +154,13 @@ enum FPU_Round {
 
 typedef struct {
 	FPU_Reg		regs[9];
+	FPU_P_Reg	p_regs[9];
 	FPU_Reg_80	regs_80[9];
 	bool		use80[9];		// if set, use the 80-bit precision version
 	FPU_Tag		tags[9];
 	Bit16u		cw,cw_mask_all;
 	Bit16u		sw;
-	Bitu		top;
+	Bit32u		top;
 	FPU_Round	round;
 } FPU_rec;
 

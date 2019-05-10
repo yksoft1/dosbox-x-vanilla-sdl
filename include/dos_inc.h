@@ -282,7 +282,7 @@ static INLINE Bit16u DOS_PackDate(Bit16u year,Bit16u mon,Bit16u day) {
 }
 
 /* fopen64, ftello64, fseeko64 */
-#if defined(__APPLE__) || defined(__MINGW32__)
+#if defined(__APPLE__) 
  #define fopen64 fopen
  #define ftello64 ftell
  #define fseeko64 fseek
@@ -295,6 +295,17 @@ static INLINE Bit16u DOS_PackDate(Bit16u year,Bit16u mon,Bit16u day) {
   #define ftello64 ftell
   #define fseeko64 fseek
  #endif
+#elif defined(__MINGW32__)
+
+  #ifndef _LARGEFILE64_SOURCE
+    #define _LARGEFILE64_SOURCE
+  #endif
+  #ifndef _FILE_OFFSET_BIT
+     #define _FILE_OFFSET_BIT 64
+  #endif
+		
+  #define fopen64 fopen
+//MinGW and mingw-w64 had their own fseeko64 and ftello64.
 #endif
 
 /* Dos Error Codes */
@@ -584,6 +595,7 @@ public:
 	void SetAttr(Bit8u attr);
 	void SetResultAttr(Bit8u attr);
 	bool Valid(void);
+	void ClearBlockRecsize(void);
 private:
 	bool extended;
 	PhysPt real_pt;

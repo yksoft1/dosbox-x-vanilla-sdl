@@ -52,6 +52,8 @@ double vga_fps = 70;
 double vga_mode_time_base = -1;
 int vga_mode_frames_since_time_base = 0;
 
+bool pc98_display_enable = true;
+
 extern bool vga_3da_polled;
 extern bool vga_page_flip_occurred;
 extern bool vga_enable_hpel_effects;
@@ -60,6 +62,7 @@ extern unsigned int vga_display_start_hretrace;
 extern float hretrace_fx_avg_weight;
 extern bool ignore_vblank_wraparound;
 extern bool vga_double_buffered_line_compare;
+extern bool pc98_crt_mode;      // see port 6Ah command 40h/41h.
 
 extern bool pc98_31khz_mode;
 
@@ -1205,6 +1208,9 @@ struct Text_Draw_State {
 
 Text_Draw_State pc98_text_draw;
 
+extern bool                 pc98_256kb_boundary;
+extern bool                 gdc_5mhz_mode;
+
 static Bit8u* VGA_PC98_Xlat32_Draw_Line(Bitu vidstart, Bitu line) {
 	// keep it aligned:
 	Bit32u* draw = ((Bit32u*)TempLine);
@@ -1213,10 +1219,14 @@ static Bit8u* VGA_PC98_Xlat32_Draw_Line(Bitu vidstart, Bitu line) {
     Bit16u chr = 0,attr = 0;
     Bit16u lineoverlay = 0; // vertical + underline overlay over the character cell, but apparently with a 4-pixel delay
     bool doublewide = false;
+	unsigned int disp_off = 0;
     unsigned char font,foreground;
     unsigned char fline;
     bool ok_raster = true;
 
+	// simulate 1-pixel shift in CRT mode by offsetting everything by 1 then rendering text without the offset
+	disp_off = pc98_crt_mode ? 1 : 0;
+		
     // 200-line modes: The BIOS or DOS game can elect to hide odd raster lines
     if (pc98_gdc[GDC_SLAVE].doublescan && pc98_graphics_hide_odd_raster_200line && pc98_allow_scanline_effect)
         ok_raster = (vga.draw.lines_done & 1) == 0;
@@ -1224,42 +1234,65 @@ static Bit8u* VGA_PC98_Xlat32_Draw_Line(Bitu vidstart, Bitu line) {
     // Graphic RAM layer (or blank)
     // Think of it as a 3-plane GRB color graphics mode, each plane is 1 bit per pixel.
     // G-RAM is addressed 16 bits per RAM cycle.
-    if (pc98_gdc[GDC_SLAVE].display_enable && ok_raster) {
-        unsigned int disp_base;
+    if (pc98_gdc[GDC_SLAVE].display_enable && ok_raster && pc98_display_enable) {
         Bit8u g8,r8,b8,e8;
 
-        draw = ((Bit32u*)TempLine);
+        draw = ((Bit32u*)TempLine) + disp_off;
         blocks = vga.draw.blocks;
-        vidmem = pc98_gdc[GDC_SLAVE].scan_address << 1;
-        disp_base = GDC_display_plane ? 0x20000U : 0x00000U;
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
+            /* WARNING: This code ASSUMES the port A4h page flip emulation will always
+			 *          set current_display_page to the same base graphics memory address
+			 *          when the 256KB boundary is enabled! If that assumption is WRONG,
+			 *          this code will read 256KB past the end of the buffer and possibly
+			 *          segfault. */
+			const unsigned long vmask = pc98_256kb_boundary ? 0x7FFFFu : 0x3FFFFu;
+			const unsigned char *s;
 
-        while (blocks--) {
-            // NTS: Testing on real hardware shows that, when you switch the GDC back to 8-color mode,
-            //      the 4th bitplane is no longer rendered.
-            if (gdc_analog)
-                e8 = vga.mem.linear[(vidmem & 0x7FFFU) + 0x20000U + disp_base]; /* E0000-E7FFF */
-            else
-                e8 = 0x00;
+			vidmem = (unsigned int)pc98_gdc[GDC_SLAVE].scan_address << (1u+3u); /* as if reading across bitplanes */
 
-            g8 = vga.mem.linear[(vidmem & 0x7FFFU) + 0x18000U + disp_base]; /* B8000-BFFFF */
-            r8 = vga.mem.linear[(vidmem & 0x7FFFU) + 0x10000U + disp_base]; /* B0000-B7FFF */
-            b8 = vga.mem.linear[(vidmem & 0x7FFFU) + 0x08000U + disp_base]; /* A8000-AFFFF */
+			while (blocks--) {
+				s = (const unsigned char*)(&pc98_pgraph_current_display_page[vidmem & vmask]);
+				for (unsigned char i=0;i < 8;i++) *draw++ = vga.dac.xlat32[*s++];
 
-            for (unsigned char i=0;i < 8;i++) {
-                foreground  = (e8 & 0x80) ? 8 : 0;
-                foreground += (g8 & 0x80) ? 4 : 0;
-                foreground += (r8 & 0x80) ? 2 : 0;
-                foreground += (b8 & 0x80) ? 1 : 0;
-
-                e8 <<= 1;
-                g8 <<= 1;
-                r8 <<= 1;
-                b8 <<= 1;
-
-                *draw++ = vga.dac.xlat32[foreground];
+                vidmem += 8;
             }
+        }
+		else {
+			/* NTS: According to real hardware, the 128KB/256KB boundary control bit ONLY works in 256-color mode.
+			 *      It has no effect in 8/16-color planar modes, which is probably why the BIOS on such systems
+			 *      will not allow a 640x480 16-color mode since the VRAM required exceeds 32KB per bitplane. */
+			const unsigned long vmask = 0x7FFFu;
 
-            vidmem++;
+			vidmem = (unsigned int)pc98_gdc[GDC_SLAVE].scan_address << 1u;
+
+			while (blocks--) {
+			// NTS: Testing on real hardware shows that, when you switch the GDC back to 8-color mode,
+			//      the 4th bitplane is no longer rendered.
+				if (gdc_analog)
+					e8 = pc98_pgraph_current_display_page[(vidmem & vmask) + pc98_pgram_bitplane_offset(3)]; /* E0000-E7FFF */
+				else
+					e8 = 0x00;
+
+				g8 = pc98_pgraph_current_display_page[(vidmem & vmask) + pc98_pgram_bitplane_offset(2)];   /* B8000-BFFFF */
+				r8 = pc98_pgraph_current_display_page[(vidmem & vmask) + pc98_pgram_bitplane_offset(1)];   /* B0000-B7FFF */
+				b8 = pc98_pgraph_current_display_page[(vidmem & vmask) + pc98_pgram_bitplane_offset(0)];   /* A8000-AFFFF */
+
+				for (unsigned char i=0;i < 8;i++) {
+					foreground  = (e8 & 0x80) ? 8 : 0;
+					foreground += (g8 & 0x80) ? 4 : 0;
+					foreground += (r8 & 0x80) ? 2 : 0;
+					foreground += (b8 & 0x80) ? 1 : 0;
+
+					e8 <<= 1;
+					g8 <<= 1;
+					r8 <<= 1;
+					b8 <<= 1;
+	
+					*draw++ = vga.dac.xlat32[foreground];
+				}
+	
+				vidmem++;
+			}
         }
     }
     else {
@@ -1267,10 +1300,10 @@ static Bit8u* VGA_PC98_Xlat32_Draw_Line(Bitu vidstart, Bitu line) {
     }
 
     // Text RAM layer
-    if (pc98_gdc[GDC_MASTER].display_enable) {
+    if (pc98_gdc[GDC_MASTER].display_enable && pc98_display_enable) {
 		Bitu gdcvidmem = pc98_gdc[GDC_MASTER].scan_address;
         
-		draw = ((Bit32u*)TempLine);
+		draw = ((Bit32u*)TempLine);/* without the disp_off, to emulate 1-pixel cutoff in CRT mode */
         blocks = vga.draw.blocks;
 		
 		vidmem = pc98_gdc[GDC_MASTER].scan_address;
@@ -1450,7 +1483,7 @@ interrupted_char_begin:
         }
     }
 
-	return TempLine;
+	return TempLine + (disp_off * 4);
 }
 
 static void VGA_ProcessSplit() {
@@ -1794,10 +1827,15 @@ static void VGA_PanningLatch(Bitu /*val*/) {
 	}
 }
 
+void pc98_update_display_page_ptr(void);
+
 static void VGA_VerticalTimer(Bitu /*val*/) {
 	double current_time = PIC_GetCurrentEventTime();
 
-    GDC_display_plane = GDC_display_plane_pending;
+    if (IS_PC98_ARCH) {
+		GDC_display_plane = GDC_display_plane_pending;
+		pc98_update_display_page_ptr();
+	}
 
 	vga.draw.delay.framestart = current_time; /* FIXME: Anyone use this?? If not, remove it */
 	vga_page_flip_occurred = false;
@@ -2490,7 +2528,13 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 		if (vga.seq.clocking_mode & 1 ) clock = oscclock/8; else clock = oscclock/9;
 		if (vga.mode==M_LIN15 || vga.mode==M_LIN16) clock *= 2;
 		/* Check for pixel doubling, master clock/2 */
-		if (vga.seq.clocking_mode & 0x8) clock /=2;
+        /* NTS: VGA 256-color mode has a dot clock NOT divided by two, because real hardware reveals
+		 *      that internally the card processes pixels 4 bits per cycle through a 8-bit shift
+		 *      register and a bit is set to latch the 8-bit value out to the DAC every other cycle. */
+		if (vga.seq.clocking_mode & 0x8) {
+			clock /=2;
+			oscclock /= 2;
+		}
 
 		if (svgaCard==SVGA_S3Trio) {
 			// support for interlacing used by the S3 BIOS and possibly other drivers
@@ -2555,20 +2599,33 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 		case MCH_CGA:
 		case TANDY_ARCH_CASE:
 			clock = (PIT_TICK_RATE*12)/8;
-			if (!(vga.tandy.mode_control & 1)) clock /= 2;
+			// FIXME: This is wrong for Tandy/PCjr 16-color modes and 640-wide 4-color mode
+			if (vga.mode != M_TANDY2) {
+				if (!(vga.tandy.mode_control & 1)) clock /= 2;
+			}
+			oscclock = clock * 8;
 			break;
         case MCH_MCGA:
             clock = 25175000 / 2 / 8;//FIXME: Guess. Verify
-            if (!(vga.tandy.mode_control & 1)) clock /= 2;
+			if (vga.mode != M_TANDY2) {
+				if (!(vga.tandy.mode_control & 1)) clock /= 2;
+			}
+			oscclock = clock * 2 * 8;
             break;
 		case MCH_MDA:
 		case MCH_HERC:
-			clock=16000000/8;
-			if (vga.herc.mode_control & 0x2) clock/=2;
+			oscclock=16257000;
+			if (vga.mode == M_HERC_GFX)
+				clock=oscclock/8;
+			else
+				clock=oscclock/9;
+
+			if (vga.herc.mode_control & 0x2) clock /= 2;
 
 			break;
 		default:
-			clock = (PIT_TICK_RATE*12);
+            clock = (PIT_TICK_RATE*12)/8;
+			oscclock = clock * 8;
 			break;
 		}
 		vga.draw.delay.hdend = hdend*1000.0/clock; //in milliseconds

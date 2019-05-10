@@ -1023,7 +1023,6 @@ void SHELL_Init() {
 	VFILE_RegisterBuiltinFileBlob(bfb_APPEND_EXE);
 	VFILE_RegisterBuiltinFileBlob(bfb_DEVICE_COM);
 	VFILE_RegisterBuiltinFileBlob(bfb_BUFFERS_COM);
-	VFILE_RegisterBuiltinFileBlob(bfb_COPY_EXE);
 
 #ifndef EMSCRIPTEN //Don't put those into wasm to decrease file size
     /* These are IBM PC/XT/AT ONLY. They will not work in PC-98 mode. */

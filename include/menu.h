@@ -208,6 +208,8 @@ class DOSBoxMenu {
 										needRedraw(false),
 										itemHilight(false),
 										itemVisible(false),
+										itemHoverDrawn(false),
+										itemHilightDrawn(false),
 										borderTop(false),
 #endif
 										type(item_type_id),
@@ -300,6 +302,8 @@ class DOSBoxMenu {
                 bool                    needRedraw;
                 bool                    itemHilight;
                 bool                    itemVisible;
+                bool                    itemHoverDrawn;
+                bool                    itemHilightDrawn;				
                 bool                    borderTop;
             public:
                 void                    removeFocus(DOSBoxMenu &menu);
@@ -325,7 +329,7 @@ class DOSBoxMenu {
             public:
 				inline bool checkResetRedraw(void) {
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-					bool r = needRedraw;
+					bool r = needRedraw || (itemHilight != itemHilightDrawn) || (itemHover != itemHoverDrawn);
 					needRedraw = false;
 					return r;
 #else
@@ -477,7 +481,8 @@ class DOSBoxMenu {
 										nsMenu(NULL),
 #endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-										screenWidth(320),
+										screenWidth(640),
+										screenHeight(400),
 										fontCharScale(1),
 										needRedraw(false),
 										menuVisible(false),
@@ -573,6 +578,7 @@ class DOSBoxMenu {
 		static const size_t				menuBarHeightBase;
         size_t                          menuBarHeight;
         size_t                          screenWidth;
+		size_t							screenHeight;
     public:
         static const size_t         fontCharWidthBase;
         static const size_t         fontCharHeightBase;

@@ -18,6 +18,7 @@
 
 
 #include <string.h>
+#include <stdlib.h>
 #include "dosbox.h"
 #include "mem.h"
 #include "inout.h"
@@ -163,6 +164,24 @@ bool SecondDMAControllerAvailable(void) {
 }
 
 static void DMA_Write_Port(Bitu port,Bitu val,Bitu /*iolen*/) {
+	if (IS_PC98_ARCH) {
+		// I/O port translation
+		if (port < 0x20u)
+			port >>= 1u;
+		else if (port < 0x28) {/* "bank" registers at 21h, 23h, 25h, 27h */
+			switch ((port>>1u)&3u) {
+				case 0:/* 21h DMA channel 1 */  port=0x83; break;
+				case 1:/* 23h DMA channel 2 */  port=0x81; break;
+				case 2:/* 25h DMA channel 3 */  port=0x82; break;
+				case 3:/* 27h DMA channel 0 */  port=0x87; break;
+				default: abort(); break;
+			}
+		}
+		else {
+			abort();
+		}
+	}
+		
 	if (port<0x10) {
 		/* write to the first DMA controller (channels 0-3) */
 		DmaControllers[0]->WriteControllerReg(port,val,1);
@@ -191,6 +210,24 @@ static void DMA_Write_Port(Bitu port,Bitu val,Bitu /*iolen*/) {
 }
 
 static Bitu DMA_Read_Port(Bitu port,Bitu iolen) {
+	if (IS_PC98_ARCH) {
+		// I/O port translation
+		if (port < 0x20u)
+			port >>= 1u;
+		else if (port < 0x28) {/* "bank" registers at 21h, 23h, 25h, 27h */
+			switch ((port>>1u)&3u) {
+				case 0:/* 21h DMA channel 1 */  port=0x83; break;
+				case 1:/* 23h DMA channel 2 */  port=0x81; break;
+				case 2:/* 25h DMA channel 3 */  port=0x82; break;
+				case 3:/* 27h DMA channel 0 */  port=0x87; break;
+				default: abort(); break;
+			}
+		}
+		else {
+			abort();
+		}
+	}
+
 	if (port<0x10) {
 		/* read from the first DMA controller (channels 0-3) */
 		return DmaControllers[0]->ReadControllerReg(port,iolen);
@@ -362,6 +399,8 @@ DmaChannel::DmaChannel(Bit8u num, bool dma16) {
 	autoinit = false;
 	tcount = false;
 	request = false;
+	
+	page_bank_increment_wraparound = 0u;
 }
 
 Bitu DmaChannel::Read(Bitu want, Bit8u * buffer) {
@@ -485,11 +524,6 @@ void DMA_Reset(Section* /*sec*/) {
 
 	DMA_FreeControllers();
 
-    // FIXME: For now, disable DMA emulation entirely for PC-98.
-    //        The 8237 is there, but on entirely different I/O ports, and only one DMA controller (0-3).
-    //        DMA emulation is less important to port than other things like interrupt handling.
-    if (IS_PC98_ARCH) return;
-
 	// LOG
 	LOG(LOG_MISC,LOG_DEBUG)("DMA_Reset(): reinitializing DMA controller(s)");
 
@@ -505,6 +539,16 @@ void DMA_Reset(Section* /*sec*/) {
 	enable_dma_extra_page_registers = section->Get_bool("enable dma extra page registers");
 	dma_page_register_writeonly = section->Get_bool("dma page registers write-only");
 	allow_decrement_mode = section->Get_bool("allow dma address decrement");
+
+	if (IS_PC98_ARCH) // DMA 4-7 do not exist on PC-98
+		enable_2nd_dma = false;
+
+	if (machine == MCH_PCJR) {
+		LOG(LOG_MISC,LOG_DEBUG)("DMA is disabled in PCjr mode");
+		enable_1st_dma = false;
+		enable_2nd_dma = false;
+		return;
+	}
 
     {
         std::string s = section->Get_string("enable 128k capable 16-bit dma");
@@ -533,8 +577,8 @@ void DMA_Reset(Section* /*sec*/) {
 
 		if (enable_1st_dma) {
 			/* install handler for first DMA controller ports */
-			DmaControllers[0]->DMA_WriteHandler[i].Install(i,DMA_Write_Port,mask);
-			DmaControllers[0]->DMA_ReadHandler[i].Install(i,DMA_Read_Port,mask);
+			DmaControllers[0]->DMA_WriteHandler[i].Install(IS_PC98_ARCH ? ((i * 2u) + 1u) : i,DMA_Write_Port,mask);
+			DmaControllers[0]->DMA_ReadHandler[i].Install(IS_PC98_ARCH ? ((i * 2u) + 1u) : i,DMA_Read_Port,mask);
 		}
 		if (enable_2nd_dma) {
 			/* install handler for second DMA controller ports */
@@ -544,9 +588,18 @@ void DMA_Reset(Section* /*sec*/) {
 	}
 
 	if (enable_1st_dma) {
-		/* install handlers for ports 0x81-0x83 (on the first DMA controller) */
-		DmaControllers[0]->DMA_WriteHandler[0x10].Install(0x80,DMA_Write_Port,IO_MB,8);
-		DmaControllers[0]->DMA_ReadHandler[0x10].Install(0x80,DMA_Read_Port,IO_MB,8);
+		if (IS_PC98_ARCH) {
+			/* install handlers for ports 0x21-0x27 odd */
+			for (unsigned int i=0;i < 4;i++) {
+				DmaControllers[0]->DMA_WriteHandler[0x10+i].Install(0x21+(i*2u),DMA_Write_Port,IO_MB,1);
+				DmaControllers[0]->DMA_ReadHandler[0x10+i].Install(0x21+(i*2u),DMA_Read_Port,IO_MB,1);
+			}
+		}
+		else {
+			/* install handlers for ports 0x81-0x83 (on the first DMA controller) */
+			DmaControllers[0]->DMA_WriteHandler[0x10].Install(0x80,DMA_Write_Port,IO_MB,8);
+			DmaControllers[0]->DMA_ReadHandler[0x10].Install(0x80,DMA_Read_Port,IO_MB,8);
+		}
 	}
 
 	if (enable_2nd_dma) {

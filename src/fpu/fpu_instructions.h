@@ -44,20 +44,18 @@ static void FPU_FNOP(void){
 	return;
 }
 
-static void FPU_PUSH(double in){
-	TOP = (TOP - 1) &7;
-	//actually check if empty
-	fpu.tags[TOP] = TAG_Valid;
-	fpu.regs[TOP].d = in;
-	fpu.use80[TOP] = false; // the value given is already 64-bit precision, it's useless to emulate 80-bit precision
-//	LOG(LOG_FPU,LOG_ERROR)("Pushed at %d  %g to the stack",newtop,in);
-	return;
-}
-
 static void FPU_PREP_PUSH(void){
 	TOP = (TOP - 1) &7;
 	fpu.tags[TOP] = TAG_Valid;
 	fpu.use80[TOP] = false; // the value given is already 64-bit precision, it's useless to emulate 80-bit precision
+}
+
+static void FPU_PUSH(double in){
+	FPU_PREP_PUSH();
+	fpu.regs[TOP].d = in;
+	fpu.use80[TOP] = false; // the value given is already 64-bit precision, it's useless to emulate 80-bit precision
+//	LOG(LOG_FPU,LOG_ERROR)("Pushed at %d  %g to the stack",newtop,in);
+	return;
 }
 
 static void FPU_FPOP(void){

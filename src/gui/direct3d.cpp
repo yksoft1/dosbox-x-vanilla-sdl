@@ -810,8 +810,13 @@ pass2:
     if(GCC_UNLIKELY(hr=pD3DDevice9->Present(NULL, NULL, NULL, NULL)) != D3D_OK) {
 	switch(hr) {
 	    case D3DERR_DEVICELOST:
-		// This will be handled when SDL catches alt-tab and resets GFX
-		return true;
+        LOG_MSG("D3D:Driver device lost");
+        if (!deviceLost) {
+            deviceLost = true;
+            void RENDER_CallBack(GFX_CallBackFunctions_t f);
+            RENDER_CallBack(GFX_CallBackRedraw);
+        }
+		return false;
 		break;
 	    case D3DERR_DRIVERINTERNALERROR:
 		LOG_MSG("D3D:Driver internal error");
