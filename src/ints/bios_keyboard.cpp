@@ -1292,6 +1292,9 @@ static Bitu IRQ1_Handler_PC98(void) {
             case 0x72: // kana. do nothing
                 break;
 
+			case 0x73: // graph. do nothing
+				break;
+
             case 0x74: // left/right ctrl. do nothing
                 break;
 
