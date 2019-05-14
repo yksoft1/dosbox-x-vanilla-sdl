@@ -34,7 +34,7 @@
 #include "hardware.h"
 #include "timer.h"
 
-#define SYSEX_SIZE 1024
+#define SYSEX_SIZE 8192
 #define RAWBUF	1024
 
 Bit8u MIDI_evt_len[256] = {
