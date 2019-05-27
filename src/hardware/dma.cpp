@@ -28,6 +28,14 @@
 #include "setup.h"
 #include "control.h"
 
+#ifdef _MSC_VER
+# define MIN(a,b) ((a) < (b) ? (a) : (b))
+# define MAX(a,b) ((a) > (b) ? (a) : (b))
+#else
+# define MIN(a,b) std::min(a,b)
+# define MAX(a,b) std::max(a,b)
+#endif
+
 bool has_pcibus_enable(void);
 
 DmaController *DmaControllers[2]={NULL};
@@ -53,89 +61,73 @@ static void UpdateEMSMapping(void) {
 	}
 }
 
-/* read a block from physical memory */
-static void DMA_BlockRead(PhysPt spage,PhysPt offset,void * data,Bitu size,Bit8u dma16,const Bit32u DMA16_ADDRMASK) {
-	Bit8u * write=(Bit8u *) data;
-	Bitu highpart_addr_page = spage>>12;
+enum {
+    DMA_INCREMENT,
+    DMA_DECREMENT
+};
+
+/* DMA block anti-copypasta common code */
+template <const unsigned int dma_mode> static inline void DMA_BlockReadCommonSetup(
+    /*output*/PhysPt &o_xfer,unsigned int &o_size,
+     /*input*/PhysPt const spage,PhysPt offset,Bitu size,const Bit8u dma16,const Bit32u DMA16_ADDRMASK) {
+    assert(size != 0u);
+
+	const Bitu highpart_addr_page = spage>>12;
 	size <<= dma16;
 	offset <<= dma16;
-	Bit32u dma_wrap = (((0xffff<<dma16)+dma16)&DMA16_ADDRMASK) | dma_wrapping;
-	for ( ; size ; size--, offset++) {
-		offset &= dma_wrap;
-		Bitu page = highpart_addr_page+(offset >> 12);
-		/* care for EMS pageframe etc. */
-		if (page < EMM_PAGEFRAME4K) page = paging.firstmb[page];
-		else if (page < EMM_PAGEFRAME4K+0x10) page = ems_board_mapping[page];
-		else if (page < LINK_START) page = paging.firstmb[page];
-		*write++=phys_readb(page*4096 + (offset & 4095));
-	}
+	const Bit32u dma_wrap = (((0xfffful << dma16) + dma16)&DMA16_ADDRMASK) | dma_wrapping;
+    offset &= dma_wrap;
+    Bitu page = highpart_addr_page+(offset >> 12); /* page */
+    offset &= 0xFFFu; /* 4KB offset in page */
+    /* care for EMS pageframe etc. */
+    if (page < EMM_PAGEFRAME4K) page = paging.firstmb[page];
+    else if (page < EMM_PAGEFRAME4K+0x10) page = ems_board_mapping[page];
+    else if (page < LINK_START) page = paging.firstmb[page];
+    /* check our work, should not cross 4KB, then transfer linearly. Do not remove {} curly braces, assert() may compile to nothing. */
+    if (dma_mode == DMA_INCREMENT)
+        { assert((offset + size - (1u << dma16)) < 4096); } /* should stop with offset at or before first byte of next page */
+    else if (dma_mode == DMA_DECREMENT)
+        { assert(offset >= (size - (1u << dma16))); } /* should stop with offset at or after the last byte of the previous page */
+    /* result */
+    o_xfer = (page * 4096u) + offset;
+    o_size = (unsigned int)size;
 }
 
-/* decrement mode. Needed for EMF Internal Damage and other weird demo programs that like to transfer
- * audio data backwards to the sound card.
- *
- * NTS: Don't forget, from 8237 datasheet: The DMA chip transfers a byte (or word if 16-bit) of data,
- *      and THEN increments or decrements the address. So in decrement mode, "address" is still the
- *      first byte before decrementing. */
-static void DMA_BlockReadBackwards(PhysPt spage,PhysPt offset,void * data,Bitu size,Bit8u dma16,const Bit32u DMA16_ADDRMASK) {
-	Bit8u * write=(Bit8u *) data;
-	Bitu highpart_addr_page = spage>>12;
+/* read a block from physical memory.
+ * This code assumes new DMA read code that transfers 4KB at a time (4KB byte or 2KB word) therefore it is safe
+ * to compute the page and offset once and transfer in a tight loop. */
+template <const unsigned int dma_mode> static void DMA_BlockRead4KB(const PhysPt spage,const PhysPt offset,void * data,const Bitu size,const Bit8u dma16,const Bit32u DMA16_ADDRMASK) {
+	Bit8u *write = (Bit8u*)data;
+    unsigned int o_size;
+    PhysPt xfer;
 
-	size <<= dma16;
-	offset <<= dma16;
-	Bit32u dma_wrap = (((0xffff<<dma16)+dma16)&DMA16_ADDRMASK) | dma_wrapping;
-
-	if (dma16) {
-		/* I'm going to assume by how ISA DMA works that you can't just copy bytes backwards,
-		 * because 16-bit DMA means one 16-bit WORD transferred per DMA memory cycle on the ISA Bus.
-		 *
-		 * I have yet to see a DOS program use this mode of ISA DMA, so this remains unimplemented.
-		 *
-		 * Data to transfer from the device:
-		 *
-		 * 0x1234 0x5678 0x9ABC 0xDEF0
-		 *
-		 * Becomes stored to memory by DMA like this (one 16-bit WORD at a time):
-		 *
-		 * 0xDEF0 0x9ABC 0x5678 0x1234
-		 *
-		 * it does NOT become:
-		 *
-		 * 0xF0DE 0xBC9A 0x7856 0x3412 */
-		LOG(LOG_DMACONTROL,LOG_WARN)("16-bit decrementing DMA not implemented");
-	}
-	else {
-		for ( ; size ; size--, offset--) {
-			offset &= dma_wrap;
-			Bitu page = highpart_addr_page+(offset >> 12);
-			/* care for EMS pageframe etc. */
-			if (page < EMM_PAGEFRAME4K) page = paging.firstmb[page];
-			else if (page < EMM_PAGEFRAME4K+0x10) page = ems_board_mapping[page];
-			else if (page < LINK_START) page = paging.firstmb[page];
-			*write++=phys_readb(page*4096 + (offset & 4095));
-		}
-	}
+    DMA_BlockReadCommonSetup<dma_mode>(/*&*/xfer,/*&*/o_size,spage,offset,size,dma16,DMA16_ADDRMASK);
+    if (!dma16) { // 8-bit
+        for ( ; o_size ; o_size--, (dma_mode == DMA_DECREMENT ? (xfer--) : (xfer++)) ) *write++ = phys_readb(xfer);
+    }
+    else { // 16-bit
+        assert((o_size & 1u) == 0);
+        assert((xfer   & 1u) == 0);
+        for ( ; o_size ; o_size -= 2, (dma_mode == DMA_DECREMENT ? (xfer -= 2) : (xfer += 2)), write += 2 ) host_writew(write,phys_readw(xfer));
+    }
 }
 
-/* write a block into physical memory */
-static void DMA_BlockWrite(PhysPt spage,PhysPt offset,void * data,Bitu size,Bit8u dma16,const Bit32u DMA16_ADDRMASK) {
-	Bit8u * read=(Bit8u *) data;
-	Bitu highpart_addr_page = spage>>12;
-	size <<= dma16;
-	offset <<= dma16;
-	Bit32u dma_wrap = (((0xffff<<dma16)+dma16)&DMA16_ADDRMASK) | dma_wrapping;
-	for ( ; size ; size--, offset++) {
-		if (offset>(dma_wrapping<<dma16)) {
-			LOG_MSG("DMA segbound wrapping (write): %x:%x size %x [%x] wrap %x",(int)spage,(int)offset,(int)size,dma16,(int)dma_wrapping);
-		}
-		offset &= dma_wrap;
-		Bitu page = highpart_addr_page+(offset >> 12);
-		/* care for EMS pageframe etc. */
-		if (page < EMM_PAGEFRAME4K) page = paging.firstmb[page];
-		else if (page < EMM_PAGEFRAME4K+0x10) page = ems_board_mapping[page];
-		else if (page < LINK_START) page = paging.firstmb[page];
-		phys_writeb(page*4096 + (offset & 4095), *read++);
-	}
+/* write a block into physical memory.
+ * assume caller has already clipped the transfer to stay within a 4KB page. */
+template <const unsigned int dma_mode> static void DMA_BlockWrite4KB(PhysPt spage,PhysPt offset,const void * data,Bitu size,Bit8u dma16,const Bit32u DMA16_ADDRMASK) {
+    const Bit8u *read = (const Bit8u*)data;
+    unsigned int o_size;
+    PhysPt xfer;
+
+    DMA_BlockReadCommonSetup<dma_mode>(/*&*/xfer,/*&*/o_size,spage,offset,size,dma16,DMA16_ADDRMASK);
+    if (!dma16) { // 8-bit
+        for ( ; o_size ; o_size--, (dma_mode == DMA_DECREMENT ? (xfer--) : (xfer++)) ) phys_writeb(xfer,*read++);
+    }
+    else { // 16-bit
+        assert((o_size & 1u) == 0);
+        assert((xfer   & 1u) == 0);
+        for ( ; o_size ; o_size -= 2, (dma_mode == DMA_DECREMENT ? (xfer -= 2) : (xfer += 2)), read += 2 ) phys_writew(xfer,host_readw(read));
+    }
 }
 
 DmaChannel * GetDMAChannel(Bit8u chan) {
@@ -163,25 +155,38 @@ bool SecondDMAControllerAvailable(void) {
 	else return false;
 }
 
+static Bit8u pc98_port_29h = 0;
+
 static void DMA_Write_Port(Bitu port,Bitu val,Bitu /*iolen*/) {
-	if (IS_PC98_ARCH) {
-		// I/O port translation
-		if (port < 0x20u)
-			port >>= 1u;
-		else if (port < 0x28) {/* "bank" registers at 21h, 23h, 25h, 27h */
-			switch ((port>>1u)&3u) {
-				case 0:/* 21h DMA channel 1 */  port=0x83; break;
-				case 1:/* 23h DMA channel 2 */  port=0x81; break;
-				case 2:/* 25h DMA channel 3 */  port=0x82; break;
-				case 3:/* 27h DMA channel 0 */  port=0x87; break;
-				default: abort(); break;
-			}
-		}
-		else {
-			abort();
-		}
-	}
-		
+    if (IS_PC98_ARCH) {
+        // I/O port translation
+        if (port < 0x20u)
+            port >>= 1u;
+        else if (port < 0x28) {/* "bank" registers at 21h, 23h, 25h, 27h */
+            switch ((port>>1u)&3u) {
+                case 0:/* 21h DMA channel 1 */  port=0x83; break;
+                case 1:/* 23h DMA channel 2 */  port=0x81; break;
+                case 2:/* 25h DMA channel 3 */  port=0x82; break;
+                case 3:/* 27h DMA channel 0 */  port=0x87; break;
+                default: abort(); break;
+            }
+        }
+        else if (port == 0x29) { /* auto bank increment */
+            pc98_port_29h = (Bit8u)val;
+            DmaControllers[0]->GetChannel(val & 3)->page_bank_increment_wraparound =
+                (val & 0x08 ? 0xF0 : 0x00) +
+                (val & 0x04 ? 0x0F : 0x00);
+#if 0
+            LOG_MSG("DMA channel %u page auto increment mask %x",
+                (unsigned int)(val&3u),
+                DmaControllers[0]->GetChannel(val & 3)->page_bank_increment_wraparound);
+#endif
+        }
+        else {
+            abort();
+        }
+    }
+
 	if (port<0x10) {
 		/* write to the first DMA controller (channels 0-3) */
 		DmaControllers[0]->WriteControllerReg(port,val,1);
@@ -210,23 +215,26 @@ static void DMA_Write_Port(Bitu port,Bitu val,Bitu /*iolen*/) {
 }
 
 static Bitu DMA_Read_Port(Bitu port,Bitu iolen) {
-	if (IS_PC98_ARCH) {
-		// I/O port translation
-		if (port < 0x20u)
-			port >>= 1u;
-		else if (port < 0x28) {/* "bank" registers at 21h, 23h, 25h, 27h */
-			switch ((port>>1u)&3u) {
-				case 0:/* 21h DMA channel 1 */  port=0x83; break;
-				case 1:/* 23h DMA channel 2 */  port=0x81; break;
-				case 2:/* 25h DMA channel 3 */  port=0x82; break;
-				case 3:/* 27h DMA channel 0 */  port=0x87; break;
-				default: abort(); break;
-			}
-		}
-		else {
-			abort();
-		}
-	}
+    if (IS_PC98_ARCH) {
+        // I/O port translation
+        if (port < 0x20u)
+            port >>= 1u;
+        else if (port < 0x28) {/* "bank" registers at 21h, 23h, 25h, 27h */
+            switch ((port>>1u)&3u) {
+                case 0:/* 21h DMA channel 1 */  port=0x83; break;
+                case 1:/* 23h DMA channel 2 */  port=0x81; break;
+                case 2:/* 25h DMA channel 3 */  port=0x82; break;
+                case 3:/* 27h DMA channel 0 */  port=0x87; break;
+                default: abort(); break;
+            }
+        }
+        else if (port == 0x29) { /* auto bank increment */
+            return pc98_port_29h;
+        }
+        else {
+            abort();
+        }
+    }
 
 	if (port<0x10) {
 		/* read from the first DMA controller (channels 0-3) */
@@ -238,7 +246,7 @@ static Bitu DMA_Read_Port(Bitu port,Bitu iolen) {
 		/* if we're emulating PC/XT DMA controller behavior, then the page registers
 		 * are write-only and cannot be read */
 		if (dma_page_register_writeonly)
-			return ~0;
+			return ~0UL;
 
 		switch (port) {
 			/* read DMA page register */
@@ -258,7 +266,8 @@ static Bitu DMA_Read_Port(Bitu port,Bitu iolen) {
 				  break;
 		}
 	}
-	return ~0;
+
+	return ~0UL;
 }
 
 void DmaController::WriteControllerReg(Bitu reg,Bitu val,Bitu /*len*/) {
@@ -305,6 +314,7 @@ void DmaController::WriteControllerReg(Bitu reg,Bitu val,Bitu /*len*/) {
 		chan=GetChannel(val & 3);
 		chan->autoinit=(val & 0x10) > 0;
 		chan->increment=(!allow_decrement_mode) || ((val & 0x20) == 0); /* 0=increment 1=decrement */
+        chan->transfer_mode=((val >> 2) & 3);
 		//TODO Maybe other bits? Like bits 6-7 to select demand/single/block/cascade mode? */
 		break;
 	case 0xc:		/* Clear Flip/Flip */
@@ -361,9 +371,9 @@ Bitu DmaController::ReadControllerReg(Bitu reg,Bitu /*len*/) {
 		ret=0;
 		for (Bit8u ct=0;ct<4;ct++) {
 			chan=GetChannel(ct);
-			if (chan->tcount) ret|=1 << ct;
+			if (chan->tcount) ret |= 1U << ct;
 			chan->tcount=false;
-			if (chan->request) ret|=1 << (4+ct);
+			if (chan->request) ret |= 1U << (4U + ct);
 		}
 		return ret;
 	case 0xc:		/* Clear Flip/Flip (apparently most motherboards will treat read OR write as reset) */
@@ -379,6 +389,7 @@ Bitu DmaController::ReadControllerReg(Bitu reg,Bitu /*len*/) {
 DmaChannel::DmaChannel(Bit8u num, bool dma16) {
 	masked = true;
 	callback = NULL;
+	page_bank_increment_wraparound = 0;
 	channum = num;
 	DMA16 = dma16 ? 0x1 : 0x0;
 
@@ -399,8 +410,6 @@ DmaChannel::DmaChannel(Bit8u num, bool dma16) {
 	autoinit = false;
 	tcount = false;
 	request = false;
-	
-	page_bank_increment_wraparound = 0u;
 }
 
 Bitu DmaChannel::Read(Bitu want, Bit8u * buffer) {
@@ -412,45 +421,80 @@ Bitu DmaChannel::Read(Bitu want, Bit8u * buffer) {
 		LOG(LOG_DMACONTROL,LOG_WARN)("BUG: Attempted DMA channel read while channel masked");
 		return 0;
 	}
+    /* You cannot read a DMA channel configured for writing (to memory) */
+    if (transfer_mode != DMAT_READ) {
+        LOG(LOG_DMACONTROL,LOG_WARN)("BUG: Attempted DMA channel write when DMA channel is configured by guest for reading (from memory)");
+        return 0;
+    }
 
-again:
-	Bitu left=(currcnt+1);
-	if (want<left) {
-		if (increment) {
-			DMA_BlockRead(pagebase,curraddr,buffer,want,DMA16,DMA16_ADDRMASK);
-			curraddr+=want;
-		}
-		else {
-			DMA_BlockReadBackwards(pagebase,curraddr,buffer,want,DMA16,DMA16_ADDRMASK);
-			curraddr-=want;
-		}
+    /* WARNING: "want" is expressed in DMA transfer units.
+     *          For 8-bit DMA, want is in bytes.
+     *          For 16-bit DMA, want is in 16-bit WORDs.
+     *          Keep that in mind when writing code to call this function!
+     *          Perhaps a future modification could provide an alternate
+     *          Read function that expresses the count in bytes so the caller
+     *          cannot accidentally cause buffer overrun issues that cause
+     *          mystery crashes. */
 
-		currcnt-=want;
-		done+=want;
-	} else {
-		if (increment)
-			DMA_BlockRead(pagebase,curraddr,buffer,want,DMA16,DMA16_ADDRMASK);
-		else
-			DMA_BlockReadBackwards(pagebase,curraddr,buffer,want,DMA16,DMA16_ADDRMASK);
+    const Bit32u addrmask = 0xFFFu >> DMA16; /* 16-bit ISA style DMA needs 0x7FFF, else 0xFFFF. Use 0x7FF/0xFFF (4KB) for simplicity reasons. */
+    while (want > 0) {
+        const Bit32u addr =
+            curraddr & addrmask;
+        const Bitu wrapdo =
+            increment ?
+                /*inc*/((addrmask + 1u) - addr) :   /* how many transfer units until (end of 4KB page) + 1 */
+                /*dec*/(addr + 1u);                 /* how many transfer units until (start of 4KB page) - 1 */
+        const Bitu cando =
+            MIN(MIN(want,Bitu(currcnt+1u)),wrapdo);
+        assert(wrapdo != (Bitu)0);
+        assert(cando != (Bitu)0);
+        assert(cando <= want);
+        assert(cando <= (addrmask + 1u));
 
-		buffer+=left << DMA16;
-		want-=left;
-		done+=left;
-		ReachedTC();
-		if (autoinit) {
-			currcnt=basecnt;
-			curraddr=baseaddr;
-			if (want) goto again;
-			UpdateEMSMapping();
-		} else {
-			if (increment) curraddr+=left;
-			else curraddr-=left;
-			currcnt=0xffff;
-			masked=true;
-			UpdateEMSMapping();
-			DoCallBack(DMA_TRANSFEREND);
-		}
-	}
+        if (increment) {
+            assert((curraddr & (~addrmask)) == ((curraddr + (cando - 1u)) & (~addrmask)));//check our work, must not cross a 4KB boundary
+            DMA_BlockRead4KB<DMA_INCREMENT>(pagebase,curraddr,buffer,cando,DMA16,DMA16_ADDRMASK);
+            curraddr += cando;
+        }
+        else {
+            assert((curraddr & (~addrmask)) == ((curraddr - (cando - 1u)) & (~addrmask)));//check our work, must not cross a 4KB boundary
+            DMA_BlockRead4KB<DMA_DECREMENT>(pagebase,curraddr,buffer,cando,DMA16,DMA16_ADDRMASK);
+            curraddr -= cando;
+        }
+
+        curraddr &= dma_wrapping;
+        buffer += cando << DMA16;
+        currcnt -= cando;
+        want -= cando;
+        done += cando;
+
+        if (IS_PC98_ARCH) {
+            /* check wraparound, to emulate auto bank increment.
+             * do not check DMA16 because PC-98 does not have 16-bit DMA channels.
+             *
+             * The PC-98 port of Sim City 2000 needs this to properly play digitized speech,
+             * especially "reticulating splines". */
+            if ((( increment) && (curraddr & 0xFFFFu) == 0u) ||
+                ((!increment) && (curraddr & 0xFFFFu) == 0xFFFFu)) {
+                page_bank_increment();
+            }
+        }
+
+        if (currcnt == 0xFFFF) {
+            ReachedTC();
+            if (autoinit) {
+                currcnt = basecnt;
+                curraddr = baseaddr;
+                UpdateEMSMapping();
+            } else {
+                masked = true;
+                UpdateEMSMapping();
+                DoCallBack(DMA_TRANSFEREND);
+                break;
+            }
+        }
+    }
+
 	return done;
 }
 
@@ -463,40 +507,80 @@ Bitu DmaChannel::Write(Bitu want, Bit8u * buffer) {
 		LOG(LOG_DMACONTROL,LOG_WARN)("BUG: Attempted DMA channel write while channel masked");
 		return 0;
 	}
+    /* You cannot write a DMA channel configured for reading (from memory) */
+    if (transfer_mode != DMAT_WRITE) {
+        LOG(LOG_DMACONTROL,LOG_WARN)("BUG: Attempted DMA channel read when DMA channel is configured by guest for writing (to memory)");
+        return 0;
+    }
 
-	/* TODO: Implement DMA_BlockWriteBackwards() if you find a DOS program, any program, that
-	 *       transfers data backwards into system memory */
-	if (!increment) {
-		LOG(LOG_DMACONTROL,LOG_WARN)("DMA decrement mode (writing) not implemented");
-		return 0;
-	}
+    /* WARNING: "want" is expressed in DMA transfer units.
+     *          For 8-bit DMA, want is in bytes.
+     *          For 16-bit DMA, want is in 16-bit WORDs.
+     *          Keep that in mind when writing code to call this function!
+     *          Perhaps a future modification could provide an alternate
+     *          Read function that expresses the count in bytes so the caller
+     *          cannot accidentally cause buffer overrun issues that cause
+     *          mystery crashes. */
 
-again:
-	Bitu left=(currcnt+1);
-	if (want<left) {
-		DMA_BlockWrite(pagebase,curraddr,buffer,want,DMA16,DMA16_ADDRMASK);
-		done+=want;
-		curraddr+=want;
-		currcnt-=want;
-	} else {
-		DMA_BlockWrite(pagebase,curraddr,buffer,left,DMA16,DMA16_ADDRMASK);
-		buffer+=left << DMA16;
-		want-=left;
-		done+=left;
-		ReachedTC();
-		if (autoinit) {
-			currcnt=basecnt;
-			curraddr=baseaddr;
-			if (want) goto again;
-			UpdateEMSMapping();
-		} else {
-			curraddr+=left;
-			currcnt=0xffff;
-			masked=true;
-			UpdateEMSMapping();
-			DoCallBack(DMA_TRANSFEREND);
-		}
-	}
+    const Bit32u addrmask = 0xFFFu >> DMA16; /* 16-bit ISA style DMA needs 0x7FFF, else 0xFFFF. Use 0x7FF/0xFFF (4KB) for simplicity reasons. */
+    while (want > 0) {
+        const Bit32u addr =
+            curraddr & addrmask;
+        const Bitu wrapdo =
+            increment ?
+                /*inc*/((addrmask + 1u) - addr) :   /* how many transfer units until (end of 4KB page) + 1 */
+                /*dec*/(addr + 1u);                 /* how many transfer units until (start of 4KB page) - 1 */
+        const Bitu cando =
+            MIN(MIN(want,Bitu(currcnt+1u)),wrapdo);
+        assert(wrapdo != (Bitu)0);
+        assert(cando != (Bitu)0);
+        assert(cando <= want);
+        assert(cando <= (addrmask + 1u));
+
+        if (increment) {
+            assert((curraddr & (~addrmask)) == ((curraddr + (cando - 1u)) & (~addrmask)));//check our work, must not cross a 4KB boundary
+            DMA_BlockWrite4KB<DMA_INCREMENT>(pagebase,curraddr,buffer,cando,DMA16,DMA16_ADDRMASK);
+            curraddr += cando;
+        }
+        else {
+            assert((curraddr & (~addrmask)) == ((curraddr - (cando - 1u)) & (~addrmask)));//check our work, must not cross a 4KB boundary
+            DMA_BlockWrite4KB<DMA_DECREMENT>(pagebase,curraddr,buffer,cando,DMA16,DMA16_ADDRMASK);
+            curraddr -= cando;
+        }
+
+        curraddr &= dma_wrapping;
+        buffer += cando << DMA16;
+        currcnt -= cando;
+        want -= cando;
+        done += cando;
+
+        if (IS_PC98_ARCH) {
+            /* check wraparound, to emulate auto bank increment.
+             * do not check DMA16 because PC-98 does not have 16-bit DMA channels.
+             *
+             * The PC-98 port of Sim City 2000 needs this to properly play digitized speech,
+             * especially "reticulating splines". */
+            if ((( increment) && (curraddr & 0xFFFFu) == 0u) ||
+                ((!increment) && (curraddr & 0xFFFFu) == 0xFFFFu)) {
+                page_bank_increment();
+            }
+        }
+
+        if (currcnt == 0xFFFF) {
+            ReachedTC();
+            if (autoinit) {
+                currcnt = basecnt;
+                curraddr = baseaddr;
+                UpdateEMSMapping();
+            } else {
+                masked = true;
+                UpdateEMSMapping();
+                DoCallBack(DMA_TRANSFEREND);
+                break;
+            }
+        }
+    }
+
 	return done;
 }
 
@@ -540,15 +624,15 @@ void DMA_Reset(Section* /*sec*/) {
 	dma_page_register_writeonly = section->Get_bool("dma page registers write-only");
 	allow_decrement_mode = section->Get_bool("allow dma address decrement");
 
-	if (IS_PC98_ARCH) // DMA 4-7 do not exist on PC-98
-		enable_2nd_dma = false;
+    if (IS_PC98_ARCH) // DMA 4-7 do not exist on PC-98
+        enable_2nd_dma = false;
 
-	if (machine == MCH_PCJR) {
-		LOG(LOG_MISC,LOG_DEBUG)("DMA is disabled in PCjr mode");
-		enable_1st_dma = false;
-		enable_2nd_dma = false;
-		return;
-	}
+    if (machine == MCH_PCJR) {
+        LOG(LOG_MISC,LOG_DEBUG)("DMA is disabled in PCjr mode");
+        enable_1st_dma = false;
+        enable_2nd_dma = false;
+        return;
+    }
 
     {
         std::string s = section->Get_string("enable 128k capable 16-bit dma");
@@ -581,6 +665,7 @@ void DMA_Reset(Section* /*sec*/) {
 			DmaControllers[0]->DMA_ReadHandler[i].Install(IS_PC98_ARCH ? ((i * 2u) + 1u) : i,DMA_Read_Port,mask);
 		}
 		if (enable_2nd_dma) {
+            assert(!IS_PC98_ARCH);
 			/* install handler for second DMA controller ports */
 			DmaControllers[1]->DMA_WriteHandler[i].Install(0xc0+i*2,DMA_Write_Port,mask);
 			DmaControllers[1]->DMA_ReadHandler[i].Install(0xc0+i*2,DMA_Read_Port,mask);
@@ -588,22 +673,23 @@ void DMA_Reset(Section* /*sec*/) {
 	}
 
 	if (enable_1st_dma) {
-		if (IS_PC98_ARCH) {
-			/* install handlers for ports 0x21-0x27 odd */
-			for (unsigned int i=0;i < 4;i++) {
-				DmaControllers[0]->DMA_WriteHandler[0x10+i].Install(0x21+(i*2u),DMA_Write_Port,IO_MB,1);
-				DmaControllers[0]->DMA_ReadHandler[0x10+i].Install(0x21+(i*2u),DMA_Read_Port,IO_MB,1);
-			}
-		}
-		else {
-			/* install handlers for ports 0x81-0x83 (on the first DMA controller) */
-			DmaControllers[0]->DMA_WriteHandler[0x10].Install(0x80,DMA_Write_Port,IO_MB,8);
-			DmaControllers[0]->DMA_ReadHandler[0x10].Install(0x80,DMA_Read_Port,IO_MB,8);
-		}
+        if (IS_PC98_ARCH) {
+            /* install handlers for ports 0x21-0x29 odd */
+            for (unsigned int i=0;i < 5;i++) {
+                DmaControllers[0]->DMA_WriteHandler[0x10+i].Install(0x21+(i*2u),DMA_Write_Port,IO_MB,1);
+                DmaControllers[0]->DMA_ReadHandler[0x10+i].Install(0x21+(i*2u),DMA_Read_Port,IO_MB,1);
+            }
+        }
+        else {
+            /* install handlers for ports 0x81-0x83 (on the first DMA controller) */
+            DmaControllers[0]->DMA_WriteHandler[0x10].Install(0x80,DMA_Write_Port,IO_MB,8);
+            DmaControllers[0]->DMA_ReadHandler[0x10].Install(0x80,DMA_Read_Port,IO_MB,8);
+        }
 	}
 
 	if (enable_2nd_dma) {
-		/* install handlers for ports 0x81-0x83 (on the second DMA controller) */
+        assert(!IS_PC98_ARCH);
+        /* install handlers for ports 0x81-0x83 (on the second DMA controller) */
 		DmaControllers[1]->DMA_WriteHandler[0x10].Install(0x88,DMA_Write_Port,IO_MB,8);
 		DmaControllers[1]->DMA_ReadHandler[0x10].Install(0x88,DMA_Read_Port,IO_MB,8);
 	}
