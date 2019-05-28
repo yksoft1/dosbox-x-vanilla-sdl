@@ -2318,6 +2318,8 @@ static inline uint8_t expand16to32(const uint8_t t) {
 	return (t << 1) | (t >> 3);
 }
 
+static unsigned char pc98_mixctl_reg = 0x14;
+
 static void CTMIXER_Write(Bit8u val) {
 	switch (sb.mixer.index) {
 	case 0x00:		/* Reset */
@@ -2493,6 +2495,8 @@ static void CTMIXER_Write(Bit8u val) {
 			sb.hw.dma8=0xff;
 			sb.hw.dma16=0xff;
 			if (IS_PC98_ARCH) {
+				pc98_mixctl_reg = (unsigned char)val ^ 0x14;
+
 				if (val & 0x1) sb.hw.dma8=0;
 				else if (val & 0x2) sb.hw.dma8=3;
 				// FIXME: Any other DMA channels available for SB16? DOOM only allows selecting 0 and 3.
@@ -2605,10 +2609,10 @@ static Bit8u CTMIXER_Read(void) {
 		ret=0;
 		if (IS_PC98_ARCH) {
 			switch (sb.hw.irq) {
-				case 3:  return 0x1;
-				case 10: return 0x2;
-				case 12: return 0x4;
-				case 5:  return 0x8;
+				case 3:  return 0xF1; // upper 4 bits always 1111
+				case 10: return 0xF2;
+				case 12: return 0xF4;
+				case 5:  return 0xF8;
 			}
 		}
 		else {
@@ -2627,6 +2631,9 @@ static Bit8u CTMIXER_Read(void) {
 				case 0:ret|=0x1;break;
 				case 3:ret|=0x2;break;
 			}
+
+			// there's some strange behavior on the PC-98 version of the card
+			ret |= (pc98_mixctl_reg & (~3u));
 		}
 		else {
 			switch (sb.hw.dma8) {
