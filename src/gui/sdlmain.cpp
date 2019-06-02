@@ -7844,6 +7844,9 @@ int main(int argc, char* argv[]) {
 			if (!control->ParseConfigFile(cfg.c_str())) {
 				// try to load it from the user directory
 				control->ParseConfigFile((config_path + cfg).c_str());
+                if (!control->ParseConfigFile((config_path + cfg).c_str())) {
+                LOG_MSG("CONFIG: Can't open specified config file: %s",cfg.c_str());
+                }
 			}
 		}
 
