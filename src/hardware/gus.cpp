@@ -66,6 +66,7 @@ static Bit32s AutoAmp = 512;
 static bool unmask_irq = false;
 static bool enable_autoamp = false;
 static bool startup_ultrinit = false;
+static bool ignore_active_channel_write_while_active = false;
 static bool dma_enable_on_dma_control_polling = false;
 static Bit16u vol16bit[4096];
 static Bit32u pantable[16];
@@ -438,10 +439,10 @@ public:
 					if (Lc&2) sp[1] += L;
 					if (Rc&1) sp[0] += R;
 					if (Rc&2) sp[1] += R;
-				}
 
-				WaveUpdate();
-				RampUpdate();
+					WaveUpdate();
+					RampUpdate();
+				}
 			}
 		}
 		else {
@@ -454,10 +455,10 @@ public:
 				if ((GUS_reset_reg & 0x02/*DAC enable*/) == 0x02) {
 					stream[i<<1]+= tmpsamp * VolLeft;
 					stream[(i<<1)+1]+= tmpsamp * VolRight;
-				}
 
-				WaveUpdate();
-				RampUpdate();
+					WaveUpdate();
+					RampUpdate();
+				}
 			}
 		}
 	}
@@ -835,6 +836,19 @@ static void ExecuteGlobRegister(void) {
 		if(curchan) curchan->WriteRampCtrl((Bit16u)myGUS.gRegData>>8);
 		break;
 	case 0xE:  // Set active channel register
+		/* Hack for "Ice Fever" demoscene production:
+		 * If the DAC is active (bit 1 of GUS reset is set), ignore writes to this register.
+		 * The demo resets the GUS with 14 channels, then after reset changes it to 16 for some reason.
+		 * Without this hack, music will sound slowed down and wrong.
+		 * As far as I know, real hardware will accept the change immediately and produce the same
+		 * slowed down sound music. --J.C. */
+		if (ignore_active_channel_write_while_active) {
+			if (GUS_reset_reg & 0x02/*DAC enable*/) {
+				LOG_MSG("GUS: Attempt to change active channel count while DAC active rejected");
+				break;
+			}
+		}
+
 		gus_chan->FillUp();
 		myGUS.gRegSelect = myGUS.gRegData>>8;		//JAZZ Jackrabbit seems to assume this?
 		myGUS.ActiveChannelsUser = 1+((myGUS.gRegData>>8) & 31); // NTS: The GUS SDK documents this field as bits 5-0, which is wrong, it's bits 4-0. 5-0 would imply 64 channels.
@@ -1983,6 +1997,8 @@ public:
         gus_enable = true;
         memset(&myGUS,0,sizeof(myGUS));
         memset(GUSRam,0,1024*1024);
+
+		ignore_active_channel_write_while_active = section->Get_bool("ignore channel count while active");
 
 		unmask_irq = section->Get_bool("pic unmask irq");
         enable_autoamp = section->Get_bool("autoamp");
