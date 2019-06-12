@@ -538,7 +538,7 @@ void DOS_SetupMemory(void) {
 
 	assert(DOS_IHSEG != 0);
 	ihseg = DOS_IHSEG;
-	ihofs = 0x08;
+	ihofs = 0xF4;
 
 	real_writeb(ihseg,ihofs+0x00,(Bit8u)0xFE);	//GRP 4
 	real_writeb(ihseg,ihofs+0x01,(Bit8u)0x38);	//Extra Callback instruction
