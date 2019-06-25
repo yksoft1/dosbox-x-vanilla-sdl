@@ -622,7 +622,7 @@ static void DOSBox_SetOriginalIcon(void) {
 #if !defined(MACOSX)
 	SDL_Surface *logos;
 
-#if WORDS_BIGENDIAN
+#ifdef WORDS_BIGENDIAN
     	logos = SDL_CreateRGBSurfaceFrom((void*)logo,32,32,32,128,0xff000000,0x00ff0000,0x0000ff00,0);
 #else
     	logos = SDL_CreateRGBSurfaceFrom((void*)logo,32,32,32,128,0x000000ff,0x0000ff00,0x00ff0000,0);
@@ -1808,37 +1808,45 @@ void DOSBoxMenu::displaylist::DrawDisplayList(DOSBoxMenu &menu,bool updateScreen
 
 bool DOSBox_isMenuVisible(void);
 
-void GFX_DrawSDLMenu(DOSBoxMenu &menu,DOSBoxMenu::displaylist &dl) {
-    if (menu.needsRedraw() && DOSBox_isMenuVisible() && (!sdl.updating || OpenGL_using()) && !sdl.desktop.fullscreen) {
-		if (!OpenGL_using()) {
-			if (SDL_MUSTLOCK(sdl.surface))
-				SDL_LockSurface(sdl.surface);
-		}
+void GFX_DrawSDLMenu(DOSBoxMenu &menu, DOSBoxMenu::displaylist &dl) {
+    if (!menu.needsRedraw() || (sdl.updating && !OpenGL_using())) {
+        return;
+    }
+    if (!DOSBox_isMenuVisible() || sdl.desktop.fullscreen) {
+        // BUGFIX: If the menu is hidden then silently clear "needs redraw" to avoid excess redraw of nothing
+        menu.clearRedraw();
+        return;
+    }
 
-        if (&dl == &menu.display_list) { /* top level menu, draw background */
-            MenuDrawRect(menu.menuBox.x, menu.menuBox.y, menu.menuBox.w, menu.menuBox.h - 1, GFX_GetRGB(63, 63, 63));
-            MenuDrawRect(menu.menuBox.x, menu.menuBox.y + menu.menuBox.h - 1, menu.menuBox.w, 1, GFX_GetRGB(31, 31, 31));
-        }
+    bool mustLock = !OpenGL_using() && SDL_MUSTLOCK(sdl.surface);
 
-		if (!OpenGL_using()) {
-			if (SDL_MUSTLOCK(sdl.surface))
-				SDL_UnlockSurface(sdl.surface);
-		}
+    if (mustLock) {
+        SDL_LockSurface(sdl.surface);
+    }
+
+    if (&dl == &menu.display_list) { /* top level menu, draw background */
+        MenuDrawRect(menu.menuBox.x, menu.menuBox.y, menu.menuBox.w, menu.menuBox.h - 1, GFX_GetRGB(63, 63, 63));
+        MenuDrawRect(menu.menuBox.x, menu.menuBox.y + menu.menuBox.h - 1, menu.menuBox.w, 1,
+                     GFX_GetRGB(31, 31, 31));
+    }
+
+    if (mustLock) {
+        SDL_UnlockSurface(sdl.surface);
+    }
 
 #if 0
-		LOG_MSG("menudraw %u",(unsigned int)SDL_GetTicks());
+    LOG_MSG("menudraw %u",(unsigned int)SDL_GetTicks());
 #endif
 
-        menu.clearRedraw();
-        menu.display_list.DrawDisplayList(menu,/*updateScreen*/false);
+    menu.clearRedraw();
+    menu.display_list.DrawDisplayList(menu,/*updateScreen*/false);
 
-		if (!OpenGL_using()) {
+    if (!OpenGL_using()) {
 #if defined(C_SDL2)
-			SDL_UpdateWindowSurfaceRects( sdl.window, &menu.menuBox, 1 );
+        SDL_UpdateWindowSurfaceRects( sdl.window, &menu.menuBox, 1 );
 #else
-			SDL_UpdateRects( sdl.surface, 1, &menu.menuBox );
+        SDL_UpdateRects(sdl.surface, 1, &menu.menuBox);
 #endif
-		}
     }
 }
 #endif
@@ -5564,6 +5572,17 @@ void GFX_Events() {
             case SDL_WINDOWEVENT_EXPOSED:
                 if (sdl.draw.callback) sdl.draw.callback( GFX_CallBackRedraw );
                 continue;
+            case SDL_WINDOWEVENT_LEAVE:
+#if 0 && DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+                void GFX_SDLMenuTrackHover(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id);
+                void GFX_SDLMenuTrackHilight(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id);
+
+                GFX_SDLMenuTrackHover(mainMenu,DOSBoxMenu::unassigned_item_handle);
+                GFX_SDLMenuTrackHilight(mainMenu,DOSBoxMenu::unassigned_item_handle);
+
+                GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+#endif
+                break;
             case SDL_WINDOWEVENT_FOCUS_GAINED:
                 if (IsFullscreen() && !sdl.mouse.locked)
                     GFX_CaptureMouse();
@@ -5575,6 +5594,15 @@ void GFX_Events() {
 					CaptureMouseNotify();
                     GFX_CaptureMouse();
                 }
+#if 0 && DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+                void GFX_SDLMenuTrackHover(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id);
+                void GFX_SDLMenuTrackHilight(DOSBoxMenu &menu,DOSBoxMenu::item_handle_t item_id);
+
+                GFX_SDLMenuTrackHover(mainMenu,DOSBoxMenu::unassigned_item_handle);
+                GFX_SDLMenuTrackHilight(mainMenu,DOSBoxMenu::unassigned_item_handle);
+
+                GFX_DrawSDLMenu(mainMenu,mainMenu.display_list);
+#endif
                 SetPriority(sdl.priority.nofocus);
                 GFX_LosingFocus();
                 CPU_Enable_SkipAutoAdjust();
@@ -7844,6 +7872,9 @@ int main(int argc, char* argv[]) {
 			if (!control->ParseConfigFile(cfg.c_str())) {
 				// try to load it from the user directory
 				control->ParseConfigFile((config_path + cfg).c_str());
+                if (!control->ParseConfigFile((config_path + cfg).c_str())) {
+                LOG_MSG("CONFIG: Can't open specified config file: %s",cfg.c_str());
+                }
 			}
 		}
 

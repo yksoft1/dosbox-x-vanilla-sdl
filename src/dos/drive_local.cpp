@@ -1064,7 +1064,8 @@ bool localFile::Read(Bit8u * data,Bit16u * size) {
 }
 
 bool localFile::Write(Bit8u * data,Bit16u * size) {
-	if ((this->flags & 0xf) == OPEN_READ) {	// check if file opened in read-only mode
+	Bit32u lastflags = this->flags & 0xf;
+	if (lastflags == OPEN_READ || lastflags == OPEN_READ_NO_MOD) {	// check if file opened in read-only mode
 		DOS_SetError(DOSERR_ACCESS_DENIED);
 		return false;
 	}
@@ -1175,7 +1176,11 @@ bool localFile::Close() {
 		// serialize time
 		mktime(&tim);
 
+#ifdef host_cnv_use_wchar
+		struct _utimbuf ftim;
+#else
 		struct utimbuf ftim;
+#endif
 		ftim.actime = ftim.modtime = mktime(&tim);
 	
 		char fullname[DOS_PATHLENGTH];
@@ -1183,9 +1188,21 @@ bool localFile::Close() {
 		strcat(fullname, name);
 //		Dos_SpecoalChar(fullname, true);
 		CROSS_FILENAME(fullname);
-		if (utime(fullname, &ftim)) {
-//			extern int errno; 
-//			LOG_MSG("Set time failed for %s (%s)", fullname, strerror(errno));
+		
+		// guest to host code page translation
+		host_cnv_char_t *host_name = CodePageGuestToHost(fullname);
+		if (host_name == NULL) {
+			LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,fullname);
+			return false;
+		}
+
+#ifdef host_cnv_use_wchar
+		if(_wutime(host_name, &ftim)) {
+#else
+		if (utime(host_name, &ftim)) {
+#endif
+			extern int errno; 
+			LOG_MSG("Set time failed for %s (%s)", fullname, strerror(errno));
 			return false;
 		}
 	}

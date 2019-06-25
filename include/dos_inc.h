@@ -471,6 +471,7 @@ public:
 	void SetDiskBufferHeadPt(Bit32u _dbheadpt);
 	void SetStartOfUMBChain(Bit16u _umbstartseg);
 	void SetUMBChainState(Bit8u _umbchaining);
+	void SetBlockDevices(Bit8u _count);
 	Bit16u	GetStartOfUMBChain(void);
 	Bit8u	GetUMBChainState(void);
 	RealPt	GetPointer(void);
@@ -593,8 +594,9 @@ public:
 	bool Extended(void);
 	void GetAttr(Bit8u & attr);
 	void SetAttr(Bit8u attr);
-	void SetResultAttr(Bit8u attr);
+	void SetResult(Bit32u size,Bit16u date,Bit16u time,Bit8u attr);
 	bool Valid(void);
+	void ClearBlockRecsize(void);
 private:
 	bool extended;
 	PhysPt real_pt;

@@ -410,9 +410,11 @@ bool CMscdex::HasDrive(Bit16u drive) {
 }
 
 void CMscdex::ReplaceDrive(CDROM_Interface* newCdrom, Bit8u subUnit) {
-	delete cdrom[subUnit];
+	if (cdrom[subUnit] != NULL) {
+		StopAudio(subUnit);
+		delete cdrom[subUnit];
+	}
 	cdrom[subUnit] = newCdrom;
-	StopAudio(subUnit);
 }
 
 PhysPt CMscdex::GetDefaultBuffer(void) {
@@ -755,22 +757,17 @@ bool CMscdex::GetDirectoryEntry(Bit16u drive, bool copyFlag, PhysPt pathname, Ph
 			if (entryLength==0) break;
 			nameLength  = mem_readb(defBuffer+index+32);
 			MEM_StrCopy(defBuffer+index+33,entryName,nameLength);
+			// strip separator and file version number
+			char* separator = strchr(entryName,';');
+			if (separator) *separator = 0;
+			// strip trailing period
+			size_t entrylen = strlen(entryName);
+			if (entrylen>0 && entryName[entrylen-1]=='.') entryName[entrylen-1] = 0;
+
 			if (strcmp(entryName,useName)==0) {
 				//LOG(LOG_MISC,LOG_ERROR)("MSCDEX: Get DirEntry : Found : %s",useName);
 				foundName = true;
 				break;
-			}
-			/* Xcom Apocalipse searches for MUSIC. and expects to find MUSIC;1
-			 * All Files on the CDROM are of the kind blah;1
-			 */
-			char* longername = strchr(entryName,';');
-			if(longername) {
-				*longername = 0;
-				if (strcmp(entryName,useName)==0) {
-					//LOG(LOG_MISC,LOG_ERROR)("MSCDEX: Get DirEntry : Found : %s",useName);
-					foundName = true;
-					break;
-				}
 			}
 			index += entryLength;
 		} while (index+33<=2048);
@@ -1366,6 +1363,11 @@ bool MSCDEX_HasDrive(char driveLetter)
 void MSCDEX_ReplaceDrive(CDROM_Interface* cdrom, Bit8u subUnit)
 {
 	mscdex->ReplaceDrive(cdrom, subUnit);
+}
+
+Bit8u MSCDEX_GetSubUnit(char driveLetter)
+{
+	return mscdex->GetSubUnit(driveLetter-'A');
 }
 
 bool MSCDEX_GetVolumeName(Bit8u subUnit, char* name)

@@ -2840,7 +2840,7 @@ static Bitu INT18_PC98_Handler(void) {
             }
             break;
         case 0x02: /* Sense of shift key state (シフト・キー状態のセンス) */
-            reg_al = mem_readb(0x52A + 0x0E); /* FIXME: Seems to match 14th bitmap byte. Does real hardware do this?? */
+            reg_al = mem_readb(0x53A);
             break;
         case 0x03: /* Initialization of keyboard interface (キーボード・インタフェイスの初期化) */
             /* TODO */
@@ -7116,9 +7116,13 @@ private:
             if (KEYBOARD_Report_BIOS_PS2Mouse())
                 config |= 0x04;
 
+			// DMA *not* supported - Ancient Art of War CGA uses this to identify PCjr
+			if (machine==MCH_PCJR) config |= 0x100;
+
             // Gameport
             config |= 0x1000;
             mem_writew(BIOS_CONFIGURATION,config);
+			if (IS_EGAVGA_ARCH) config &= ~0x30; //EGA/VGA startup display mode differs in CMOS
             CMOS_SetRegister(0x14,(Bit8u)(config&0xff)); //Should be updated on changes
         }
 
@@ -7194,7 +7198,7 @@ private:
 			LOG(LOG_MISC,LOG_DEBUG)("Registered ISA PnP read port at 0x%03x",ISA_PNP_WPORT);
 		}
 
-		if (!IS_PC98_ARCH && enable_integration_device) {
+		if (enable_integration_device) {
             /* integration device callout */
             if (dosbox_int_iocallout == IO_Callout_t_none)
                 dosbox_int_iocallout = IO_AllocateCallout(IO_TYPE_MB);
@@ -7204,12 +7208,16 @@ private:
             {
                 IO_CalloutObject *obj = IO_GetCallout(dosbox_int_iocallout);
                 if (obj == NULL) E_Exit("Failed to get dosbox integration IO callout");
-                obj->Install(0x28,IOMASK_Combine(IOMASK_FULL,IOMASK_Range(4)),dosbox_integration_cb_port_r,dosbox_integration_cb_port_w);
+
+				/* NTS: Ports 28h-2Bh conflict with extended DMA control registers in PC-98 mode.
+				 *      TODO: Move again, if DB28h-DB2Bh are taken by something standard on PC-98. */
+				obj->Install(IS_PC98_ARCH ? 0xDB28 : 0x28,
+					IOMASK_Combine(IOMASK_FULL,IOMASK_Range(4)),dosbox_integration_cb_port_r,dosbox_integration_cb_port_w);
                 IO_PutCallout(obj);
             }
 
             /* DOSBox integration device */
-            if (isapnpigdevice == NULL && enable_integration_device_pnp) {
+            if (!IS_PC98_ARCH && isapnpigdevice == NULL && enable_integration_device_pnp) {
                 isapnpigdevice = new ISAPnPIntegrationDevice;
                 ISA_PNP_devreg(isapnpigdevice);
             }

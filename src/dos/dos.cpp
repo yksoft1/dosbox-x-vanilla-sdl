@@ -576,6 +576,10 @@ static Bitu DOS_21Handler(void) {
 			for(;;) {
 				if (!DOS_BreakTest()) return CBRET_NONE;
 				DOS_ReadFile(STDIN,&c,&n);
+				if (n == 0)				// End of file
+					E_Exit("DOS:0x0a:Redirected input reached EOF");
+				if (c == 10)			// Line feed
+					continue;
 				if (c == 8) {			// Backspace
 					if (read) {	//Something to backspace.
 						// STDOUT treats backspace as non-destructive.
@@ -1017,10 +1021,10 @@ static Bitu DOS_21Handler(void) {
 			Bit8u drive=reg_dl;
 			if (!drive || reg_ah==0x1f) drive = DOS_GetDefaultDrive();
 			else drive--;
-			if (Drives[drive]) {
+			if (drive < DOS_DRIVES && Drives[drive] && !Drives[drive]->isRemovable()) {
 				reg_al = 0x00;
 				SegSet16(ds,dos.tables.dpb);
-				reg_bx = drive;//Faking only the first entry (that is the driveletter)
+				reg_bx = drive*9;
 				LOG(LOG_DOSMISC,LOG_ERROR)("Get drive parameter block.");
 			} else {
 				reg_al=0xff;
@@ -1417,6 +1421,9 @@ static Bitu DOS_21Handler(void) {
 		reg_bx=dos.psp();
 		break;
 	case 0x52: {				/* Get list of lists */
+		Bit8u count=2; // floppy drives always counted
+		while (count<DOS_DRIVES && Drives[count] && !Drives[count]->isRemovable()) count++;
+		dos_infoblock.SetBlockDevices(count);
 		RealPt addr=dos_infoblock.GetPointer();
 		SegSet16(es,RealSeg(addr));
 		reg_bx=RealOff(addr);
@@ -1850,33 +1857,36 @@ static Bitu DOS_27Handler(void) {
 }
 
 static Bitu DOS_25Handler(void) {
-	if (Drives[reg_al] == 0){
+	if (reg_al >= DOS_DRIVES || !Drives[reg_al] || Drives[reg_al]->isRemovable()) {
 		reg_ax = 0x8002;
 		SETFLAGBIT(CF,true);
 	} else {
+		if (reg_cx == 1 && reg_dx == 0) {
+			if (reg_al >= 2) {
+				PhysPt ptr = PhysMake(SegValue(ds),reg_bx);
+				// write some BPB data into buffer for MicroProse installers
+				mem_writew(ptr+0x1c,0x3f); // hidden sectors
+			}
+		} else {
+			LOG(LOG_DOSMISC,LOG_NORMAL)("int 25 called but not as disk detection drive %u",reg_al);
+			}
 		SETFLAGBIT(CF,false);
-		if ((reg_cx != 1) ||(reg_dx != 1))
-			LOG(LOG_DOSMISC,LOG_NORMAL)("int 25 called but not as diskdetection drive %X",reg_al);
-
-	   reg_ax = 0;
+		reg_ax = 0;
 	}
-	SETFLAGBIT(IF,true);
     return CBRET_NONE;
 }
 static Bitu DOS_26Handler(void) {
 	LOG(LOG_DOSMISC,LOG_NORMAL)("int 26 called: hope for the best!");
-	if (Drives[reg_al] == 0){
+	if (reg_al >= DOS_DRIVES || !Drives[reg_al] || Drives[reg_al]->isRemovable()) {	
 		reg_ax = 0x8002;
 		SETFLAGBIT(CF,true);
 	} else {
 		SETFLAGBIT(CF,false);
 		reg_ax = 0;
 	}
-	SETFLAGBIT(IF,true);
     return CBRET_NONE;
 }
 
-bool iret_only_for_debug_interrupts = true;
 bool enable_collating_uppercase = true;
 bool keep_private_area_on_boot = false;
 bool dynamic_dos_kernel_alloc = false;
@@ -2003,7 +2013,6 @@ public:
 		private_always_from_umb = section->Get_bool("kernel allocation in umb");
 		minimum_dos_initial_private_segment = section->Get_hex("minimum dos initial private segment");
 		dos_con_use_int16_to_detect_input = section->Get_bool("con device use int 16h to detect keyboard input");
-		iret_only_for_debug_interrupts = section->Get_bool("write plain iretf for debug interrupts");
 		dbg_zero_on_dos_allocmem = section->Get_bool("zero memory on int 21h memory allocation");
 		MAXENV = section->Get_int("maximum environment block size on exec");
 		ENV_KEEPFREE = section->Get_int("additional environment block size on exec");
@@ -2185,10 +2194,10 @@ public:
 	// iret
 	// retf  <- int 21 4c jumps here to mimic a retf Cyber
 
-		callback[2].Install(DOS_25Handler,CB_RETF,"DOS Int 25");
+		callback[2].Install(DOS_25Handler,CB_RETF_STI,"DOS Int 25");
 		callback[2].Set_RealVec(0x25);
 
-		callback[3].Install(DOS_26Handler,CB_RETF,"DOS Int 26");
+		callback[3].Install(DOS_26Handler,CB_RETF_STI,"DOS Int 26");
 		callback[3].Set_RealVec(0x26);
 
 		callback[4].Install(DOS_27Handler,CB_IRET,"DOS Int 27");

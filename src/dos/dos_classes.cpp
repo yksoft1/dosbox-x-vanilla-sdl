@@ -158,6 +158,10 @@ void DOS_InfoBlock::SetUMBChainState(Bit8u _umbchaining) {
 	sSave(sDIB,chainingUMB,_umbchaining);
 }
 
+void DOS_InfoBlock::SetBlockDevices(Bit8u _count) {
+	sSave(sDIB,blockDevices,_count);
+}
+
 RealPt DOS_InfoBlock::GetPointer(void) {
 	return RealMake(seg,offsetof(sDIB,firstDPB));
 }
@@ -379,7 +383,7 @@ void DOS_DTA::SetupSearch(Bit8u _sdrive,Bit8u _sattr,char * pattern) {
 }
 
 void DOS_DTA::SetResult(const char * _name,Bit32u _size,Bit16u _date,Bit16u _time,Bit8u _attr) {
-	MEM_BlockWrite(pt+offsetof(sDTA,name),(void *)_name,DOS_NAMELENGTH_ASCII);
+	MEM_BlockWrite(pt+offsetof(sDTA,name),(void *)_name,strlen(_name)+1);
 	sSave(sDTA,size,_size);
 	sSave(sDTA,date,_date);
 	sSave(sDTA,time,_time);
@@ -483,6 +487,11 @@ void DOS_FCB::SetRandom(Bit32u _random) {
 	sSave(sFCB,rndm,_random);
 }
 
+void DOS_FCB::ClearBlockRecsize(void) {
+	sSave(sFCB,cur_block,0);
+	sSave(sFCB,rec_size,0);
+}
+
 void DOS_FCB::FileOpen(Bit8u _fhandle) {
 	sSave(sFCB,drive,GetDrive()+1);
 	sSave(sFCB,file_handle,_fhandle);
@@ -533,8 +542,11 @@ void DOS_FCB::SetAttr(Bit8u attr) {
 	if(extended) mem_writeb(pt - 1,attr);
 }
 
-void DOS_FCB::SetResultAttr(Bit8u attr) {
-	mem_writeb(pt + 12,attr);
+void DOS_FCB::SetResult(Bit32u size,Bit16u date,Bit16u time,Bit8u attr) {
+	mem_writed(pt + 0x1d,size);
+	mem_writew(pt + 0x19,date);
+	mem_writew(pt + 0x17,time);
+	mem_writeb(pt + 0x0c,attr);
 }
 
 void DOS_SDA::Init() {
