@@ -27,8 +27,6 @@
 #include "support.h"
 #include "debug.h"
 #include "ide.h"
-#include "bitop.h"
-#include "ptrop.h"
 #include "mapper.h"
 #include "zipfile.h"
 

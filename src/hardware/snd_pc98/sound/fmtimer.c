@@ -62,12 +62,12 @@ UINT8 fmtimer_irq2index(const UINT8 irq) {
 static void set_fmtimeraevent(BOOL absolute) {
 
 	SINT32	l;
-
+	double dt_ms;
     nevent_ack_event(NEVENT_FMTIMERA);
 
 	l = 18 * (1024 - fmtimer.timera);
 #if 0
-	if (pccore.cpumode & CPUMODE_8MHZ) {		// 4MHz
+	if (pcc	ore.cpumode & CPUMODE_8MHZ) {		// 4MHz
 		l = (l * 1248 / 625) * pccore.multiple;
 	}
 	else {										// 5MHz
@@ -80,7 +80,7 @@ static void set_fmtimeraevent(BOOL absolute) {
      * l_us = l * core_clock_speed * multiple
      * which can be expressed in seconds like this:
      * dt = l / 1000000 */
-    double dt_ms = (double)l / 1000;
+    dt_ms = (double)l / 1000;
     nevent_set(NEVENT_FMTIMERA,dt_ms);
 #endif
 }
@@ -88,7 +88,7 @@ static void set_fmtimeraevent(BOOL absolute) {
 static void set_fmtimerbevent(BOOL absolute) {
 
 	SINT32	l;
-
+	double dt_ms;
     nevent_ack_event(NEVENT_FMTIMERB);
 
 	l = 288 * (256 - fmtimer.timerb);
@@ -102,7 +102,7 @@ static void set_fmtimerbevent(BOOL absolute) {
 //	TRACEOUT(("FMTIMER-B: %08x-%d", l, absolute));
 	nevent_set(NEVENT_FMTIMERB, l, fmport_b, absolute);
 #else
-    double dt_ms = (double)l / 1000;
+    dt_ms = (double)l / 1000;
     nevent_set(NEVENT_FMTIMERB,dt_ms);
 #endif
 }

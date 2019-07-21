@@ -143,7 +143,7 @@ static inline void FillMemory(void *p,size_t l,unsigned char c) {
 }
 #endif
 
-static inline void pcm86io_bind(void) {
+static /*inline*/ void pcm86io_bind(void) {
     /* dummy */
 }
 

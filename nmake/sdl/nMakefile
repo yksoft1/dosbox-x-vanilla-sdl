@@ -1,0 +1,108 @@
+CC		=	cl
+CXX		=   cl
+LD		= 	link
+LIBR	=	lib
+WINDRES =	rc
+
+
+CXXFLAGS =  -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
+
+CFLAGS	=	-nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
+
+LFLAGS	=	-nologo
+
+TARGET	=	sdl.lib
+
+SDLMAIN = 	sdlmain.lib
+	
+OBJS	=	src\SDL.obj \
+			src\SDL_error.obj \
+			src\SDL_fatal.obj \
+			src\audio\SDL_audio.obj \
+			src\audio\SDL_audiocvt.obj \
+			src\audio\SDL_audiodev.obj \
+			src\audio\SDL_mixer.obj \
+			src\audio\SDL_mixer_MMX_VC.obj \
+			src\audio\SDL_wave.obj \
+			src\audio\disk\SDL_diskaudio.obj \
+			src\audio\dummy\SDL_dummyaudio.obj \
+			src\audio\windib\SDL_dibaudio.obj \
+			src\audio\windx5\SDL_dx5audio.obj \
+			src\cdrom\SDL_cdrom.obj \
+			src\cdrom\win32\SDL_syscdrom.obj \
+			src\cpuinfo\SDL_cpuinfo.obj \
+			src\events\SDL_active.obj \
+			src\events\SDL_events.obj \
+			src\events\SDL_expose.obj \
+			src\events\SDL_keyboard.obj \
+			src\events\SDL_mouse.obj \
+			src\events\SDL_quit.obj \
+			src\events\SDL_resize.obj \
+			src\file\SDL_rwops.obj \
+			src\joystick\SDL_joystick.obj \
+			src\joystick\win32\SDL_mmjoystick.obj \
+			src\loadso\win32\SDL_sysloadso.obj \
+			src\stdlib\SDL_getenv.obj \
+			src\stdlib\SDL_iconv.obj \
+			src\stdlib\SDL_malloc.obj \
+			src\stdlib\SDL_qsort.obj \
+			src\stdlib\SDL_stdlib.obj \
+			src\stdlib\SDL_string.obj \
+			src\thread\SDL_thread.obj \
+			src\thread\win32\SDL_sysmutex.obj \
+			src\thread\win32\SDL_syssem.obj \
+			src\thread\win32\SDL_systhread.obj \
+			src\timer\SDL_timer.obj \
+			src\timer\win32\SDL_systimer.obj \
+			src\video\SDL_blit.obj \
+			src\video\SDL_blit_0.obj \
+			src\video\SDL_blit_1.obj \
+			src\video\SDL_blit_A.obj \
+			src\video\SDL_blit_N.obj \
+			src\video\SDL_bmp.obj \
+			src\video\SDL_cursor.obj \
+			src\video\SDL_gamma.obj \
+			src\video\SDL_pixels.obj \
+			src\video\SDL_RLEaccel.obj \
+			src\video\SDL_stretch.obj \
+			src\video\SDL_surface.obj \
+			src\video\SDL_video.obj \
+			src\video\SDL_yuv.obj \
+			src\video\SDL_yuv_sw.obj \
+			src\video\dummy\SDL_nullevents.obj \
+			src\video\dummy\SDL_nullmouse.obj \
+			src\video\dummy\SDL_nullvideo.obj \
+			src\video\wincommon\SDL_sysevents.obj \
+			src\video\wincommon\SDL_sysmouse.obj \
+			src\video\wincommon\SDL_syswm.obj \
+			src\video\wincommon\SDL_wingl.obj \
+			src\video\windib\SDL_dibvideo.obj \
+			src\video\windib\SDL_dibevents.obj \
+			src\video\windx5\SDL_dx5video.obj \
+			src\video\windx5\SDL_dx5events.obj \
+			src\video\windx5\SDL_dx5yuv.obj	
+
+LIBS = user32.lib
+
+.SUFFIXES: .c.o
+.SUFFIXES: .cpp.o
+
+all: $(TARGET) $(SDLMAIN)
+
+$(TARGET):	$(OBJS)
+	$(LIBR) $(LFLAGS) -OUT:$@ $(OBJS) 
+
+$(SDLMAIN):	src\main\win32\SDL_win32_main.obj
+	$(LIBR) $(LFLAGS) -OUT:$@ src\main\win32\SDL_win32_main.obj
+	
+.c.obj:
+	$(CC) $(CFLAGS) -c -Fo$@ $<
+
+.cpp.obj:
+	$(CXX) $(CXXFLAGS) -c -Fo$@ $<
+
+.rc.res: 
+	$(WINDRES) -fo $@ $< 
+	
+clean:
+	del $(TARGET) $(SDLMAIN) $(OBJS) src\main\win32\SDL_win32_main.obj

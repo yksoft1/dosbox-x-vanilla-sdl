@@ -59,7 +59,7 @@ void GFX_OpenGLRedrawScreen(void);
 # include <sys/stat.h>
 # include <process.h>
 # if !defined(__MINGW32__) /* MinGW does not have these headers */
-#  include <shcore.h>
+//#  include <shcore.h>
 #  include <shellscalingapi.h>
 # endif
 #endif
@@ -2686,7 +2686,7 @@ static bool exthook_enabled = false;
 #if defined(WIN32) && !defined(C_SDL2) && !defined(HX_DOS)
 static HHOOK exthook_winhook = NULL;
 
-#if !defined(__MINGW32__)
+#if defined(WIN32) && defined(SDL_DOSBOX_X_SPECIAL)
 extern "C" void SDL_DOSBox_X_Hack_Set_Toggle_Key_WM_USER_Hack(unsigned char x);
 #endif
 
@@ -2863,7 +2863,7 @@ void DoExtendedKeyboardHook(bool enable) {
 			}
 		}
 
-#if !defined(__MINGW32__)
+#if SDL_DOSBOX_X_SPECIAL
 		// Enable the SDL hack for Win32 to handle Num/Scroll/Caps
 		SDL_DOSBox_X_Hack_Set_Toggle_Key_WM_USER_Hack(1);
 #endif
@@ -2901,7 +2901,7 @@ void DoExtendedKeyboardHook(bool enable) {
 				}
 			}
 
-#if !defined(__MINGW32__)
+#if SDL_DOSBOX_X_SPECIAL
 			// Disable the SDL hack for Win32 to handle Num/Scroll/Caps
 			SDL_DOSBox_X_Hack_Set_Toggle_Key_WM_USER_Hack(0);
 #endif
@@ -7450,7 +7450,7 @@ bool overscan_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const men
 void UpdateOverscanMenu(void) {
 	for (size_t i=0;i <= 10;i++) {
 		char tmp[64];
-		sprintf(tmp,"overscan_%zu",i);
+		sprintf(tmp,"overscan_%u",i);
 		mainMenu.get_item(tmp).check(sdl.overscan_width == i).refresh_item(mainMenu);
 	}
 }
@@ -8229,8 +8229,8 @@ int main(int argc, char* argv[]) {
 				for (size_t i=1;i <= 10;i++) {
 					char tmp1[64],tmp2[64];
 
-					sprintf(tmp1,"overscan_%zu",i);
-					sprintf(tmp2,"%zu",i);
+					sprintf(tmp1,"overscan_%u",i);
+					sprintf(tmp2,"%u",i);
 					mainMenu.alloc_item(DOSBoxMenu::item_type_id,tmp1).set_text(tmp2).
 						set_callback_function(overscan_menu_callback);
 				}

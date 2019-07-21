@@ -284,7 +284,7 @@ bool Prop_double::SetValue(std::string const& input){
 }
 
 const double same (const double a, const double b, const double epsilon) {
-	return fabs(a - b < epsilon);
+	return std::abs(a - b < epsilon);
 };
 	
 bool Prop_double::CheckValue(Value const& in, bool warn)

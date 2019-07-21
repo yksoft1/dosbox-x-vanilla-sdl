@@ -405,15 +405,15 @@ typedef struct {
 
 typedef struct {
     char        szFileID[15];                 // 識別ID "T98HDDIMAGE.R0"
-    char        Reserve1[1];                  // 予約
+    char        Reserve1[1];                  // 予約 
     char        szComment[0x100];             // イメージコメント(ASCIIz)
-    uint32_t    dwHeadSize;                   // ヘッダ部のサイズ
-    uint32_t    dwCylinder;                   // シリンダ数
-    uint16_t    wHead;                        // ヘッド数
-    uint16_t    wSect;                        // １トラックあたりのセクタ数
-    uint16_t    wSectLen;                     // セクタ長
-    char        Reserve2[2];                  // 予約
-    char        Reserve3[0xe0];               // 予約
+    uint32_t    dwHeadSize;                   // ヘッダ部のサイズ 
+    uint32_t    dwCylinder;                   // シリンダ数 
+    uint16_t    wHead;                        // ヘッド数  
+    uint16_t    wSect;                        // １トラックあたりのセクタ数 
+    uint16_t    wSectLen;                     // セクタ長 
+    char        Reserve2[2];                  // 予約 
+    char        Reserve3[0xe0];               // 予約 
 }NHD_FILE_HEAD,*LP_NHD_FILE_HEAD;
 #pragma pack(pop)
 
