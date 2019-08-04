@@ -7,6 +7,7 @@ WINDRES =	rc
 DBX_PATH	= ..
 
 CXXFLAGS =  -nologo -O2 -MT -EHsc -DNDEBUG -DWIN32 -D_FILE_OFFSET_BITS=64 -DC_OPENGL=1 -DC_DYNREC=1 -DC_MT32=1 -I. \
+			-D_WIN32_WINNT=0x0501 \
 			-Dmain=SDL_main -Isdl\include \
 			-Ilibpng -Izlib \
 			-I$(DBX_PATH) \
@@ -21,7 +22,7 @@ CXXFLAGS =  -nologo -O2 -MT -EHsc -DNDEBUG -DWIN32 -D_FILE_OFFSET_BITS=64 -DC_OP
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus \
 			-I$(DBX_PATH)/src/mt32
 
-CFLAGS	=	-nologo -O2 -MT -DNDEBUG -DWIN32 -I. \
+CFLAGS	=	-nologo -O2 -MT -DNDEBUG -DWIN32 -D_WIN32_WINNT=0x0501 -I. \
 			-Dmain=SDL_main -Isdl\include \
 			-Ilibpng \
 			-I$(DBX_PATH) \
@@ -35,7 +36,7 @@ CFLAGS	=	-nologo -O2 -MT -DNDEBUG -DWIN32 -I. \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/x11 \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus 
 
-LFLAGS	=	-nologo -SUBSYSTEM:Windows
+LFLAGS	=	-nologo -SUBSYSTEM:Windows,"5.01"
 
 TARGET	=	dosbox-x.exe
 
