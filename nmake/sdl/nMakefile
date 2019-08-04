@@ -1,6 +1,9 @@
 CC		=	cl
-]c]c
-<<<<<<< HEAD
+CXX		=   cl
+LD		= 	link
+LIBR	=	lib
+WINDRES =	rc
+
 CXXFLAGS =  -arch:IA32 -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
 
 CFLAGS	=	-arch:IA32 -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
