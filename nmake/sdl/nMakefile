@@ -5,9 +5,9 @@ LIBR	=	lib
 WINDRES =	rc
 
 
-CXXFLAGS =  -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
+CXXFLAGS =  -arch:IA32 -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
 
-CFLAGS	=	-nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
+CFLAGS	=	-arch:IA32 -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
 
 LFLAGS	=	-nologo
 

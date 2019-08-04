@@ -5,9 +5,9 @@ LIBR	=	lib
 WINDRES =	rc
 
 
-CXXFLAGS =  -nologo -O2 -MT -DNDEBUG -I..\zlib
+CXXFLAGS =  -arch:IA32 -nologo -O2 -MT -DNDEBUG -I..\zlib
 
-CFLAGS	=	-nologo -O2 -MT -DNDEBUG -I..\zlib
+CFLAGS	=	-arch:IA32 -nologo -O2 -MT -DNDEBUG -I..\zlib
 
 LFLAGS	=	-nologo
 
