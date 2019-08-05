@@ -275,7 +275,7 @@ void FloppyDevice::set_motor(bool enable) {
 
 void FloppyDevice::motor_step(int dir) {
 	current_track += dir;
-	if (current_track < 0) current_track = 0;
+//	if (current_track < 0) current_track = 0;
 	if (current_track > 84) current_track = 84;
 	track0 = (current_track == 0);
 }
