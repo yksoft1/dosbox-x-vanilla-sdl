@@ -5,6 +5,10 @@
  * [insert open source license here]
  */
 
+// largest sector size supported here. Size code represents size as 2 << (7 + code) i.e. code == 2 is 2 << 9 = 512 bytes
+#define FLOPPY_MAX_SECTOR_SIZE              (2048u)
+#define FLOPPY_MAX_SECTOR_SIZE_SZCODE       (11u/*2^11=2048*/ - 7u)
+
 #include <math.h>
 #include <assert.h>
 #include "dosbox.h"
@@ -87,7 +91,9 @@ public:
 	bool out_res_state;
 public:
     void register_isapnp();
-	bool dma_irq_enabled();
+	bool dma_enabled();
+	bool irq_enabled();
+	bool drive_motor_on(unsigned char index);
 	int drive_selected();
 	void reset_cmd();
 	void reset_res();
@@ -130,6 +136,11 @@ bool FDC_AssignINT13Disk(unsigned char drv) {
 	dev->int13_disk = drv;
 	dev->set_select(fdc->drive_selected() == drv);
 
+	if (IS_PC98_ARCH) {
+		// HACK: Enable motor by default, until motor enable port 0xBE is implemented
+		dev->set_motor(true);
+	}
+
 	LOG_MSG("FDC: Primary controller, drive %u assigned to INT 13h drive %u",drv,drv);
 	return true;
 }
@@ -150,6 +161,8 @@ bool FDC_UnassignINT13Disk(unsigned char drv) {
 	return true;
 }
 
+static void fdc_baseio98_w(Bitu port,Bitu val,Bitu iolen);
+static Bitu fdc_baseio98_r(Bitu port,Bitu iolen);
 static void fdc_baseio_w(Bitu port,Bitu val,Bitu iolen);
 static Bitu fdc_baseio_r(Bitu port,Bitu iolen);
 
@@ -171,25 +184,24 @@ void FDC_MotorStep(Bitu idx/*which IDE controller*/) {
 #endif
 
 	if (dev != NULL && dev->track0 && fdc->motor_dir < 0) {
-		LOG_MSG("FDC: motor step abort. floppy drive signalling track0\n");
 		fdc->motor_steps = 0;
 		fdc->current_cylinder[devidx] = 0;
 	}
 
 	if (fdc->motor_steps > 0) {
 		fdc->motor_steps--;
-		fdc->current_cylinder[devidx] += fdc->motor_dir;
-		if (fdc->current_cylinder[devidx] <= 0) {
-			fdc->current_cylinder[devidx] = 0;
-			fdc->motor_steps = 0;
-		}
-		else if (fdc->current_cylinder[devidx] > 255) {
-			fdc->current_cylinder[devidx] = 255;
-			fdc->motor_steps = 0;
+		if ((fdc->motor_dir < 0 && fdc->current_cylinder[devidx] != 0x00) ||
+			(fdc->motor_dir > 0 && fdc->current_cylinder[devidx] != 0xFF)) {
+			fdc->current_cylinder[devidx] += fdc->motor_dir;
 		}
 
-		if (dev != NULL)
+		if (dev != NULL) {
 			dev->motor_step(fdc->motor_dir);
+			if (dev->track0) {
+				fdc->motor_steps = 0;
+				fdc->current_cylinder[devidx] = 0;
+			}
+		}
 	}
 
 	fdc->update_ST3();
@@ -202,7 +214,7 @@ void FDC_MotorStep(Bitu idx/*which IDE controller*/) {
 		fdc->data_register_ready = 1;
 		fdc->busy_status = 0;
 		fdc->ST[0] &= 0x1F;
-		if (fdc->current_cylinder == 0) fdc->ST[0] |= 0x20;
+		fdc->ST[0] |= 0x20; /* seek completed (bit 5) */
 		/* fire IRQ */
 		fdc->raise_irq();
 		/* no result phase */
@@ -268,11 +280,23 @@ void FloppyDevice::motor_step(int dir) {
 	track0 = (current_track == 0);
 }
 
+bool FloppyController::drive_motor_on(unsigned char index) {
+	if (index < 4) return !!((digital_output_register >> (4u + index)) & 1);
+	return false;
+}
+
 int FloppyController::drive_selected() {
 	return (digital_output_register & 3);
 }
 
-bool FloppyController::dma_irq_enabled() {
+bool FloppyController::dma_enabled() {
+	return (digital_output_register & 0x08); /* bit 3 of DOR controls DMA/IRQ enable */
+}
+
+bool FloppyController::irq_enabled() {
+	/* IRQ seems to be enabled, always, on PC-98. There does not seem to be an enable bit. */
+	if (IS_PC98_ARCH) return true;
+
 	return (digital_output_register & 0x08); /* bit 3 of DOR controls DMA/IRQ enable */
 }
 
@@ -303,7 +327,7 @@ static void FDC_Init(Section* sec,unsigned char fdc_interface) {
 
 	LOG(LOG_MISC,LOG_DEBUG)("Initializing floppy controller interface %u",fdc_interface);
 
-    if (!IS_PC98_ARCH) {
+    {
         fdc = floppycontroller[fdc_interface] = new FloppyController(sec,fdc_interface);
         fdc->install_io_port();
 
@@ -451,19 +475,32 @@ FloppyController::FloppyController(Section* configuration,unsigned char index):M
 	if (i >= 0 && i <= 15) DMA = i;
 
 	i = section->Get_hex("io");
-	if (i >= 0x100 && i <= 0x3FF) base_io = i & ~7;
+	if (i >= 0x90 && i <= 0x3FF) base_io = i & ~7;
 
-	if (IRQ < 0) IRQ = 6;
-	if (DMA < 0) DMA = 2;
+	if (IS_PC98_ARCH) {
+		/* According to Neko Project II source code, and the Undocumented PC-98 reference:
+		 *
+		 * The primary controller at 0x90-0x94 is for 3.5" drives, uses IRQ 11 (INT42), and DMA channel 2.
+		 * The secondary controller at 0xC8-0xCC is for 5.25" drives, uses IRQ 10 (INT41), and DMA channel 3. */
+		if (IRQ < 0) IRQ = (index == 1) ? 10/*INT41*/ : 11/*INT42*/;
+		if (DMA < 0) DMA = (index == 1) ? 3 : 2;
+
+		if (base_io == 0) {
+			if (index == 0) base_io = 0x90;
+			if (index == 1) base_io = 0xC8;
+		}
+	}
+	else {
+		if (IRQ < 0) IRQ = 6;
+		if (DMA < 0) DMA = 2;
+
+		if (base_io == 0) {
+			if (index == 0) base_io = 0x3F0;
+			if (index == 1) base_io = 0x370;
+		}
+	}
 
 	dma = GetDMAChannel(DMA);
-
-	if (base_io == 0) {
-		if (index == 0) base_io = 0x3F0;
-	}
-	else if (base_io == 1) {
-		if (index == 0) base_io = 0x370;
-	}
 }
 
 void FloppyController::install_io_port(){
@@ -471,10 +508,20 @@ void FloppyController::install_io_port(){
 
 	if (base_io != 0) {
 		LOG_MSG("FDC installing to io=%03xh IRQ=%d DMA=%d\n",base_io,IRQ,DMA);
-		for (i=0;i < 8;i++) {
-			if (i != 6) { /* does not use port 0x3F6 */
-				WriteHandler[i].Install(base_io+i,fdc_baseio_w,IO_MA);
-				ReadHandler[i].Install(base_io+i,fdc_baseio_r,IO_MA);
+		if (IS_PC98_ARCH) {
+			WriteHandler[0].Install(base_io+0,fdc_baseio98_w,IO_MA);    // 0x90 / 0xC8
+			ReadHandler[0].Install(base_io+0,fdc_baseio98_r,IO_MA);     // 0x90 / 0xC8
+			WriteHandler[1].Install(base_io+2,fdc_baseio98_w,IO_MA);    // 0x92 / 0xCA
+			ReadHandler[1].Install(base_io+2,fdc_baseio98_r,IO_MA);     // 0x92 / 0xCA
+			WriteHandler[2].Install(base_io+4,fdc_baseio98_w,IO_MA);    // 0x94 / 0xCC
+			ReadHandler[2].Install(base_io+4,fdc_baseio98_r,IO_MA);     // 0x94 / 0xCC
+		}
+		else {
+			for (i=0;i < 8;i++) {
+				if (i != 6) { /* does not use port 0x3F6 */
+					WriteHandler[i].Install(base_io+i,fdc_baseio_w,IO_MA);
+					ReadHandler[i].Install(base_io+i,fdc_baseio_r,IO_MA);
+				}
 			}
 		}
 	}
@@ -658,13 +705,28 @@ void FloppyController::on_fdc_in_command() {
 			if (dev != NULL && dma != NULL && dev->motor && dev->select && image != NULL && (in_cmd[0]&0x40)/*MFM=1*/ &&
 				current_cylinder[devidx] < image->cylinders && (in_cmd[1]&4?1:0) <= image->heads &&
 				(in_cmd[1]&4?1:0) == in_cmd[3] && in_cmd[2] == current_cylinder[devidx] &&
-				in_cmd[5] == 2/*512 bytes/sector*/ && in_cmd[4] > 0 && in_cmd[4] <= image->sectors) {
-				unsigned char sector[512];
+				in_cmd[5] <= FLOPPY_MAX_SECTOR_SIZE_SZCODE && in_cmd[4] > 0U && in_cmd[4] <= image->sectors) {
+				unsigned char sector[FLOPPY_MAX_SECTOR_SIZE];
 				bool fail = false;
+
+				const unsigned int sector_size_bytes = (1u << (in_cmd[5]+7u));
+				assert(sector_size_bytes <= FLOPPY_MAX_SECTOR_SIZE);
 
 				/* TODO: delay related to how long it takes for the disk to rotate around to the sector requested */
 				reset_res();
 				ST[0] = 0x00 | devidx;
+
+				out_res[3] = in_cmd[2];
+				out_res[4] = in_cmd[3];
+				out_res[5] = in_cmd[4];		/* the sector passing under the head at this time */
+				{
+					unsigned int sz = (unsigned int)image->sector_size;
+					out_res[6] = 0;			    /* 128 << 2 == 512 bytes/sector */
+					while (sz > 128u && out_res[6] < FLOPPY_MAX_SECTOR_SIZE_SZCODE) {
+						out_res[6]++;
+						sz >>= 1u;
+					}
+				}
 
 				while (!fail && !dma->tcount/*terminal count*/) {
 					/* if we're reading past the track, fail */
@@ -675,10 +737,10 @@ void FloppyController::on_fdc_in_command() {
 
 					/* DMA transfer */
 					dma->Register_Callback(0);
-					if (dma->Read(512,sector) != 512) break;
+					if (dma->Read(sector_size_bytes,sector) != sector_size_bytes) break;
 
 					/* write sector */
-					Bit8u err = image->Write_Sector(in_cmd[3]/*head*/,in_cmd[2]/*cylinder*/,in_cmd[4]/*sector*/,sector);
+					Bit8u err = image->Write_Sector(in_cmd[3]/*head*/,in_cmd[2]/*cylinder*/,in_cmd[4]/*sector*/,sector,sector_size_bytes);
 					if (err != 0x00) {
 						fail = true;
 						break;
@@ -698,28 +760,25 @@ void FloppyController::on_fdc_in_command() {
 					ST[0] = (ST[0] & 0x3F) | 0x80;
 					ST[1] = (1 << 0)/*missing address mark*/ | (1 << 2)/*no data*/;
 					ST[2] = (1 << 0)/*missing data address mark*/;
-					prepare_res_phase(1);
-					out_res[0] = ST[0];
 				}
-				else {
+				{
 					prepare_res_phase(7);
 					out_res[0] = ST[0];
 					out_res[1] = ST[1];
 					out_res[2] = ST[2];
-					out_res[3] = in_cmd[2];
-					out_res[4] = in_cmd[3];
-					out_res[5] = in_cmd[4];		/* the sector passing under the head at this time */
-					out_res[6] = 2;			/* 128 << 2 == 512 bytes/sector */
 				}
 			}
 			else {
 				/* TODO: real floppy controllers will pause for up to 1/2 a second before erroring out */
 				reset_res();
-				ST[0] = (ST[0] & 0x3F) | 0x80;
+				ST[0] = (ST[0] & 0x1F) | 0x80;
 				ST[1] = (1 << 0)/*missing address mark*/ | (1 << 2)/*no data*/;
 				ST[2] = (1 << 0)/*missing data address mark*/;
-				prepare_res_phase(1);
+
+				prepare_res_phase(7);
 				out_res[0] = ST[0];
+				out_res[1] = ST[1];
+				out_res[2] = ST[2];
 			}
 			raise_irq();
 			break;
@@ -742,13 +801,28 @@ void FloppyController::on_fdc_in_command() {
 			if (dev != NULL && dma != NULL && dev->motor && dev->select && image != NULL && (in_cmd[0]&0x40)/*MFM=1*/ &&
 				current_cylinder[devidx] < image->cylinders && (in_cmd[1]&4?1:0) <= image->heads &&
 				(in_cmd[1]&4?1:0) == in_cmd[3] && in_cmd[2] == current_cylinder[devidx] &&
-				in_cmd[5] == 2/*512 bytes/sector*/ && in_cmd[4] > 0 && in_cmd[4] <= image->sectors) {
-				unsigned char sector[512];
+				in_cmd[5] <= FLOPPY_MAX_SECTOR_SIZE_SZCODE && in_cmd[4] > 0U && in_cmd[4] <= image->sectors) {
+				unsigned char sector[FLOPPY_MAX_SECTOR_SIZE];
 				bool fail = false;
+
+				const unsigned int sector_size_bytes = (1u << (in_cmd[5]+7u));
+				assert(sector_size_bytes <= FLOPPY_MAX_SECTOR_SIZE);
 
 				/* TODO: delay related to how long it takes for the disk to rotate around to the sector requested */
 				reset_res();
 				ST[0] = 0x00 | devidx;
+
+				out_res[3] = in_cmd[2];
+				out_res[4] = in_cmd[3];
+				out_res[5] = in_cmd[4];		/* the sector passing under the head at this time */
+				{
+					unsigned int sz = (unsigned int)image->sector_size;
+					out_res[6] = 0;			    /* 128 << 2 == 512 bytes/sector */
+					while (sz > 128u && out_res[6] < FLOPPY_MAX_SECTOR_SIZE_SZCODE) {
+						out_res[6]++;
+						sz >>= 1u;
+					}
+				}
 
 				while (!fail && !dma->tcount/*terminal count*/) {
 					/* if we're reading past the track, fail */
@@ -758,7 +832,7 @@ void FloppyController::on_fdc_in_command() {
 					}
 
 					/* read sector */
-					Bit8u err = image->Read_Sector(in_cmd[3]/*head*/,in_cmd[2]/*cylinder*/,in_cmd[4]/*sector*/,sector);
+					Bit8u err = image->Read_Sector(in_cmd[3]/*head*/,in_cmd[2]/*cylinder*/,in_cmd[4]/*sector*/,sector,sector_size_bytes);
 					if (err != 0x00) {
 						fail = true;
 						break;
@@ -766,7 +840,7 @@ void FloppyController::on_fdc_in_command() {
 
 					/* DMA transfer */
 					dma->Register_Callback(0);
-					if (dma->Write(512,sector) != 512) break;
+					if (dma->Write(sector_size_bytes,sector) != sector_size_bytes) break;
 
 					/* if we're at the last sector of the track according to program, then stop */
 					if (in_cmd[4] == in_cmd[6]) break;
@@ -782,28 +856,25 @@ void FloppyController::on_fdc_in_command() {
 					ST[0] = (ST[0] & 0x3F) | 0x80;
 					ST[1] = (1 << 0)/*missing address mark*/ | (1 << 2)/*no data*/;
 					ST[2] = (1 << 0)/*missing data address mark*/;
-					prepare_res_phase(1);
-					out_res[0] = ST[0];
 				}
-				else {
+				{
 					prepare_res_phase(7);
 					out_res[0] = ST[0];
 					out_res[1] = ST[1];
 					out_res[2] = ST[2];
-					out_res[3] = in_cmd[2];
-					out_res[4] = in_cmd[3];
-					out_res[5] = in_cmd[4];		/* the sector passing under the head at this time */
-					out_res[6] = 2;			/* 128 << 2 == 512 bytes/sector */
 				}
 			}
 			else {
 				/* TODO: real floppy controllers will pause for up to 1/2 a second before erroring out */
 				reset_res();
-				ST[0] = (ST[0] & 0x3F) | 0x80;
+				ST[0] = (ST[0] & 0x1F) | 0x80;
 				ST[1] = (1 << 0)/*missing address mark*/ | (1 << 2)/*no data*/;
 				ST[2] = (1 << 0)/*missing data address mark*/;
-				prepare_res_phase(1);
+
+				prepare_res_phase(7);
 				out_res[0] = ST[0];
+				out_res[1] = ST[1];
+				out_res[2] = ST[2];
 			}
 			raise_irq();
 			break;
@@ -819,8 +890,7 @@ void FloppyController::on_fdc_in_command() {
 			}
 			else {
 				/* delay due to stepping the head to the desired cylinder */
-				motor_steps = current_cylinder[devidx]; /* always to track 0 */
-				if (motor_steps > 79) motor_steps = 79; /* calibrate is said to max out at 79 */
+				motor_steps = 79; /* calibrate is said to max out at 79. motor step routine will STOP when drive sets track0 signal */
 				motor_dir = -1; /* always step backwards */
 
 				/* the command takes time to move the head */
@@ -876,6 +946,7 @@ void FloppyController::on_fdc_in_command() {
 			 */
 			/* must have a device present. must have an image. device motor and select must be enabled.
 			 * current physical cylinder position must be within range of the image. request must have MFM bit set. */
+			ST[0] &= ~0x20;
 			if (dev != NULL && dev->motor && dev->select && image != NULL && (in_cmd[0]&0x40)/*MFM=1*/ &&
 				current_cylinder[devidx] < image->cylinders && (in_cmd[1]&4?1:0) <= image->heads) {
 				int ns = (int)floor(dev->floppy_image_motor_position() * image->sectors);
@@ -887,7 +958,14 @@ void FloppyController::on_fdc_in_command() {
 				out_res[3] = current_cylinder[devidx];
 				out_res[4] = (in_cmd[1]&4?1:0);
 				out_res[5] = ns + 1;		/* the sector passing under the head at this time */
-				out_res[6] = 2;			/* 128 << 2 == 512 bytes/sector */
+				{
+					unsigned int sz = (unsigned int)image->sector_size;
+					out_res[6] = 0;			    /* 128 << 2 == 512 bytes/sector */
+					while (sz > 128u && out_res[6] < FLOPPY_MAX_SECTOR_SIZE_SZCODE) {
+						out_res[6]++;
+						sz >>= 1u;
+					}
+				}
 				prepare_res_phase(7);
 			}
 			else {
@@ -916,7 +994,7 @@ void FloppyController::on_fdc_in_command() {
 			 */
 			/* the raw images used by DOSBox cannot represent "deleted sectors", so always fail */
 			reset_res();
-			ST[0] = (ST[0] & 0x3F) | 0x80;
+			ST[0] = (ST[0] & 0x1F) | 0x80;
 			ST[1] = (1 << 0)/*missing address mark*/ | (1 << 2)/*no data*/;
 			ST[2] = (1 << 0)/*missing data address mark*/;
 			prepare_res_phase(1);
@@ -1218,6 +1296,85 @@ static void fdc_baseio_w(Bitu port,Bitu val,Bitu iolen) {
 	};
 }
 
+static void fdc_baseio98_w(Bitu port,Bitu val,Bitu iolen) {
+	FloppyController *fdc = match_fdc_controller(port);
+	if (fdc == NULL) {
+		LOG_MSG("WARNING: port read from I/O port not registered to FDC, yet callback triggered\n");
+		return;
+	}
+
+//	LOG_MSG("FDC: Write port 0x%03x data 0x%02x irq_at_time=%u\n",port,val,fdc->irq_pending);
+
+	if (iolen > 1) {
+		LOG_MSG("WARNING: FDC unusual port write %03xh val=%02xh len=%u, port I/O should be 8-bit\n",(int)port,(int)val,(int)iolen);
+	}
+
+	switch (port&7) {
+		case 2: /* data */
+			if (!fdc->data_register_ready) {
+				LOG_MSG("WARNING: FDC data write when data port not ready\n");
+			}
+			else if (fdc->data_read_expected) {
+				LOG_MSG("WARNING: FDC data write when data port ready but expecting I/O read\n");
+			}
+			else {
+				fdc->fdc_data_write(val&0xFF);
+			}
+			break;
+		default:
+			LOG_MSG("DEBUG: FDC write port %03xh val %02xh len=%u\n",(int)port,(int)val,(int)iolen);
+			break;
+	}
+}
+
+static Bitu fdc_baseio98_r(Bitu port,Bitu iolen) {
+	FloppyController *fdc = match_fdc_controller(port);
+	unsigned char b;
+
+	if (fdc == NULL) {
+		LOG_MSG("WARNING: port read from I/O port not registered to FDC, yet callback triggered\n");
+		return ~(0UL);
+	}
+
+//	LOG_MSG("FDC: Read port 0x%03x irq_at_time=%u\n",port,fdc->irq_pending);
+
+	if (iolen > 1) {
+		LOG_MSG("WARNING: FDC unusual port read %03xh len=%u, port I/O should be 8-bit\n",(int)port,(int)iolen);
+	}
+
+	switch (port&7) {
+		case 0: /* main status */
+			b =	(fdc->data_register_ready ? 0x80 : 0x00) +
+				(fdc->data_read_expected ? 0x40 : 0x00) +
+				(fdc->non_dma_mode ? 0x20 : 0x00) +
+				(fdc->busy_status ? 0x10 : 0x00) +
+				(fdc->positioning[3] ? 0x08 : 0x00) +
+				(fdc->positioning[2] ? 0x04 : 0x00) +
+				(fdc->positioning[1] ? 0x02 : 0x00) +
+				(fdc->positioning[0] ? 0x01 : 0x00);
+//			LOG_MSG("FDC: read status 0x%02x\n",b);
+			return b;
+		case 2: /* data */
+			if (!fdc->data_register_ready) {
+				LOG_MSG("WARNING: FDC data read when data port not ready\n");
+				return ~(0UL);
+			}
+			else if (!fdc->data_read_expected) {
+				LOG_MSG("WARNING: FDC data read when data port ready but expecting I/O write\n");
+				return ~(0UL);
+			}
+
+			b = fdc->fdc_data_read();
+//			LOG_MSG("FDC: read data 0x%02x\n",b);
+			return b;
+		default:
+			LOG_MSG("DEBUG: FDC read port %03xh len=%u\n",(int)port,(int)iolen);
+			break;
+	}
+
+	return ~(0UL);
+}
+
 static Bitu fdc_baseio_r(Bitu port,Bitu iolen) {
 	FloppyController *fdc = match_fdc_controller(port);
 	unsigned char b;
@@ -1268,7 +1425,7 @@ static Bitu fdc_baseio_r(Bitu port,Bitu iolen) {
 
 void FloppyController::raise_irq() {
 	irq_pending = true;
-	if (dma_irq_enabled() && IRQ >= 0) PIC_ActivateIRQ(IRQ);
+	if (irq_enabled() && IRQ >= 0) PIC_ActivateIRQ((unsigned int)IRQ);
 }
 
 void FloppyController::lower_irq() {
