@@ -302,8 +302,10 @@ OBJS3	=	$(DBX_PATH)\src\ints\bios.obj \
 LIBS = kernel32.lib user32.lib gdi32.lib imm32.lib winmm.lib dxguid.lib shell32.lib opengl32.lib advapi32.lib ws2_32.lib sdl\sdl.lib sdl\sdlmain.lib zlib\z.lib libpng\png.lib
 
 !IFDEF SSE2
+CFLAGS = -arch:SSE2 $(CFLAGS)
 CXXFLAGS = -arch:SSE2 $(CXXFLAGS)
 !ELSE
+CFLAGS = -arch:IA32 $(CFLAGS)
 CXXFLAGS = -arch:IA32 $(CXXFLAGS)
 !ENDIF
 
