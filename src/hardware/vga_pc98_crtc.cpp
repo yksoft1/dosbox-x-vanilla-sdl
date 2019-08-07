@@ -21,6 +21,7 @@
 
 void pc98_update_page_ptrs(void);
 
+extern bool                 pc98_40col_text;
 extern bool                 pc98_31khz_mode;
 extern bool                 pc98_attr4_graphic;
 extern bool                 pc98_display_enable;
@@ -229,6 +230,10 @@ void pc98_port68_command_write(unsigned char b) {
         case 0x01: //                                       1=simple graphic
             pc98_attr4_graphic = !!(b&1);
             break;
+		case 0x04: // 40-column mode  0=80-column
+		case 0x05: //                 1=40-column
+			pc98_40col_text = !!(b&1);
+			break;
         case 0x08: // 200-line mode: show odd raster
         case 0x09: //                don't show odd raster
             pc98_graphics_hide_odd_raster_200line = !!(b&1);
