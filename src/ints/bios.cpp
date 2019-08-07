@@ -63,6 +63,7 @@ const unsigned char pc98_epson_check_2[0x27] = {
 bool enable_pc98_copyright_string = false;
 
 /* mouse.cpp */
+extern bool pc98_40col_text;
 extern bool en_bios_ps2mouse;
 extern bool rom_bios_8x8_cga_font;
 extern bool pcibus_enable;
