@@ -2332,13 +2332,32 @@ public:
 		/* carry on setup */
 		DOS_SetupMemory();								/* Setup first MCB */
 
+        /* NTS: The reason PC-98 has a higher minimum free is that the MS-DOS kernel
+         *      has a larger footprint in memory, including fixed locations that
+         *      some PC-98 games will read directly, and an ANSI driver.
+         *
+         *      Some PC-98 games will have problems if loaded below a certain
+         *      threshhold as well.
+         *
+         *        Valkyrie: 0xE10 is not enough for the game to run. If a specific
+         *                  FM music selection is chosen, the remaining memory is
+         *                  insufficient for the game to start the battle.
+         *
+         *      The default assumes a DOS kernel and lower memory region of 32KB,
+         *      which might be a reasonable compromise so far.
+         *
+         * NOTES: A minimum mcb free value of at least 0xE10 is needed for Windows 3.1
+         *        386 enhanced to start, else it will complain about insufficient memory (?).
+         *        To get Windows 3.1 to run, either set "minimum mcb free=e10" or run
+         *        "LOADFIX" before starting Windows 3.1 */
+		 
 		/* NTS: There is a mysterious memory corruption issue with some DOS games
 		 * and applications when they are loaded at or around segment 0x800.
 		 * This should be looked into. In the meantime, setting the MCB
 		 * start segment before or after 0x800 helps to resolve these issues.
 		 * It also puts DOSBox-X at parity with main DOSBox SVN behavior. */
         if (minimum_mcb_free == 0)
-            minimum_mcb_free = 0x100;
+            minimum_mcb_free = IS_PC98_ARCH ? 0x800 : 0x100;
         else if (minimum_mcb_free < minimum_mcb_segment)
             minimum_mcb_free = minimum_mcb_segment;
 
