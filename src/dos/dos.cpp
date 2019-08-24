@@ -409,9 +409,18 @@ bool disk_io_unmask_irq0 = true;
 //! \brief Is a DOS program running ? (set by INT21 4B/4C)
 bool dos_program_running = false;
 
+void XMS_DOS_LocalA20EnableIfNotEnabled(void);
+
 #define DOSNAMEBUF 256
 static Bitu DOS_21Handler(void) {
     bool unmask_irq0 = false;
+
+	/* Real MS-DOS behavior:
+	 *   If HIMEM.SYS is loaded and CONFIG.SYS says DOS=HIGH, DOS will load itself into the HMA area.
+	 *   To prevent crashes, the INT 21h handler down below will enable the A20 gate before executing
+	 *   the DOS kernel. */
+	if (DOS_IS_IN_HMA())
+		XMS_DOS_LocalA20EnableIfNotEnabled();
 
 	if (((reg_ah != 0x50) && (reg_ah != 0x51) && (reg_ah != 0x62) && (reg_ah != 0x64)) && (reg_ah<0x6c)) {
 		DOS_PSP psp(dos.psp());
@@ -2332,13 +2341,32 @@ public:
 		/* carry on setup */
 		DOS_SetupMemory();								/* Setup first MCB */
 
+        /* NTS: The reason PC-98 has a higher minimum free is that the MS-DOS kernel
+         *      has a larger footprint in memory, including fixed locations that
+         *      some PC-98 games will read directly, and an ANSI driver.
+         *
+         *      Some PC-98 games will have problems if loaded below a certain
+         *      threshhold as well.
+         *
+         *        Valkyrie: 0xE10 is not enough for the game to run. If a specific
+         *                  FM music selection is chosen, the remaining memory is
+         *                  insufficient for the game to start the battle.
+         *
+         *      The default assumes a DOS kernel and lower memory region of 32KB,
+         *      which might be a reasonable compromise so far.
+         *
+         * NOTES: A minimum mcb free value of at least 0xE10 is needed for Windows 3.1
+         *        386 enhanced to start, else it will complain about insufficient memory (?).
+         *        To get Windows 3.1 to run, either set "minimum mcb free=e10" or run
+         *        "LOADFIX" before starting Windows 3.1 */
+		 
 		/* NTS: There is a mysterious memory corruption issue with some DOS games
 		 * and applications when they are loaded at or around segment 0x800.
 		 * This should be looked into. In the meantime, setting the MCB
 		 * start segment before or after 0x800 helps to resolve these issues.
 		 * It also puts DOSBox-X at parity with main DOSBox SVN behavior. */
         if (minimum_mcb_free == 0)
-            minimum_mcb_free = 0x100;
+            minimum_mcb_free = IS_PC98_ARCH ? 0x800 : 0x100;
         else if (minimum_mcb_free < minimum_mcb_segment)
             minimum_mcb_free = minimum_mcb_segment;
 

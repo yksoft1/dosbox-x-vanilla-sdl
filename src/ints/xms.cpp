@@ -240,6 +240,7 @@ Bitu XMS_AllocateMemory(Bitu size, Bit16u& handle) {	// size = kb
 
 Bitu XMS_FreeMemory(Bitu handle) {
 	if (InvalidHandle(handle)) return XMS_INVALID_HANDLE;
+	if (xms_handles[handle].locked != 0) return XMS_BLOCK_LOCKED;
 	MEM_ReleasePages(xms_handles[handle].mem);
 	xms_handles[handle].mem=-1;
 	xms_handles[handle].size=0;
@@ -250,6 +251,10 @@ Bitu XMS_FreeMemory(Bitu handle) {
 Bitu XMS_MoveMemory(PhysPt bpt) {
 	/* Read the block with mem_read's */
 	Bitu length=mem_readd(bpt+offsetof(XMS_MemMove,length));
+
+	/* "Length must be even" --Microsoft XMS Spec 3.0 */
+	if (length & 1u) return XMS_INVALID_LENGTH;
+
 	Bitu src_handle=mem_readw(bpt+offsetof(XMS_MemMove,src_handle));
 	union {
 		RealPt realpt;
@@ -272,6 +277,10 @@ Bitu XMS_MoveMemory(PhysPt bpt) {
 		srcpt=(xms_handles[src_handle].mem*4096)+src.offset;
 	} else {
 		srcpt=Real2Phys(src.realpt);
+
+		/* Microsoft TEST.C considers it an error to allow real mode pointers + length to
+		 * extend past the end of the 8086-accessible conventional memory area. */
+		if ((srcpt+length) > 0x10FFF0u) return XMS_INVALID_LENGTH;
 	}
 	if (dest_handle) {
 		if (InvalidHandle(dest_handle)) {
@@ -286,6 +295,10 @@ Bitu XMS_MoveMemory(PhysPt bpt) {
 		destpt=(xms_handles[dest_handle].mem*4096)+dest.offset;
 	} else {
 		destpt=Real2Phys(dest.realpt);
+
+		/* Microsoft TEST.C considers it an error to allow real mode pointers + length to
+		 * extend past the end of the 8086-accessible conventional memory area. */
+		if ((destpt+length) > 0x10FFF0u) return XMS_INVALID_LENGTH;
 	}
 //	LOG_MSG("XMS move src %X dest %X length %X",srcpt,destpt,length);
 
@@ -384,6 +397,14 @@ Bitu XMS_LocalDisableA20(void) {
     }
 
     return 0;
+}
+
+void XMS_DOS_LocalA20EnableIfNotEnabled(void) {
+	/* Confirmed MS-DOS behavior if DOS=HIGH */
+	if (!XMS_GetEnabledA20()) {
+		LOG(LOG_DOSMISC,LOG_DEBUG)("DOS=HIGH, XMS enabled, A20 gate disabled. Reenabling A20 gate on INT 21h call.");
+		XMS_LocalEnableA20();
+	}
 }
 
 Bitu XMS_Handler(void) {
