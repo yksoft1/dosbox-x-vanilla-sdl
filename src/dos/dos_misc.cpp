@@ -91,6 +91,12 @@ static Bitu INT2A_Handler(void) {
 // INT 2F
 static bool DOS_MultiplexFunctions(void) {
 	switch (reg_ax) {
+    case 0x0800:    /* DRIVER.SYS function */
+    case 0x0801:    /* DRIVER.SYS function */
+    case 0x0802:    /* DRIVER.SYS function */
+    case 0x0803:    /* DRIVER.SYS function */
+        LOG(LOG_MISC,LOG_DEBUG)("Unhandled DRIVER.SYS call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+        break;
 	/* ert, 20100711: Locking extensions */
 	case 0x1000:	/* SHARE.EXE installation check */
 		if (enable_share_exe_fake) {
@@ -132,7 +138,7 @@ static bool DOS_MultiplexFunctions(void) {
 				mem_writew(sftptr+sftofs+0x02,(Bit16u)(Files[reg_bx]->flags&3));	// file open mode
 				mem_writeb(sftptr+sftofs+0x04,(Bit8u)(Files[reg_bx]->attr));		// file attribute
 				mem_writew(sftptr+sftofs+0x05,0x40|drive);							// device info word
-				mem_writed(sftptr+sftofs+0x07,RealMake(dos.tables.dpb,drive*9));		// dpb of the drive
+				mem_writed(sftptr+sftofs+0x07,RealMake(dos.tables.dpb,drive*dos.tables.dpb_size));		// dpb of the drive
 				mem_writew(sftptr+sftofs+0x0d,Files[reg_bx]->time);					// packed file time
 				mem_writew(sftptr+sftofs+0x0f,Files[reg_bx]->date);					// packed file date
 				Bit32u curpos=0;
@@ -352,6 +358,12 @@ static bool DOS_MultiplexFunctions(void) {
 		LOG(LOG_MISC,LOG_DEBUG)("HMA allocation: %u bytes at FFFF:%04x",reg_bx,reg_di);
 		DOS_HMA_CLAIMED(reg_bx);
 		} return true;
+    case 0x4a10: { /* Microsoft SmartDrive (SMARTDRV) API */
+        LOG(LOG_MISC,LOG_DEBUG)("Unhandled SMARTDRV call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+	    } return true;
+    case 0x4a11: { /* Microsoft DoubleSpace (DBLSPACE.BIN) API */
+        LOG(LOG_MISC,LOG_DEBUG)("Unhandled DBLSPACE call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+	    } return true;
 	}
 
 	return false;

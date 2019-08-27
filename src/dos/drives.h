@@ -285,8 +285,16 @@ public:
 	virtual Bit8u Write_AbsoluteSector(Bit32u sectnum, void * data);
 	virtual Bit32u getSectSize(void);
 	Bit32u sector_size;
+
+    // INT 25h/INT 26h
+    virtual Bit32u GetSectorCount(void);
+    virtual Bit32u GetSectorSize(void);
+	virtual Bit8u Read_AbsoluteSector_INT25(Bit32u sectnum, void * data);
+	virtual Bit8u Write_AbsoluteSector_INT25(Bit32u sectnum, void * data);
+	virtual void UpdateDPB(unsigned char dos_drive);
 };
 
+PhysPt DOS_Get_DPB(unsigned int dos_drive);
 
 class cdromDrive : public localDrive
 {
