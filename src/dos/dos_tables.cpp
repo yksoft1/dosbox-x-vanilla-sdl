@@ -199,8 +199,19 @@ extern bool enable_dbcs_tables;
 extern bool enable_filenamechar;
 extern bool enable_collating_uppercase;
 
+PhysPt DOS_Get_DPB(unsigned int dos_drive) {
+    if (dos_drive >= DOS_DRIVES)
+        return 0;
+
+    return PhysMake(dos.tables.dpb,dos_drive*dos.tables.dpb_size);
+}
+
 void DOS_SetupTables(void) {
 	Bit16u seg;Bitu i;
+	
+	dos.tables.dpb_size=0x21;  // bytes per DPB entry (MS-DOS 4.x-6.x size)
+	dos.tables.mediaid_offset=0x17; // media ID offset in DPB (MS-DOS 4.x-6.x case)
+
 	dos.tables.tempdta=RealMake(DOS_GetMemory(4,"dos.tables.tempdta"),0);
 	dos.tables.tempdta_fcbdelete=RealMake(DOS_GetMemory(4,"dos.tables.fcbdelete"),0);
 	/* Create the DOS Info Block */
@@ -303,13 +314,22 @@ void DOS_SetupTables(void) {
 	dos_infoblock.SetFCBTable(RealMake(seg,0));
 
 	/* Create a fake DPB */
-	dos.tables.dpb=DOS_GetMemory(16,"dos.tables.dpb");
-	dos.tables.mediaid=RealMake(dos.tables.dpb,0x17);	//Media ID offset in DPB
+	dos.tables.dpb=DOS_GetMemory(((DOS_DRIVES*dos.tables.dpb_size)+15u)/16u,"dos.tables.dpb");
+    dos.tables.mediaid_offset=0x17;	//Media ID offset in DPB (MS-DOS 4.x-6.x)
+	dos.tables.mediaid=RealMake(dos.tables.dpb,dos.tables.mediaid_offset);
 	for (i=0;i<DOS_DRIVES;i++) {
-		real_writeb(dos.tables.dpb,i*9,i);				// drive number
-		real_writeb(dos.tables.dpb,i*9+1,i);			// unit number
-		real_writew(dos.tables.dpb,i*9+2,0x0200);		// bytes per sector
-		mem_writew(Real2Phys(dos.tables.mediaid)+i*9,0);
+        real_writeb(dos.tables.dpb,i*dos.tables.dpb_size,(Bit8u)i);             // drive number
+        real_writeb(dos.tables.dpb,i*dos.tables.dpb_size+1,(Bit8u)i);           // unit number
+        real_writew(dos.tables.dpb,i*dos.tables.dpb_size+2,0x0200);     // bytes per sector
+        real_writew(dos.tables.dpb,i*dos.tables.dpb_size+6,0x0001);     // reserved sectors at the beginning of the drive
+        mem_writew(Real2Phys(dos.tables.mediaid)+i*dos.tables.dpb_size,0u);
+        real_writew(dos.tables.dpb,i*dos.tables.dpb_size+0x1F,0xFFFF);      // number of free clusters or 0xFFFF if unknown
+	
+        // next DPB pointer
+        if ((i+1) < DOS_DRIVES)
+            real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,RealMake(dos.tables.dpb,(i+1)*dos.tables.dpb_size));
+        else
+            real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,0);
 	}
 
 	/* Create a fake disk buffer head */

@@ -586,12 +586,28 @@ Bit8u fatDrive::writeSector(Bit32u sectnum, void * data) {
 	return loadedDisk->Write_Sector(head, cylinder, sector, data);
 }
 
+Bit32u fatDrive::GetSectorCount(void) {
+    return (loadedDisk->heads * loadedDisk->sectors * loadedDisk->cylinders) - partSectOff;
+}
+
+Bit32u fatDrive::GetSectorSize(void) {
+    return getSectorSize();
+}
+
 Bit32u fatDrive::getSectorSize(void) {
 	return bootbuffer.bytespersector;
 }
 
 Bit32u fatDrive::getClusterSize(void) {
 	return bootbuffer.sectorspercluster * bootbuffer.bytespersector;
+}
+
+Bit8u fatDrive::Read_AbsoluteSector_INT25(Bit32u sectnum, void * data) {
+    return readSector(sectnum+partSectOff,data);
+}
+
+Bit8u fatDrive::Write_AbsoluteSector_INT25(Bit32u sectnum, void * data) {
+    return writeSector(sectnum+partSectOff,data);
 }
 
 Bit32u fatDrive::getAbsoluteSectFromBytePos(Bit32u startClustNum, Bit32u bytePos) {
@@ -906,6 +922,39 @@ Bit8u fatDrive::Write_AbsoluteSector(Bit32u sectnum, void * data) {
 
 Bit32u fatDrive::getSectSize(void) {
     return sector_size;
+}
+
+//https://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
+static unsigned int mylog2 (unsigned int val) {
+    if (val == 0) return ~(0u);
+    if (val == 1) return 0;
+    unsigned int ret = 0;
+    while (val > 1) {
+        val >>= 1;
+        ret++;
+    }
+    return ret;
+}
+
+void fatDrive::UpdateDPB(unsigned char dos_drive) {
+    PhysPt ptr = DOS_Get_DPB(dos_drive);
+    if (ptr != PhysPt(0)) {
+        mem_writew(ptr+0x02,bootbuffer.bytespersector);             // +2 = bytes per sector
+        mem_writeb(ptr+0x04,bootbuffer.sectorspercluster - 1);      // +4 = highest sector within a cluster
+        mem_writeb(ptr+0x05,mylog2(bootbuffer.sectorspercluster));// +5 = shift count to convert clusters to sectors
+        mem_writew(ptr+0x06,bootbuffer.reservedsectors);            // +6 = number of reserved sectors at start of partition
+        mem_writeb(ptr+0x08,bootbuffer.fatcopies);                  // +8 = number of FATs (file allocation tables)
+        mem_writew(ptr+0x09,bootbuffer.rootdirentries);             // +9 = number of root directory entries
+        mem_writew(ptr+0x0B,(uint16_t)(firstDataSector-partSectOff));// +11 = number of first sector containing user data
+        mem_writew(ptr+0x0D,(uint16_t)CountOfClusters + 1);         // +13 = highest cluster number
+        mem_writew(ptr+0x0F,(uint16_t)bootbuffer.sectorsperfat);    // +15 = sectors per FAT
+        mem_writew(ptr+0x11,(uint16_t)(firstRootDirSect-partSectOff));// +17 = sector number of first directory sector
+        mem_writed(ptr+0x13,0);                                     // +19 = address of device driver header (NOT IMPLEMENTED)
+        mem_writeb(ptr+0x17,GetMediaByte());                        // +23 = media ID byte
+        mem_writeb(ptr+0x18,0x00);                                  // +24 = disk accessed
+        mem_writew(ptr+0x1F,0xFFFF);                                // +31 = number of free clusters or 0xFFFF if unknown
+        // other fields, not implemented
+    }
 }
 
 void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u cylsector, Bit32u headscyl, Bit32u cylinders, Bit64u filesize, std::vector<std::string> &options) {

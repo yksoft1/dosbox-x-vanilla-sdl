@@ -169,6 +169,36 @@ void INT10_SetupRomMemory(void) {
                 phys_writeb(base+i,int10_font_16[i]);
 
             int10.rom.font_16 = RealMake(base >> 4,base & 0xF);
+
+            // MCGA has the pointer at 40:A8 (BIOSMEM_VS_POINTER), confirmed on real hardware.
+            // It points into the BIOS, because MCGA systems do not have a BIOS at C000:0000
+            Bitu vptr = ROMBIOS_GetMemory((Bitu)(0x600),"MCGA video save pointer and structs",1,0u);
+            Bitu vptrseg = vptr >> 4;
+            Bitu vptroff = vptr & 0xF;
+            vptr -= vptroff;
+            Bitu vptroff_limit = vptroff + 0x600;
+
+            int10.rom.video_parameter_table=RealMake(vptrseg,vptroff);
+            vptroff+=INT10_SetupVideoParameterTable(vptr+vptroff);
+
+            // The dynamic save area should be in RAM, it cannot exist in ROM
+            int10.rom.video_dynamic_save_area=0;
+
+            int10.rom.video_save_pointers=RealMake(vptrseg,vptroff);
+            phys_writed(vptr+vptroff,int10.rom.video_parameter_table);
+            vptroff+=4;
+            phys_writed(vptr+vptroff,int10.rom.video_dynamic_save_area);		// dynamic save area pointer
+            vptroff+=4;
+            phys_writed(vptr+vptroff,0);		// alphanumeric character set override
+            vptroff+=4;
+            phys_writed(vptr+vptroff,0);		// graphics character set override
+            vptroff+=4;
+            phys_writed(vptr+vptroff,0);		// secondary save pointer table
+            vptroff+=4;
+            phys_writed(vptr+vptroff,0); vptroff+=4;
+            phys_writed(vptr+vptroff,0); vptroff+=4;
+
+            if (vptroff > vptroff_limit) E_Exit("MCGA ptr overrun");
         }
 		
 		return;
@@ -296,8 +326,8 @@ void INT10_SetupRomMemory(void) {
 			phys_writed(rom_base+int10.rom.used,0);		int10.rom.used+=4;
 		}
 
-		int10.rom.video_dynamic_save_area=RealMake(0xC000,int10.rom.used);
-		int10.rom.used+=256;    // table is 16+1+239 = 256 bytes large
+        // The dynamic save area should be in RAM, it cannot exist in ROM
+        int10.rom.video_dynamic_save_area=0;
 		
 		int10.rom.video_save_pointers=RealMake(0xC000,int10.rom.used);
 		phys_writed(rom_base+int10.rom.used,int10.rom.video_parameter_table);
