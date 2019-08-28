@@ -55,6 +55,7 @@ void SOUNDCALL psggen_getpcm(PSGGEN psg, SINT32 *pcm, UINT count) {
 			}
 		}
 		mixer = psg->mixer;
+		noisetbl = 0;
 		if (mixer & 0x38) {
 			/* NTS: This code relies on signed integer underflow to determine when to advance
 					the pseudo-random noise generation sequence. It assumes that it can detect
@@ -76,10 +77,9 @@ void SOUNDCALL psggen_getpcm(PSGGEN psg, SINT32 *pcm, UINT count) {
 				psg->noise.count -= psg->noise.freq;
 				if (((long)psg->noise.count & sint32mask) > ((long)countbak & sint32mask)) {
 //					psg->noise.base = GETRAND() & (1 << (1 << PSGADDEDBIT));
-					psg->noise.base = rand_get() & (1 << (1 << PSGADDEDBIT));
+					psg->noise.lfsr = (psg->noise.lfsr >> 1) ^ ((psg->noise.lfsr & 1) * 0x12000);
 				}
-				noisetbl += psg->noise.base;
-				noisetbl >>= 1;
+				noisetbl |= (psg->noise.lfsr & 1) << i;
 			}
 		}
 		tone = psg->tone;

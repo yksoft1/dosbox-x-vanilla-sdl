@@ -1013,8 +1013,7 @@ static void SaveFindResult(DOS_FCB & find_fcb) {
 	fcb.Create(find_fcb.Extended());
 	fcb.SetName(drive,file_name,ext);
 	fcb.SetAttr(find_attr);      /* Only adds attribute if fcb is extended */
-	fcb.SetResultAttr(attr);
-	fcb.SetSizeDateTime(size,date,time);
+	fcb.SetResult(size,date,time,attr);
 }
 
 bool DOS_FCBCreate(Bit16u seg,Bit16u offset) { 
@@ -1033,6 +1032,20 @@ bool DOS_FCBOpen(Bit16u seg,Bit16u offset) {
 	DOS_FCB fcb(seg,offset);
 	char shortname[DOS_FCBNAME];Bit16u handle;
 	fcb.GetName(shortname);
+
+	/* Search for file if name has wildcards */
+	if (strpbrk(shortname,"*?")) {
+		LOG(LOG_FCB,LOG_WARN)("Wildcards in filename");
+		if (!DOS_FCBFindFirst(seg,offset)) return false;
+		DOS_DTA find_dta(dos.tables.tempdta);
+		DOS_FCB find_fcb(RealSeg(dos.tables.tempdta),RealOff(dos.tables.tempdta));
+		char name[DOS_NAMELENGTH_ASCII],file_name[9],ext[4];
+		Bit32u size;Bit16u date,time;Bit8u attr;
+		find_dta.GetResult(name,size,date,time,attr);
+		DTAExtendName(name,file_name,ext);
+		find_fcb.SetName(fcb.GetDrive()+1,file_name,ext);
+		find_fcb.GetName(shortname);
+	}
 
 	/* First check if the name is correct */
 	Bit8u drive;
@@ -1334,7 +1347,7 @@ bool DOS_GetAllocationInfo(Bit8u drive,Bit16u * _bytes_sector,Bit8u * _sectors_c
 	Bit16u _free_clusters;
 	Drives[drive]->AllocationInfo(_bytes_sector,_sectors_cluster,_total_clusters,&_free_clusters);
 	SegSet16(ds,RealSeg(dos.tables.mediaid));
-	reg_bx=RealOff(dos.tables.mediaid+drive*2);
+	reg_bx=RealOff(dos.tables.mediaid+drive*dos.tables.dpb_size);
 	return true;
 }
 

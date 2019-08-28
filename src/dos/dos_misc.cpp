@@ -88,9 +88,28 @@ static Bitu INT2A_Handler(void) {
 	return CBRET_NONE;
 }
 
+extern RealPt DOS_DriveDataListHead;       // INT 2Fh AX=0803h DRIVER.SYS drive data table list
+
 // INT 2F
 static bool DOS_MultiplexFunctions(void) {
 	switch (reg_ax) {
+    case 0x0800:    /* DRIVER.SYS function */
+    case 0x0801:    /* DRIVER.SYS function */
+    case 0x0802:    /* DRIVER.SYS function */
+		LOG(LOG_MISC,LOG_DEBUG)("Unhandled DRIVER.SYS call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+		break;
+    case 0x0803:    /* DRIVER.SYS function */
+        LOG(LOG_MISC,LOG_DEBUG)("Unhandled DRIVER.SYS call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+        // FIXME: Windows 95 SCANDISK.EXE relies on the drive data table list pointer provided by this call.
+        //        Returning DS:DI unmodified or set to 0:0 will only send it off into the weeds chasing random data
+        //        as a linked list. However looking at the code DI=0xFFFF is sufficient to prevent that until
+        //        DOSBox-X emulates DRIVER.SYS functions and provides the information it expects according to RBIL.
+        //        BUT, Windows 95 setup checks if the pointer is NULL, and considers 0:FFFF valid >_<.
+        //        It's just easier to return a pointer to a dummy table.
+        //        [http://www.ctyme.com/intr/rb-4283.htm]
+        SegSet16(ds,DOS_DriveDataListHead >> 16);
+        reg_di = DOS_DriveDataListHead;
+        break;
 	/* ert, 20100711: Locking extensions */
 	case 0x1000:	/* SHARE.EXE installation check */
 		if (enable_share_exe_fake) {
@@ -132,7 +151,7 @@ static bool DOS_MultiplexFunctions(void) {
 				mem_writew(sftptr+sftofs+0x02,(Bit16u)(Files[reg_bx]->flags&3));	// file open mode
 				mem_writeb(sftptr+sftofs+0x04,(Bit8u)(Files[reg_bx]->attr));		// file attribute
 				mem_writew(sftptr+sftofs+0x05,0x40|drive);							// device info word
-				mem_writed(sftptr+sftofs+0x07,RealMake(dos.tables.dpb,drive));		// dpb of the drive
+				mem_writed(sftptr+sftofs+0x07,RealMake(dos.tables.dpb,drive*dos.tables.dpb_size));		// dpb of the drive
 				mem_writew(sftptr+sftofs+0x0d,Files[reg_bx]->time);					// packed file time
 				mem_writew(sftptr+sftofs+0x0f,Files[reg_bx]->date);					// packed file date
 				Bit32u curpos=0;
@@ -352,6 +371,12 @@ static bool DOS_MultiplexFunctions(void) {
 		LOG(LOG_MISC,LOG_DEBUG)("HMA allocation: %u bytes at FFFF:%04x",reg_bx,reg_di);
 		DOS_HMA_CLAIMED(reg_bx);
 		} return true;
+    case 0x4a10: { /* Microsoft SmartDrive (SMARTDRV) API */
+        LOG(LOG_MISC,LOG_DEBUG)("Unhandled SMARTDRV call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+	    } return true;
+    case 0x4a11: { /* Microsoft DoubleSpace (DBLSPACE.BIN) API */
+        LOG(LOG_MISC,LOG_DEBUG)("Unhandled DBLSPACE call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+	    } return true;
 	}
 
 	return false;

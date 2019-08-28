@@ -2133,7 +2133,7 @@ void DOSBOX_SetupConfigSections(void) {
 		"To emulate Adlib, set sbtype=none and oplmode=opl2. To emulate a Game Blaster, set\n"
 		"sbtype=none and oplmode=cms");
 
-	Pbool = secprop->Add_bool("adlib force timer overflow on detect",Property::Changeable::WhenIdle,true);
+	Pbool = secprop->Add_bool("adlib force timer overflow on detect",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("If set, Adlib/OPL emulation will signal 'overflow' on timers after 50 I/O reads.\n"
 			"This is a temporary hack to work around timing bugs noted in DOSBox-X. Certain\n"
 			"games (Wolfenstein 3D) poll the Adlib status port a fixed number of times assuming\n"
@@ -2258,6 +2258,11 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool->Set_help("Start the DOS virtual machine with the DMA channel already unmasked at the controller.\n"
 			"Use this for DOS applications that expect to operate the GUS but forget to unmask the DMA channel.");
 
+	Pbool = secprop->Add_bool("ignore channel count while active",Property::Changeable::WhenIdle,false);
+	Pbool->Set_help("Ignore writes to the active channel count register when the DAC is enabled (bit 1 of GUS reset)\n"
+					"This is a HACK for demoscene prod 'Ice Fever' without which the music sounds wrong.\n"
+					"According to current testing real hardware does not behave this way.");
+					
 	Pbool = secprop->Add_bool("pic unmask irq",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("Start the DOS virtual machine with the GUS IRQ already unmasked at the PIC.");
 
@@ -2711,6 +2716,12 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool->Set_help("If ems=false, leave interrupt vector 67h zeroed out (default true).\n"
 			"This is a workaround for games or demos that try to detect EMS by whether or not INT 67h is 0000:0000 rather than a proper test.\n"
 			"This option also affects whether INT 67h is zeroed when booting a guest OS");
+
+	Pbool = secprop->Add_bool("zero unused int 68h",Property::Changeable::OnlyAtStart,false);
+	Pbool->Set_help("Leave INT 68h zero at startup.\n"
+			"Set this to true for certain games that use INT 68h in unusual ways that require a zero value.\n"
+			"Note that the vector is left at zero anyway when machine=cga.\n"
+			"This is needed to properly run 1988 game 'PopCorn'.");
 
 	/* FIXME: The vm86 monitor in src/ints/ems.cpp is not very stable! Option is default OFF until stabilized! */
 	Pbool = secprop->Add_bool("emm386 startup active",Property::Changeable::OnlyAtStart,false);

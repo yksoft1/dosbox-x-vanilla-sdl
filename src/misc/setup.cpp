@@ -650,6 +650,14 @@ bool Section_prop::HandleInputline(string const& gegevens){
 	if(loc == string::npos) return false;
 	string name = str1.substr(0,loc);
 	string val = str1.substr(loc + 1);
+	
+	/* Remove quotes around value */
+	trim(val);
+	string::size_type length = val.length();
+	if (length > 1 &&
+		 ((val[0] == '"'  && val[length - 1] == '"' ) ||
+		  (val[0] == '\'' && val[length - 1] == '\''))
+	   ) val = val.substr(1,length - 2); 
 	/* trim the results incase there were spaces somewhere */
 	trim(name);trim(val);
 	for(it tel=properties.begin();tel!=properties.end();tel++){

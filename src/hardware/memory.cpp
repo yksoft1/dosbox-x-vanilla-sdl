@@ -58,6 +58,7 @@ static MEM_callout_vector MEM_callouts[MEM_callouts_max];
 
 bool a20_guest_changeable = true;
 bool a20_fake_changeable = false;
+bool a20_fast_changeable = false;
 
 bool enable_port92 = true;
 bool has_Init_RAM = false;
@@ -154,10 +155,16 @@ public:
 	RAMPageHandler() : PageHandler(PFLAG_READABLE|PFLAG_WRITEABLE) {}
 	RAMPageHandler(Bitu flags) : PageHandler(flags) {}
 	HostPt GetHostReadPt(Bitu phys_page) {
-		return MemBase+(phys_page&memory.mem_alias_pagemask_active)*MEM_PAGESIZE;
+        if (!a20_fast_changeable || (phys_page & (~0xFul/*64KB*/)) == 0x100ul/*@1MB*/)
+            return MemBase+(phys_page&memory.mem_alias_pagemask_active)*MEM_PAGESIZE;
+
+        return MemBase+phys_page*MEM_PAGESIZE;
 	}
 	HostPt GetHostWritePt(Bitu phys_page) {
-		return MemBase+(phys_page&memory.mem_alias_pagemask_active)*MEM_PAGESIZE;
+        if (!a20_fast_changeable || (phys_page & (~0xFul/*64KB*/)) == 0x100ul/*@1MB*/)
+            return MemBase+(phys_page&memory.mem_alias_pagemask_active)*MEM_PAGESIZE;
+
+        return MemBase+phys_page*MEM_PAGESIZE;
 	}
 };
 
@@ -483,7 +490,8 @@ void MEM_FreeCallout(MEM_Callout_t c) {
         obj.Uninstall();
 
     obj.alloc = false;
-    vec.alloc_from = idx; /* an empty slot just opened up, you can alloc from there */
+	if (vec.alloc_from > idx)
+		vec.alloc_from = idx; /* an empty slot just opened up, you can alloc from there */
 }
 
 MEM_CalloutObject *MEM_GetCallout(MEM_Callout_t c) {
@@ -1574,6 +1582,7 @@ public:
 		if (cmd->FindString("SET",temp_line,false)) {
 			char *x = (char*)temp_line.c_str();
 
+			a20_fast_changeable = false;
 			a20_fake_changeable = false;
 			a20_guest_changeable = true;
 			MEM_A20_Enable(true);
@@ -1613,6 +1622,7 @@ public:
 				MEM_A20_Enable(false);
 				a20_guest_changeable = true;
 				a20_fake_changeable = false;
+				a20_fast_changeable = true;
 				WriteOut("A20 gate now fast mode\n");
 			}
 			else {
@@ -1918,6 +1928,7 @@ void A20Gate_TakeUserSetting(Section *sec) {
 	memory.a20.enabled = 0;
 	a20_fake_changeable = false;
     a20_guest_changeable = true;
+	a20_fast_changeable = false;
 
 	// TODO: A20 gate control should also be handled by a motherboard init routine
 	std::string ss = section->Get_string("a20");
@@ -1947,8 +1958,13 @@ void A20Gate_TakeUserSetting(Section *sec) {
 		a20_fake_changeable = true;
 		memory.a20.enabled = 0;
 	}
-	else { /* "" or "fast" */
-		LOG(LOG_MISC,LOG_DEBUG)("A20: masking emulation (fast mode no longer supported)");
+    else if (ss == "fast") {
+        LOG(LOG_MISC,LOG_DEBUG)("A20: fast mode");
+        a20_fast_changeable = true;
+        a20_guest_changeable = true;
+    }
+    else {
+        LOG(LOG_MISC,LOG_DEBUG)("A20: masking emulation");
 		a20_guest_changeable = true;
 	}
 }

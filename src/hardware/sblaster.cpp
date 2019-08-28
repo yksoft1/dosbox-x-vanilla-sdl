@@ -410,13 +410,32 @@ static INLINE void DSP_FlushData(void) {
 	sb.dsp.out.pos=0;
 }
 
+static double last_dma_callback = 0.0f;
+
 static void DSP_DMA_CallBack(DmaChannel * chan, DMAEvent event) {
 	if (chan!=sb.dma.chan || event==DMA_REACHED_TC) return;
 	else if (event==DMA_MASKED) {
-		if (sb.mode==MODE_DMA) {
-			sb.mode=MODE_DMA_MASKED;
-			LOG(LOG_SB,LOG_NORMAL)("DMA masked,stopping output, left %d",chan->currcnt);
-		}
+        if (sb.mode==MODE_DMA) {
+            //Catch up to current time, but don't generate an IRQ!
+            //Fixes problems with later sci games.
+            double t = PIC_FullIndex() - last_dma_callback;
+            Bitu s = static_cast<Bitu>(sb.dma.rate * t / 1000.0f);
+            if (s > sb.dma.min) {
+                LOG(LOG_SB,LOG_NORMAL)("limiting amount masked to sb.dma.min");
+                s = sb.dma.min;
+            }
+            Bitu min_size = sb.dma.mul >> SB_SH;
+            if (!min_size) min_size = 1;
+            min_size *= 2;
+            if (sb.dma.left > min_size) {
+                if (s > (sb.dma.left-min_size)) s = sb.dma.left - min_size;
+                GenerateDMASound(s);
+            }
+            sb.mode=MODE_DMA_MASKED;
+            LOG(LOG_SB,LOG_NORMAL)("DMA masked,stopping output, left %d",chan->currcnt);
+        }
+    } else if (event==DMA_TRANSFEREND) {
+        if (sb.mode==MODE_DMA) sb.mode=MODE_DMA_MASKED;
 	} else if (event==DMA_UNMASKED) {
 		if (sb.mode==MODE_DMA_MASKED && sb.dma.mode!=DSP_DMA_NONE) {
 			DSP_ChangeMode(MODE_DMA);
@@ -2179,24 +2198,36 @@ static Bit8u DSP_ReadData(void) {
 }
 
 //The soundblaster manual says 2.0 Db steps but we'll go for a bit less
-#define CALCVOL(_VAL) (float)pow(10.0f,((float)(31-_VAL)*-1.3f)/20)
+static float calc_vol(Bit8u amount) {
+    Bit8u count = 31 - amount;
+    float db = static_cast<float>(count);
+    if (sb.type == SBT_PRO1 || sb.type == SBT_PRO2) {
+        if (count) {
+            if (count < 16) db -= 1.0f;
+            else if (count > 16) db += 1.0f;
+            if (count == 24) db += 2.0f;
+            if (count > 27) return 0.0f; //turn it off.
+        }
+    } else { //Give the rest, the SB16 scale, as we don't have data.
+        db *= 2.0f;
+        if (count > 20) db -= 1.0f;
+    }
+    return (float) pow (10.0f,-0.05f * db);
+}
 static void CTMIXER_UpdateVolumes(void) {
-	if (!sb.mixer.enabled) return;
+    if (!sb.mixer.enabled) return;
 
-	sb.chan->FillUp();
+    sb.chan->FillUp();
 
-	MixerChannel * chan;
-
-	//adjust to get linear master volume slider in trackers
-	chan=MIXER_FindChannel("SB");
-	if (chan) chan->SetVolume(float(sb.mixer.master[0])/31.0f*CALCVOL(sb.mixer.dac[0]),
-							  float(sb.mixer.master[1])/31.0f*CALCVOL(sb.mixer.dac[1]));
-	chan=MIXER_FindChannel("FM");
-	if (chan) chan->SetVolume(float(sb.mixer.master[0])/31.0f*CALCVOL(sb.mixer.fm[0]),
-							  float(sb.mixer.master[1])/31.0f*CALCVOL(sb.mixer.fm[1]));
-	chan=MIXER_FindChannel("CDAUDIO");
-	if (chan) chan->SetVolume(float(sb.mixer.master[0])/31.0f*CALCVOL(sb.mixer.cda[0]),
-							  float(sb.mixer.master[1])/31.0f*CALCVOL(sb.mixer.cda[1]));
+    MixerChannel * chan;
+    float m0 = calc_vol(sb.mixer.master[0]);
+    float m1 = calc_vol(sb.mixer.master[1]);
+    chan = MIXER_FindChannel("SB");
+    if (chan) chan->SetVolume(m0 * calc_vol(sb.mixer.dac[0]), m1 * calc_vol(sb.mixer.dac[1]));
+    chan = MIXER_FindChannel("FM");
+    if (chan) chan->SetVolume(m0 * calc_vol(sb.mixer.fm[0]) , m1 * calc_vol(sb.mixer.fm[1]) );
+    chan = MIXER_FindChannel("CDAUDIO");
+    if (chan) chan->SetVolume(m0 * calc_vol(sb.mixer.cda[0]), m1 * calc_vol(sb.mixer.cda[1]));
 }
 
 static void CTMIXER_Reset(void) {
@@ -2317,6 +2348,8 @@ static inline uint8_t expand16to32(const uint8_t t) {
 	 * 15 -> 31 */
 	return (t << 1) | (t >> 3);
 }
+
+static unsigned char pc98_mixctl_reg = 0x14;
 
 static void CTMIXER_Write(Bit8u val) {
 	switch (sb.mixer.index) {
@@ -2493,6 +2526,8 @@ static void CTMIXER_Write(Bit8u val) {
 			sb.hw.dma8=0xff;
 			sb.hw.dma16=0xff;
 			if (IS_PC98_ARCH) {
+				pc98_mixctl_reg = (unsigned char)val ^ 0x14;
+
 				if (val & 0x1) sb.hw.dma8=0;
 				else if (val & 0x2) sb.hw.dma8=3;
 				// FIXME: Any other DMA channels available for SB16? DOOM only allows selecting 0 and 3.
@@ -2605,10 +2640,10 @@ static Bit8u CTMIXER_Read(void) {
 		ret=0;
 		if (IS_PC98_ARCH) {
 			switch (sb.hw.irq) {
-				case 3:  return 0x1;
-				case 10: return 0x2;
-				case 12: return 0x4;
-				case 5:  return 0x8;
+				case 3:  return 0xF1; // upper 4 bits always 1111
+				case 10: return 0xF2;
+				case 12: return 0xF4;
+				case 5:  return 0xF8;
 			}
 		}
 		else {
@@ -2627,6 +2662,9 @@ static Bit8u CTMIXER_Read(void) {
 				case 0:ret|=0x1;break;
 				case 3:ret|=0x2;break;
 			}
+
+			// there's some strange behavior on the PC-98 version of the card
+			ret |= (pc98_mixctl_reg & (~3u));
 		}
 		else {
 			switch (sb.hw.dma8) {

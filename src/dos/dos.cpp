@@ -36,7 +36,8 @@
 #include "dos_network.h"
 
 Bitu INT29_HANDLER(void);
-
+Bit32u BIOS_get_PC98_INT_STUB(void);
+	
 int ascii_toupper(int c) {
     if (c >= 'a' && c <= 'z')
         return c + 'A' - 'a';
@@ -408,9 +409,18 @@ bool disk_io_unmask_irq0 = true;
 //! \brief Is a DOS program running ? (set by INT21 4B/4C)
 bool dos_program_running = false;
 
+void XMS_DOS_LocalA20EnableIfNotEnabled(void);
+
 #define DOSNAMEBUF 256
 static Bitu DOS_21Handler(void) {
     bool unmask_irq0 = false;
+
+	/* Real MS-DOS behavior:
+	 *   If HIMEM.SYS is loaded and CONFIG.SYS says DOS=HIGH, DOS will load itself into the HMA area.
+	 *   To prevent crashes, the INT 21h handler down below will enable the A20 gate before executing
+	 *   the DOS kernel. */
+	if (DOS_IS_IN_HMA())
+		XMS_DOS_LocalA20EnableIfNotEnabled();
 
 	if (((reg_ah != 0x50) && (reg_ah != 0x51) && (reg_ah != 0x62) && (reg_ah != 0x64)) && (reg_ah<0x6c)) {
 		DOS_PSP psp(dos.psp());
@@ -576,6 +586,10 @@ static Bitu DOS_21Handler(void) {
 			for(;;) {
 				if (!DOS_BreakTest()) return CBRET_NONE;
 				DOS_ReadFile(STDIN,&c,&n);
+				if (n == 0)				// End of file
+					E_Exit("DOS:0x0a:Redirected input reached EOF");
+				if (c == 10)			// Line feed
+					continue;
 				if (c == 8) {			// Backspace
 					if (read) {	//Something to backspace.
 						// STDOUT treats backspace as non-destructive.
@@ -1017,10 +1031,10 @@ static Bitu DOS_21Handler(void) {
 			Bit8u drive=reg_dl;
 			if (!drive || reg_ah==0x1f) drive = DOS_GetDefaultDrive();
 			else drive--;
-			if (Drives[drive]) {
+			if (drive < DOS_DRIVES && Drives[drive] && !Drives[drive]->isRemovable()) {
 				reg_al = 0x00;
 				SegSet16(ds,dos.tables.dpb);
-				reg_bx = drive;//Faking only the first entry (that is the driveletter)
+				reg_bx = drive*dos.tables.dpb_size;
 				LOG(LOG_DOSMISC,LOG_ERROR)("Get drive parameter block.");
 			} else {
 				reg_al=0xff;
@@ -1417,6 +1431,9 @@ static Bitu DOS_21Handler(void) {
 		reg_bx=dos.psp();
 		break;
 	case 0x52: {				/* Get list of lists */
+		Bit8u count=2; // floppy drives always counted
+		while (count<DOS_DRIVES && Drives[count] && !Drives[count]->isRemovable()) count++;
+		dos_infoblock.SetBlockDevices(count);
 		RealPt addr=dos_infoblock.GetPointer();
 		SegSet16(es,RealSeg(addr));
 		reg_bx=RealOff(addr);
@@ -1850,33 +1867,195 @@ static Bitu DOS_27Handler(void) {
 }
 
 static Bitu DOS_25Handler(void) {
-	if (Drives[reg_al] == 0){
-		reg_ax = 0x8002;
-		SETFLAGBIT(CF,true);
-	} else {
-		SETFLAGBIT(CF,false);
-		if ((reg_cx != 1) ||(reg_dx != 1))
-			LOG(LOG_DOSMISC,LOG_NORMAL)("int 25 called but not as diskdetection drive %X",reg_al);
+	if (reg_al >= DOS_DRIVES || !Drives[reg_al] || Drives[reg_al]->isRemovable()) {
+        reg_ax = 0x8002;
+        SETFLAGBIT(CF,true);
+    } else {
+        DOS_Drive *drv = Drives[reg_al];
+        /* assume drv != NULL */
+        Bit32u sector_size = drv->GetSectorSize();
+        Bit32u sector_count = drv->GetSectorCount();
+        PhysPt ptr = PhysMake(SegValue(ds),reg_bx);
+        Bit32u req_count = reg_cx;
+        Bit32u sector_num = reg_dx;
 
-	   reg_ax = 0;
-	}
-	SETFLAGBIT(IF,true);
+        /* For < 32MB drives.
+         *  AL = drive
+         *  CX = sector count (not 0xFFFF)
+         *  DX = sector number
+         *  DS:BX = pointer to disk transfer area
+         *
+         * For >= 32MB drives.
+         *
+         *  AL = drive
+         *  CX = 0xFFFF
+         *  DS:BX = disk read packet
+         *
+         *  Disk read packet:
+         *    +0 DWORD = sector number
+         *    +4 WORD = sector count
+         *    +6 DWORD = disk tranfer area
+         */
+        if (sector_count != 0 && sector_size != 0) {
+            unsigned char tmp[2048];
+            const char *method;
+
+            if (sector_size > sizeof(tmp)) {
+                reg_ax = 0x8002;
+                SETFLAGBIT(CF,true);
+                return CBRET_NONE;
+            }
+
+            if (sector_count > 0xFFFF && req_count != 0xFFFF) {
+                reg_ax = 0x0207; // must use CX=0xFFFF API for > 64KB segment partitions
+                SETFLAGBIT(CF,true);
+                return CBRET_NONE;
+            }
+
+            if (req_count == 0xFFFF) {
+                sector_num = mem_readd(ptr+0);
+                req_count = mem_readw(ptr+4);
+                Bit32u p = mem_readd(ptr+6);
+                ptr = PhysMake(p >> 16u,p & 0xFFFFu);
+                method = ">=32MB";
+            }
+            else {
+                method = "<32MB";
+            }
+
+            LOG(LOG_MISC,LOG_DEBUG)("INT 25h READ: sector=%lu count=%lu ptr=%lx method='%s'",
+                (unsigned long)sector_num,
+                (unsigned long)req_count,
+                (unsigned long)ptr,
+                method);
+
+            SETFLAGBIT(CF,false);
+            reg_ax = 0;
+
+            while (req_count > 0) {
+                Bit8u res = drv->Read_AbsoluteSector_INT25(sector_num,tmp);
+                if (res != 0) {
+                    reg_ax = 0x8002;
+                    SETFLAGBIT(CF,true);
+                    break;
+                }
+
+                for (unsigned int i=0;i < (unsigned int)sector_size;i++)
+                    mem_writeb(ptr+i,tmp[i]);
+
+                req_count--;
+                sector_num++;
+                ptr += sector_size;
+            }
+
+            return CBRET_NONE;
+        }
+
+        /* MicroProse installer hack, inherited from DOSBox SVN, as a fallback if INT 25h emulation is not available for the drive. */
+        if (reg_cx == 1 && reg_dx == 0 && reg_al >= 2) {
+            // write some BPB data into buffer for MicroProse installers
+            mem_writew(ptr+0x1c,0x3f); // hidden sectors
+            SETFLAGBIT(CF,false);
+            reg_ax = 0;
+        } else {
+            LOG(LOG_DOSMISC,LOG_NORMAL)("int 25 called but not as disk detection drive %u",reg_al);
+            reg_ax = 0x8002;
+            SETFLAGBIT(CF,true);
+        }
+    }
     return CBRET_NONE;
 }
 static Bitu DOS_26Handler(void) {
-	LOG(LOG_DOSMISC,LOG_NORMAL)("int 26 called: hope for the best!");
-	if (Drives[reg_al] == 0){
+	if (reg_al >= DOS_DRIVES || !Drives[reg_al] || Drives[reg_al]->isRemovable()) {	
 		reg_ax = 0x8002;
 		SETFLAGBIT(CF,true);
-	} else {
-		SETFLAGBIT(CF,false);
-		reg_ax = 0;
-	}
-	SETFLAGBIT(IF,true);
+    } else {
+        DOS_Drive *drv = Drives[reg_al];
+        /* assume drv != NULL */
+        Bit32u sector_size = drv->GetSectorSize();
+        Bit32u sector_count = drv->GetSectorCount();
+        PhysPt ptr = PhysMake(SegValue(ds),reg_bx);
+        Bit32u req_count = reg_cx;
+        Bit32u sector_num = reg_dx;
+
+        /* For < 32MB drives.
+         *  AL = drive
+         *  CX = sector count (not 0xFFFF)
+         *  DX = sector number
+         *  DS:BX = pointer to disk transfer area
+         *
+         * For >= 32MB drives.
+         *
+         *  AL = drive
+         *  CX = 0xFFFF
+         *  DS:BX = disk read packet
+         *
+         *  Disk read packet:
+         *    +0 DWORD = sector number
+         *    +4 WORD = sector count
+         *    +6 DWORD = disk tranfer area
+         */
+        if (sector_count != 0 && sector_size != 0) {
+            unsigned char tmp[2048];
+            const char *method;
+
+            if (sector_size > sizeof(tmp)) {
+                reg_ax = 0x8002;
+                SETFLAGBIT(CF,true);
+                return CBRET_NONE;
+            }
+
+            if (sector_count > 0xFFFF && req_count != 0xFFFF) {
+                reg_ax = 0x0207; // must use CX=0xFFFF API for > 64KB segment partitions
+                SETFLAGBIT(CF,true);
+                return CBRET_NONE;
+            }
+
+            if (req_count == 0xFFFF) {
+                sector_num = mem_readd(ptr+0);
+                req_count = mem_readw(ptr+4);
+                Bit32u p = mem_readd(ptr+6);
+                ptr = PhysMake(p >> 16u,p & 0xFFFFu);
+                method = ">=32MB";
+            }
+            else {
+                method = "<32MB";
+            }
+
+            LOG(LOG_MISC,LOG_DEBUG)("INT 26h WRITE: sector=%lu count=%lu ptr=%lx method='%s'",
+                (unsigned long)sector_num,
+                (unsigned long)req_count,
+                (unsigned long)ptr,
+                method);
+
+            SETFLAGBIT(CF,false);
+            reg_ax = 0;
+
+            while (req_count > 0) {
+                for (unsigned int i=0;i < (unsigned int)sector_size;i++)
+                    tmp[i] = mem_readb(ptr+i);
+
+                Bit8u res = drv->Write_AbsoluteSector_INT25(sector_num,tmp);
+                if (res != 0) {
+                    reg_ax = 0x8002;
+                    SETFLAGBIT(CF,true);
+                    break;
+                }
+
+                req_count--;
+                sector_num++;
+                ptr += sector_size;
+            }
+
+            return CBRET_NONE;
+        }
+
+        reg_ax = 0x8002;
+        SETFLAGBIT(CF,true);
+    }
     return CBRET_NONE;
 }
 
-bool iret_only_for_debug_interrupts = true;
 bool enable_collating_uppercase = true;
 bool keep_private_area_on_boot = false;
 bool dynamic_dos_kernel_alloc = false;
@@ -2003,7 +2182,6 @@ public:
 		private_always_from_umb = section->Get_bool("kernel allocation in umb");
 		minimum_dos_initial_private_segment = section->Get_hex("minimum dos initial private segment");
 		dos_con_use_int16_to_detect_input = section->Get_bool("con device use int 16h to detect keyboard input");
-		iret_only_for_debug_interrupts = section->Get_bool("write plain iretf for debug interrupts");
 		dbg_zero_on_dos_allocmem = section->Get_bool("zero memory on int 21h memory allocation");
 		MAXENV = section->Get_int("maximum environment block size on exec");
 		ENV_KEEPFREE = section->Get_int("additional environment block size on exec");
@@ -2185,10 +2363,10 @@ public:
 	// iret
 	// retf  <- int 21 4c jumps here to mimic a retf Cyber
 
-		callback[2].Install(DOS_25Handler,CB_RETF,"DOS Int 25");
+		callback[2].Install(DOS_25Handler,CB_RETF_STI,"DOS Int 25");
 		callback[2].Set_RealVec(0x25);
 
-		callback[3].Install(DOS_26Handler,CB_RETF,"DOS Int 26");
+		callback[3].Install(DOS_26Handler,CB_RETF_STI,"DOS Int 26");
 		callback[3].Set_RealVec(0x26);
 
 		callback[4].Install(DOS_27Handler,CB_IRET,"DOS Int 27");
@@ -2232,6 +2410,36 @@ public:
 		// pseudocode for CB_CPM:
 		//	pushf
 		//	... the rest is like int 21
+
+		if (IS_PC98_ARCH) {
+			/* Any interrupt vector pointing to the INT stub in the BIOS must be rewritten to point to a JMP to the stub
+			 * residing in the DOS segment (60h) because some PC-98 resident drivers use segment 60h as a check for
+			 * installed vs uninstalled (MUSIC.COM, Peret em Heru) */
+			Bit16u sg = DOS_GetMemory(1/*paragraph*/,"INT stub trampoline");
+			PhysPt sgp = (PhysPt)sg << (PhysPt)4u;
+
+			/* Re-base the pointer so the segment is 0x60 */
+			Bit32u veco = sgp - 0x600;
+			if (veco >= 0xFFF0u) E_Exit("INT stub trampoline out of bounds");
+			Bit32u vecp = RealMake(0x60,(Bit16u)veco);
+
+			mem_writeb(sgp+0,0xEA);
+			mem_writed(sgp+1,BIOS_get_PC98_INT_STUB());
+
+/*			for (unsigned int i=0;i < 0x100;i++) {
+				Bit32u vec = RealGetVec(i);
+
+				if (vec == BIOS_get_PC98_INT_STUB())
+					mem_writed(i*4,vecp);
+			}
+*/
+
+			//Fix just for RPG Maker II MUSIC.COM for now...
+			Bit32u vec = RealGetVec(0x48);
+			
+			if (vec == BIOS_get_PC98_INT_STUB())
+				mem_writed(0x48*4,vecp);
+		}
 
         /* NTS: HMA support requires XMS. EMS support may switch on A20 if VCPI emulation requires the odd megabyte */
         if ((!dos_in_hma || !section->Get_bool("xms")) && (MEM_A20_Enabled() || strcmp(section->Get_string("ems"),"false") != 0) &&
@@ -2292,13 +2500,32 @@ public:
 		/* carry on setup */
 		DOS_SetupMemory();								/* Setup first MCB */
 
+        /* NTS: The reason PC-98 has a higher minimum free is that the MS-DOS kernel
+         *      has a larger footprint in memory, including fixed locations that
+         *      some PC-98 games will read directly, and an ANSI driver.
+         *
+         *      Some PC-98 games will have problems if loaded below a certain
+         *      threshhold as well.
+         *
+         *        Valkyrie: 0xE10 is not enough for the game to run. If a specific
+         *                  FM music selection is chosen, the remaining memory is
+         *                  insufficient for the game to start the battle.
+         *
+         *      The default assumes a DOS kernel and lower memory region of 32KB,
+         *      which might be a reasonable compromise so far.
+         *
+         * NOTES: A minimum mcb free value of at least 0xE10 is needed for Windows 3.1
+         *        386 enhanced to start, else it will complain about insufficient memory (?).
+         *        To get Windows 3.1 to run, either set "minimum mcb free=e10" or run
+         *        "LOADFIX" before starting Windows 3.1 */
+		 
 		/* NTS: There is a mysterious memory corruption issue with some DOS games
 		 * and applications when they are loaded at or around segment 0x800.
 		 * This should be looked into. In the meantime, setting the MCB
 		 * start segment before or after 0x800 helps to resolve these issues.
 		 * It also puts DOSBox-X at parity with main DOSBox SVN behavior. */
         if (minimum_mcb_free == 0)
-            minimum_mcb_free = 0x100;
+            minimum_mcb_free = IS_PC98_ARCH ? 0x800 : 0x100;
         else if (minimum_mcb_free < minimum_mcb_segment)
             minimum_mcb_free = minimum_mcb_segment;
 

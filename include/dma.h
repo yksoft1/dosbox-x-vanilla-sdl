@@ -28,6 +28,12 @@ enum DMAEvent {
 	DMA_TRANSFEREND
 };
 
+enum DMATransfer {
+    DMAT_VERIFY=0,
+    DMAT_WRITE=1,
+    DMAT_READ=2
+};
+
 class DmaChannel;
 typedef void (* DMA_CallBack)(DmaChannel * chan,DMAEvent event);
 
@@ -43,6 +49,7 @@ public:
     Bit8u DMA16_PAGESHIFT;
     Bit32u DMA16_ADDRMASK;
 	Bit8u DMA16;
+	Bit8u transfer_mode;
 	bool increment;
 	bool autoinit;
 	bool masked;
@@ -69,18 +76,20 @@ public:
 	//       an internal copy?
 	Bit8u page_bank_increment_wraparound;
 
-	void page_bank_increment(void) { // to be called on DMA wraparound
-		if (page_bank_increment_wraparound != 0u) {
-			// FIXME: Improve this.
-			// Currently this code assumes that the auto increment in PC-98 modifies the
-			// register value (and therefore visible to the guest). Change this code if
-			// that model is wrong.
-			const Bit8u nv =
-				( pagenum       & (~page_bank_increment_wraparound)) +
-				((pagenum + 1u) & ( page_bank_increment_wraparound));
-			SetPage(nv);
-		}
-	}
+    void page_bank_increment(void) { // to be called on DMA wraparound
+        if (page_bank_increment_wraparound != 0u) {
+            // FIXME: Improve this.
+            // Currently this code assumes that the auto increment in PC-98 modifies the
+            // register value (and therefore visible to the guest). Change this code if
+            // that model is wrong.
+            const Bit8u add =
+                increment ? 0x01u : 0xFFu;
+            const Bit8u nv =
+                ( pagenum        & (~page_bank_increment_wraparound)) +
+                ((pagenum + add) & ( page_bank_increment_wraparound));
+            SetPage(nv);
+        }
+    }
 
 	DmaChannel(Bit8u num, bool dma16);
 	void DoCallBack(DMAEvent event) {
@@ -133,8 +142,8 @@ private:
 	bool flipflop;
 	DmaChannel *DmaChannels[4];
 public:
-	IO_ReadHandleObject DMA_ReadHandler[0x14];
-	IO_WriteHandleObject DMA_WriteHandler[0x14];
+	IO_ReadHandleObject DMA_ReadHandler[0x15];
+	IO_WriteHandleObject DMA_WriteHandler[0x15];
 	DmaController(Bit8u num) {
 		flipflop = false;
 		ctrlnum = num;		/* first or second DMA controller */

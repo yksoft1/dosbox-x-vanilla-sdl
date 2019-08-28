@@ -63,6 +63,7 @@ const unsigned char pc98_epson_check_2[0x27] = {
 bool enable_pc98_copyright_string = false;
 
 /* mouse.cpp */
+extern bool pc98_40col_text;
 extern bool en_bios_ps2mouse;
 extern bool rom_bios_8x8_cga_font;
 extern bool pcibus_enable;
@@ -2840,7 +2841,7 @@ static Bitu INT18_PC98_Handler(void) {
             }
             break;
         case 0x02: /* Sense of shift key state (シフト・キー状態のセンス) */
-            reg_al = mem_readb(0x52A + 0x0E); /* FIXME: Seems to match 14th bitmap byte. Does real hardware do this?? */
+            reg_al = mem_readb(0x53A);
             break;
         case 0x03: /* Initialization of keyboard interface (キーボード・インタフェイスの初期化) */
             /* TODO */
@@ -2900,11 +2901,10 @@ static Bitu INT18_PC98_Handler(void) {
 			//TODO: set 25/20 lines mode and 80/40 columns mode.
 			//Attribute bit (bit 2)
 			pc98_attr4_graphic = !!(reg_al & 0x04);
+			pc98_40col_text = !!(reg_al & 0x02);
 
             mem_writeb(0x53C,(mem_readb(0x53C) & 0xF0u) | (reg_al & 0x0Fu));
 
-            if (reg_al & 2)
-                LOG_MSG("INT 18H AH=0Ah warning: 40-column PC-98 text mode not supported");
             if (reg_al & 8)
                 LOG_MSG("INT 18H AH=0Ah warning: K-CG dot access mode not supported");
 
@@ -3989,7 +3989,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 			
             // Hack for Ys II
             FDC_WAIT_TIMER_HACK();
-			
+
+			fdc_cyl[drive] = 0;
+
             reg_ah = 0x00;
             CALLBACK_SCF(false);
             break;
@@ -6365,6 +6367,10 @@ void gdc_16color_enable_update_vars(void) {
 	}
 }
 
+Bit32u BIOS_get_PC98_INT_STUB(void) {
+	return callback[18].Get_RealPointer();
+}
+
 /* NTS: Remember the 8259 is non-sentient, and the term "slave" is used in a computer programming context */
  static Bitu Default_IRQ_Handler_Cooperative_Slave_Pic(void) {
      /* PC-98 style IRQ 8-15 handling.
@@ -6935,9 +6941,16 @@ private:
 	        PIC_SetIRQMask(0,true); /* PC-98 keeps the timer off unless INT 1Ch is called to set a timer interval */
         }
 
+		bool null_68h = false;
+
+		{
+			Section_prop * section=static_cast<Section_prop *>(control->GetSection("dos"));
+			null_68h = section->Get_bool("zero unused int 68h");
+		}
+
 		real_writed(0,0x66*4,CALLBACK_RealPointer(call_default));	//war2d
 		real_writed(0,0x67*4,CALLBACK_RealPointer(call_default));
-		real_writed(0,0x68*4,CALLBACK_RealPointer(call_default));
+		if (machine==MCH_CGA || null_68h) real_writed(0,0x68*4,0);  //Popcorn
 		real_writed(0,0x5c*4,CALLBACK_RealPointer(call_default));	//Network stuff
 		//real_writed(0,0xf*4,0); some games don't like it
 
@@ -7116,9 +7129,13 @@ private:
             if (KEYBOARD_Report_BIOS_PS2Mouse())
                 config |= 0x04;
 
+			// DMA *not* supported - Ancient Art of War CGA uses this to identify PCjr
+			if (machine==MCH_PCJR) config |= 0x100;
+
             // Gameport
             config |= 0x1000;
             mem_writew(BIOS_CONFIGURATION,config);
+			if (IS_EGAVGA_ARCH) config &= ~0x30; //EGA/VGA startup display mode differs in CMOS
             CMOS_SetRegister(0x14,(Bit8u)(config&0xff)); //Should be updated on changes
         }
 

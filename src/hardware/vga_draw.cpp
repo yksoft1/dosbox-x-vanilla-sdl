@@ -54,6 +54,7 @@ int vga_mode_frames_since_time_base = 0;
 
 bool pc98_display_enable = true;
 
+extern bool pc98_40col_text;
 extern bool vga_3da_polled;
 extern bool vga_page_flip_occurred;
 extern bool vga_enable_hpel_effects;
@@ -1231,6 +1232,18 @@ static Bit8u* VGA_PC98_Xlat32_Draw_Line(Bitu vidstart, Bitu line) {
     if (pc98_gdc[GDC_SLAVE].doublescan && pc98_graphics_hide_odd_raster_200line && pc98_allow_scanline_effect)
         ok_raster = (vga.draw.lines_done & 1) == 0;
 
+	// Generally the master and slave GDC are given the same active display area, timing, etc.
+	// however some games reprogram the slave (graphics) GDC to reduce the active display area.
+	//
+	// Without this consideration, graphics display will be incorrect relative to actual hardware.
+	//
+	// This will NOT cause correct display if other parameters like blanking area are changed!
+	//
+	// Examples:
+	//  - "First Queen" and "First Queen II" (reduces active lines count to 384 to display status bar at the bottom of the screen)
+	if (vga.draw.lines_done >= pc98_gdc[GDC_SLAVE].active_display_lines)
+		ok_raster = false;
+
     // Graphic RAM layer (or blank)
     // Think of it as a 3-plane GRB color graphics mode, each plane is 1 bit per pixel.
     // G-RAM is addressed 16 bits per RAM cycle.
@@ -1468,18 +1481,34 @@ interrupted_char_begin:
             /* draw it!
              * NTS: Based on real hardware (and this is probably why there's no provisions for both fore and background color)
              *      any bit in the font overlays the graphic output (after reverse, etc) or else does not output anything. */
-            /* NTS: Apparently (correct me if I'm wrong) the analog color palette applies to the graphics layer, NOT the text layer. */
-            for (Bitu n = 0; n < 8; n++) {
-                if (font & 0x80)
-                    *draw++ = pc98_text_palette[foreground];
-                else
-                    draw++;
+            if (!pc98_40col_text) {
+				/* 80-col */
+				for (Bitu n = 0; n < 8; n++) {
+					if (font & 0x80)
+						*draw++ = pc98_text_palette[foreground];
+					else
+						draw++;
 
-                font <<= 1;
+					font <<= 1u;
+				}
+
+				vidmem++;
+				gdcvidmem++;
             }
+			else {
+				/* 40-col */
+				for (Bitu n = 0; n < 8; n++) {
+					if (font & 0x80)
+						draw[0] = draw[1] = pc98_text_palette[foreground];
 
-            vidmem++;
-			gdcvidmem++;
+					font <<= 1u;
+					draw += 2;
+				}
+	
+				vidmem += 2;
+				gdcvidmem += 2;
+				if (blocks > 0) blocks--;
+			}
         }
     }
 

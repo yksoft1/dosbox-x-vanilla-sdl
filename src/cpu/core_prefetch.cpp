@@ -135,7 +135,12 @@ static Bitu pq_reload;
 static double pq_next_dbg=0;
 static unsigned int pq_hit=0,pq_miss=0;
 
+/* MUST BE POWER OF 2 */
+#define prefetch_unit       (4ul)
+
 //#define PREFETCH_DEBUG
+
+#define PREFETCH_CORE
 
 /* WARNING: This code needs MORE TESTING. So far, it seems to work fine. */
 
@@ -195,10 +200,12 @@ static inline void prefetch_lazyflush(const Bitu w) {
         pq_start += 4;
 
         prefetch_filldword();
+	}
+
 #ifdef PREFETCH_DEBUG
-        assert(pq_start+pq_limit == pq_fill);
+		assert(pq_fill >= pq_start);
+		assert((pq_fill - pq_start) <= pq_limit);
 #endif
-    }
 }
 
 /* this implementation follows what I think the Intel 80386/80486 is more likely
@@ -208,9 +215,12 @@ template <class T> static inline T Fetch(void) {
 
     if (prefetch_hit<T>(core.cseip)) {
         /* as long as prefetch hits are occurring, keep loading more! */
-        if ((pq_fill - pq_start) < pq_limit) {
+        prefetch_lazyflush(core.cseip+sizeof(T));
+		if ((pq_fill - pq_start) < pq_limit)
             prefetch_filldword();
-            if (sizeof(T) >= 4 && (pq_fill - pq_start) < pq_limit)
+
+		if (sizeof(T) >= prefetch_unit) {
+			if ((pq_fill - pq_start) < pq_limit)
                 prefetch_filldword();
         }
         else {
@@ -240,6 +250,56 @@ template <class T> static inline T Fetch(void) {
 
     core.cseip += sizeof(T);
     return temp;
+}
+
+template <class T> static inline void FetchDiscard(void) {
+	core.cseip += sizeof(T);
+}
+
+template <class T> static inline T FetchPeek(void) {
+	T temp;
+
+	if (prefetch_hit<T>(core.cseip)) {
+		/* as long as prefetch hits are occurring, keep loading more! */
+		prefetch_lazyflush(core.cseip+sizeof(T));
+		if ((pq_fill - pq_start) < pq_limit)
+			prefetch_filldword();
+
+		if (sizeof(T) >= prefetch_unit) {
+			if ((pq_fill - pq_start) < pq_limit)
+				prefetch_filldword();
+		}
+
+		temp = prefetch_read<T>(core.cseip);
+#ifdef PREFETCH_DEBUG
+		pq_hit++;
+#endif
+	}
+	else {
+		prefetch_init(core.cseip & (~(prefetch_unit-1ul))); /* fill prefetch starting on DWORD boundary */
+		prefetch_refill(pq_start + pq_reload); /* perhaps in the time it takes for a prefetch miss the 80486 can load two DWORDs */
+		temp = prefetch_read<T>(core.cseip);
+#ifdef PREFETCH_DEBUG
+		pq_miss++;
+#endif
+	}
+
+#ifdef PREFETCH_DEBUG
+	if (pq_valid) {
+		assert(core.cseip >= pq_start && (core.cseip+sizeof(T)) <= pq_fill);
+		assert(pq_fill >= pq_start && (pq_fill - pq_start) <= pq_limit);
+	}
+#endif
+
+	return temp;
+}
+
+static INLINE void FetchDiscardb() {
+	FetchDiscard<uint8_t>();
+}
+
+static INLINE Bit8u FetchPeekb() {
+	return FetchPeek<uint8_t>();
 }
 
 static Bit8u Fetchb() {

@@ -80,7 +80,7 @@ static inline const Bitu MEMMASK_Combine(const Bitu a,const Bitu b) {
 #define PFLAG_HASCODE		0x8				//Page contains dynamic code
 #define PFLAG_NOCODE		0x10			//No dynamic code can be generated here
 #define PFLAG_INIT			0x20			//No dynamic code can be generated here
-
+	
 #define LINK_START	((1024+64)/4)			//Start right after the HMA
 
 //Allow 128 mb of memory to be linked
@@ -351,7 +351,7 @@ void PAGING_InitTLBBank(tlb_entry **bank);
 
 static INLINE tlb_entry *get_tlb_entry(const PhysPt address) {
 	const Bitu index=(address>>12);
-	if (TLB_BANKS && (index > TLB_SIZE)) {
+	if (TLB_BANKS && (index >= TLB_SIZE)) {
 		const Bitu bank=(address>>BANK_SHIFT) - 1;
 		if (!paging.tlbh_banks[bank])
 			PAGING_InitTLBBank(&paging.tlbh_banks[bank]);

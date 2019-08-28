@@ -1910,11 +1910,11 @@ static struct pc98_8251_keyboard_uart {
         nidx = (recv_in + 1) % 32;
         if (nidx == recv_out) {
             LOG_MSG("8251 device send recv overrun");
-            return;
         }
-
-        recv_buffer[recv_in] = b;
-        recv_in = nidx;
+        else {
+            recv_buffer[recv_in] = b;
+            recv_in = nidx;
+        }
 
         if (!rx_busy) {
             rx_busy = true;
@@ -1924,6 +1924,10 @@ static struct pc98_8251_keyboard_uart {
 
     unsigned char read_data(void) {
         rx_ready = false;
+        if (recv_in != recv_out && !rx_busy) {
+            rx_busy = true;
+            PIC_AddEvent(uart_rx_load,io_delay_ms,0);
+        }
         return data;
     }
 

@@ -463,6 +463,7 @@ class DOS_InfoBlock:public MemStruct {
 public:
 	DOS_InfoBlock			() {};
 	void SetLocation(Bit16u  seg);
+	void SetFirstDPB(Bit32u _first_dpb);
 	void SetFirstMCB(Bit16u _first_mcb);
 	void SetBuffers(Bit16u x,Bit16u y);
 	void SetCurDirStruct(Bit32u _curdirstruct);
@@ -471,6 +472,7 @@ public:
 	void SetDiskBufferHeadPt(Bit32u _dbheadpt);
 	void SetStartOfUMBChain(Bit16u _umbstartseg);
 	void SetUMBChainState(Bit8u _umbchaining);
+	void SetBlockDevices(Bit8u _count);
 	Bit16u	GetStartOfUMBChain(void);
 	Bit8u	GetUMBChainState(void);
 	RealPt	GetPointer(void);
@@ -593,7 +595,7 @@ public:
 	bool Extended(void);
 	void GetAttr(Bit8u & attr);
 	void SetAttr(Bit8u attr);
-	void SetResultAttr(Bit8u attr);
+	void SetResult(Bit32u size,Bit16u date,Bit16u time,Bit8u attr);
 	bool Valid(void);
 	void ClearBlockRecsize(void);
 private:
@@ -720,6 +722,8 @@ struct DOS_Block {
 		RealPt upcase;
 		Bit8u* country;//Will be copied to dos memory. resides in real mem
 		Bit16u dpb; //Fake Disk parameter system using only the first entry so the drive letter matches
+        Bit16u dpb_size; // bytes per DPB entry (MS-DOS 4.x-6.x size)
+        Bit16u mediaid_offset; // media ID offset in DPB (MS-DOS 4.x-6.x case)
 	} tables;
 	Bit16u loaded_codepage;
 };
