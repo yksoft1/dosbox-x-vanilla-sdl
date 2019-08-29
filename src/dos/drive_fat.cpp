@@ -240,6 +240,9 @@ bool fatFile::Write(Bit8u * data, Bit16u *size) {
 		seekpos++;
 		if(curSectOff >= myDrive->getSectorSize()) {
 			if(loadedSector) myDrive->writeSector(currentSector, sectorBuffer);
+			loadedSector = false;
+
+			if (sizedec <= 1) goto finalizeWrite; // --sizedec == 0
 
 			currentSector = myDrive->getAbsoluteSectFromBytePos(firstCluster, seekpos);
 			if(currentSector == 0) {
@@ -249,7 +252,6 @@ bool fatFile::Write(Bit8u * data, Bit16u *size) {
 				currentSector = myDrive->getAbsoluteSectFromBytePos(firstCluster, seekpos);
 				if(currentSector == 0) {
 					/* No can do. lets give up and go home.  We must be out of room */
-					loadedSector = false;
 					goto finalizeWrite;
 				}
 			}

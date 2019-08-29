@@ -1445,9 +1445,8 @@ public:
 
                 for (unsigned int i=0;i < 2;i++) {
                     if (imageDiskList[i] != NULL) {
-                        disk_equip |= (0x1111u << i);
+                        disk_equip |= (0x0111u << i); /* 320KB[15:12] 1MB[11:8] 640KB[7:4] unit[1:0] */
                         disk_equip_144 |= (1 << i);
-						RDISK_EQUIP |= (0x11u << i);
 						F2HD_MODE |= (0x11u << i);
                     }
                 }
@@ -1467,7 +1466,7 @@ public:
 				mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
 				mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
 				mem_writeb(0x482,scsi_equip);
-				mem_writeb(0x488,RDISK_EQUIP);
+				mem_writeb(0x488,RDISK_EQUIP); /* RAM disk equip */
 				mem_writeb(0x493,F2HD_MODE);
 				mem_writeb(0x5CA,F2DD_MODE);
 				
