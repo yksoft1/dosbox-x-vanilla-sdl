@@ -1254,6 +1254,7 @@ bool localFile::UpdateDateTimeFromHost(void) {
 void localFile::Flush(void) {
 	if (last_action==WRITE) {
 		fseek(fhandle,ftell(fhandle),SEEK_SET);
+		fflush(fhandle);
 		last_action=NONE;
 	}
 }

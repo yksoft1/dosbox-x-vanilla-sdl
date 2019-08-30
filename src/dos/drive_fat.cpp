@@ -48,6 +48,7 @@ public:
 	bool Seek(Bit32u * pos,Bit32u type);
 	bool Close();
 	Bit16u GetInformation(void);
+	void Flush(void);
 	bool UpdateDateTimeFromHost(void);   
 	Bit32u GetSeekPos(void);
 public:
@@ -118,6 +119,39 @@ fatFile::fatFile(const char* /*name*/, Bit32u startCluster, Bit32u fileLen, fatD
 	}
 }
 
+void fatFile::Flush(void) {
+#if 0//UNTESTED: THIS MAY CAUSE FURTHER PROBLEMS
+	// FIXME: Copy-pasta from Close
+	if (loadedSector) {
+		myDrive->writeSector(currentSector, sectorBuffer);
+		loadedSector = false;
+	}
+#endif
+
+	if (modified || newtime) {
+		direntry tmpentry;
+
+		myDrive->directoryBrowse(dirCluster, &tmpentry, (Bit32s)dirIndex);
+
+		if (newtime) {
+			tmpentry.modTime = time;
+			tmpentry.modDate = date;
+		}
+		else {
+			Bit16u ct,cd;
+
+			time_t_to_DOS_DateTime(/*&*/ct,/*&*/cd,::time(NULL));
+
+			tmpentry.modTime = ct;
+			tmpentry.modDate = cd;
+		}
+
+		myDrive->directoryChange(dirCluster, &tmpentry, (Bit32s)dirIndex);
+		modified = false;
+		newtime = false;
+	}
+}
+	
 bool fatFile::Read(Bit8u * data, Bit16u *size) {
 	if ((this->flags & 0xf) == OPEN_WRITE) {	// check if file opened in write-only mode
 		DOS_SetError(DOSERR_ACCESS_DENIED);
