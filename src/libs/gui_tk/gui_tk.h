@@ -1029,6 +1029,10 @@ protected:
 	const int cw;
 	/// clip height.
 	const int ch;
+	/// functional width.
+	const int fw;
+	/// functional height.
+	const int fh;
 
 	/// Current position x coordinate.
 	int x;
@@ -2363,8 +2367,8 @@ public:
 	/// Create a new message box
 	template <typename STR> MessageBox2(Screen *parent, int x, int y, int width, const STR title, const STR text) :
 		ToplevelWindow(parent, x, y, width, 1, title) {
-		message = new Label(this, 5, 5, text, width-10);
-		close = new GUI::Button(this, width/2-40, 10, "Close", 70);
+		message = new Label(this, 5, 5, text, width-border_left-border_right-10);
+		close = new GUI::Button(this, (width-border_left-border_right-70)/2, 10, "Close", 70);
 		close->addActionHandler(this);
 		setText(text);
 
@@ -2375,8 +2379,8 @@ public:
 	/// Set a new text. Size of the box is adjusted accordingly.
 	template <typename STR> void setText(const STR text) {
 		message->setText(text);
-		close->move(width/2-40, 20+message->getHeight());
-		resize(width, message->getHeight()+100);
+		close->move((width-border_left-border_right-70)/2, 15+message->getHeight());
+		resize(width, message->getHeight()+15+close->getHeight()+border_bottom+border_top+15);
 	}
 
 	virtual bool keyDown(const GUI::Key &key) {
@@ -2396,8 +2400,14 @@ public:
     }	
 };
 
+extern int titlebar_y_start;
+extern int titlebar_y_stop;
+
+extern int titlebox_y_start;
+extern int titlebox_y_height;
+
 template <typename STR> ToplevelWindow::ToplevelWindow(Screen *parent, int x, int y, int w, int h, const STR title) :
-	BorderedWindow(parent, x, y, w, h, 6, 33, 6, 3), title(title),
+	BorderedWindow(parent, x, y, w, h, 6, titlebar_y_stop, 6, 3), title(title),
 	dragx(-1), dragy(-1), closehandlers(), systemMenu(new Menu(this,-1,-2,"System Menu")) {
 /* If these commands don't do anything, then why have them there?? --J.C. */
 #if 0 /* TODO: Allow selective enabling these if the Window object wants us to */

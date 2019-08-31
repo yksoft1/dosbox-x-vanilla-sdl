@@ -48,6 +48,7 @@ public:
 	bool Seek(Bit32u * pos,Bit32u type);
 	bool Close();
 	Bit16u GetInformation(void);
+	void Flush(void);
 	bool UpdateDateTimeFromHost(void);   
 	Bit32u GetSeekPos(void);
 public:
@@ -118,6 +119,39 @@ fatFile::fatFile(const char* /*name*/, Bit32u startCluster, Bit32u fileLen, fatD
 	}
 }
 
+void fatFile::Flush(void) {
+#if 0//UNTESTED: THIS MAY CAUSE FURTHER PROBLEMS
+	// FIXME: Copy-pasta from Close
+	if (loadedSector) {
+		myDrive->writeSector(currentSector, sectorBuffer);
+		loadedSector = false;
+	}
+#endif
+
+	if (modified || newtime) {
+		direntry tmpentry;
+
+		myDrive->directoryBrowse(dirCluster, &tmpentry, (Bit32s)dirIndex);
+
+		if (newtime) {
+			tmpentry.modTime = time;
+			tmpentry.modDate = date;
+		}
+		else {
+			Bit16u ct,cd;
+
+			time_t_to_DOS_DateTime(/*&*/ct,/*&*/cd,::time(NULL));
+
+			tmpentry.modTime = ct;
+			tmpentry.modDate = cd;
+		}
+
+		myDrive->directoryChange(dirCluster, &tmpentry, (Bit32s)dirIndex);
+		modified = false;
+		newtime = false;
+	}
+}
+	
 bool fatFile::Read(Bit8u * data, Bit16u *size) {
 	if ((this->flags & 0xf) == OPEN_WRITE) {	// check if file opened in write-only mode
 		DOS_SetError(DOSERR_ACCESS_DENIED);
@@ -240,6 +274,9 @@ bool fatFile::Write(Bit8u * data, Bit16u *size) {
 		seekpos++;
 		if(curSectOff >= myDrive->getSectorSize()) {
 			if(loadedSector) myDrive->writeSector(currentSector, sectorBuffer);
+			loadedSector = false;
+
+			if (sizedec <= 1) goto finalizeWrite; // --sizedec == 0
 
 			currentSector = myDrive->getAbsoluteSectFromBytePos(firstCluster, seekpos);
 			if(currentSector == 0) {
@@ -249,7 +286,6 @@ bool fatFile::Write(Bit8u * data, Bit16u *size) {
 				currentSector = myDrive->getAbsoluteSectFromBytePos(firstCluster, seekpos);
 				if(currentSector == 0) {
 					/* No can do. lets give up and go home.  We must be out of room */
-					loadedSector = false;
 					goto finalizeWrite;
 				}
 			}
@@ -794,7 +830,7 @@ fatDrive::fatDrive(const char *sysFilename, Bit32u bytesector, Bit32u cylsector,
 	Bit32u filesize;
 	
 	if(imgDTASeg == 0) {
-		imgDTASeg = DOS_GetMemory(2,"imgDTASeg");
+		imgDTASeg = DOS_GetMemory(4,"imgDTASeg");
 		imgDTAPtr = RealMake(imgDTASeg, 0);
 		imgDTA    = new DOS_DTA(imgDTAPtr);
 	}
@@ -864,7 +900,7 @@ fatDrive::fatDrive(imageDisk *sourceLoadedDisk, std::vector<std::string> &option
 	created_successfully = true;
 	
 	if(imgDTASeg == 0) {
-		imgDTASeg = DOS_GetMemory(2,"imgDTASeg");
+		imgDTASeg = DOS_GetMemory(4,"imgDTASeg");
 		imgDTAPtr = RealMake(imgDTASeg, 0);
 		imgDTA    = new DOS_DTA(imgDTAPtr);
 	}
@@ -1427,6 +1463,7 @@ bool fatDrive::FileCreate(DOS_File **file, const char *name, Bit16u attributes) 
 	Bit32u dirClust, subEntry;
 	char dirName[DOS_NAMELENGTH_ASCII];
 	char pathName[11];
+	Bit16u ct,cd;
 
 	Bit16u save_errorcode=dos.errorcode;
 
@@ -1824,6 +1861,7 @@ bool fatDrive::MakeDir(const char *dir) {
 	direntry tmpentry;
 	char dirName[DOS_NAMELENGTH_ASCII];
 	char pathName[11];
+	Bit16u ct,cd;
 
 	/* Can we even get the name of the directory itself? */
 	if(!getEntryName(dir, &dirName[0])) return false;
@@ -1842,13 +1880,17 @@ bool fatDrive::MakeDir(const char *dir) {
 
 	/* Can we find the base directory? */
 	if(!getDirClustNum(dir, &dirClust, true)) return false;
-	
+
+	time_t_to_DOS_DateTime(/*&*/ct,/*&*/cd,::time(NULL));
+
 	/* Add the new directory to the base directory */
 	memset(&tmpentry,0, sizeof(direntry));
 	memcpy(&tmpentry.entryname, &pathName[0], 11);
 	tmpentry.loFirstClust = (Bit16u)(dummyClust & 0xffff);
 	tmpentry.hiFirstClust = (Bit16u)(dummyClust >> 16);
 	tmpentry.attrib = DOS_ATTR_DIRECTORY;
+	tmpentry.modTime = ct;
+	tmpentry.modDate = cd;
 	addDirectoryEntry(dirClust, tmpentry);
 
 	/* Add the [.] and [..] entries to our new directory*/
@@ -1858,6 +1900,8 @@ bool fatDrive::MakeDir(const char *dir) {
 	tmpentry.loFirstClust = (Bit16u)(dummyClust & 0xffff);
 	tmpentry.hiFirstClust = (Bit16u)(dummyClust >> 16);
 	tmpentry.attrib = DOS_ATTR_DIRECTORY;
+	tmpentry.modTime = ct;
+	tmpentry.modDate = cd;
 	addDirectoryEntry(dummyClust, tmpentry);
 
 	/* [..] entry */

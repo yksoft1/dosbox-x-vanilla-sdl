@@ -1102,13 +1102,14 @@ static Bitu DOS_21Handler(void) {
 		case 0:
 			 reg_al=0;reg_dl=0x2f;break;  /* always return '/' like dos 5.0+ */
 		case 1:
+			 LOG(LOG_MISC,LOG_DEBUG)("DOS:0x37:Attempted to set switch char");
 			 reg_al=0;break;
 		case 2:
-			 reg_al=0;reg_dl=0x2f;break;
+			 reg_al=0;reg_dl=0xff;break;  /* AVAILDEV \DEV\ prefix optional */
 		case 3:
+			 LOG(LOG_MISC,LOG_DEBUG)("DOS:0x37:Attempted to set AVAILDEV \\DEV\\ prefix use");
 			 reg_al=0;break;
 		};
-		LOG(LOG_MISC,LOG_ERROR)("DOS:0x37:Call for not supported switchchar");
 		break;
 	case 0x38:					/* Set Country Code */	
 		if (reg_al==0) {		/* Get country specidic information */
@@ -1728,6 +1729,30 @@ static Bitu DOS_21Handler(void) {
 					for (Bitu count = 0; count < len;count++)
 						dos_copybuf[count] = (Bit8u)toupper(*reinterpret_cast<unsigned char*>(dos_copybuf+count));
 					MEM_BlockWrite(data,dos_copybuf,len);
+				}
+				CALLBACK_SCF(false);
+				break;
+			case 0x23: /* Determine if character represents yes/no response (MS-DOS 4.0+) */
+				/* DL = character
+				 * DH = second char of double-byte char if DBCS */
+				/* response: CF=1 if error (what error?) or CF=0 and AX=response
+				 *
+				 * response values 0=no 1=yes 2=neither */
+				/* FORMAT.COM and FDISK.EXE rely on this call after prompting the user */
+				{
+					unsigned int c;
+
+					if (IS_PC98_ARCH)
+						c = reg_dx; // DBCS
+					else
+						c = reg_dl; // SBCS
+
+					if (tolower(c) == 'y')
+						reg_ax = 1;/*yes*/
+					else if (tolower(c) == 'n')
+						reg_ax = 0;/*no*/
+					else
+						reg_ax = 2;/*neither*/
 				}
 				CALLBACK_SCF(false);
 				break;

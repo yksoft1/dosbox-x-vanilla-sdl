@@ -36,6 +36,17 @@
 
 namespace GUI {
 
+/* start <= y < stop, region reserved for top level window title bar */
+int titlebar_y_start = 5;
+int titlebar_y_stop = 25;
+
+/* region where title bar is drawn */
+int titlebox_y_start = 4;
+int titlebox_y_height = 20;
+
+/* width of the system menu */
+int titlebox_sysmenu_width = 20; // includes black divider line
+
 namespace Color {
 	RGB Background3D =		0xffc0c0c0;
 	RGB Light3D =			0xfffcfcfc;
@@ -55,7 +66,7 @@ namespace Color {
 std::map<const char *,Font *,Font::ltstr> Font::registry;
 
 bool ToplevelWindow::mouseDoubleClicked(int x, int y, MouseButton button) {
-	if (button == Left && x < 32 && x > 6 && y > 4 && y < 31) {
+	if (button == Left && x < (6+titlebox_sysmenu_width) && x > 6 && y >= titlebar_y_start && y < titlebar_y_stop) {
 		systemMenu->executeAction("Close");
 		return true;
 	}
@@ -163,7 +174,7 @@ void Drawable::drawText(const String& text, bool interpret, Size start, Size len
 				} while (0);
 			default:
 				width += font->getWidth(text[start]);
-				if (x > 0 && x+width > this->width) gotoXY(0,y+font->getHeight());
+				if (x > 0 && x+width > (this->fw)) gotoXY(0,y+font->getHeight());
 			}
 			start++;
 		}
@@ -175,13 +186,13 @@ void Drawable::drawText(const String& text, bool interpret, Size start, Size len
 }
 
 bool ToplevelWindow::mouseDown(int x, int y, MouseButton button) {
-	if (button == Left && x > 32 && x < width-6 && y > 4 && y < 31) {
+	if (button == Left && x >= (6+titlebox_sysmenu_width) && x < width-6 && y >= titlebar_y_start && y < titlebar_y_stop) {
 		dragx = x;
 		dragy = y;
 		mouseChild = NULL;
 		systemMenu->setVisible(false);
 		return true;
-	} else if (button == Left && x < 32 && x > 6 && y > 4 && y < 31) {
+	} else if (button == Left && x < (6+titlebox_sysmenu_width) && x >= 6 && y >= titlebar_y_start && y < titlebar_y_stop) {
 		mouseChild = NULL;
 		raise();
 		systemMenu->setVisible(!systemMenu->isVisible());
@@ -202,6 +213,7 @@ Drawable::Drawable(int w, int h, RGB clear) :
 	tx(0), ty(0),
 	cx(0), cy(0),
 	cw(w), ch(h),
+	fw(w), fh(h),
 	x(0), y(0)
 {
 	this->clear(clear);
@@ -217,6 +229,7 @@ Drawable::Drawable(Drawable &src, RGB clear) :
 	tx(0), ty(0),
 	cx(0), cy(0),
 	cw(src.cw), ch(src.ch),
+	fw(src.fw), fh(src.fh),
 	x(src.x), y(src.y)
 {
 	if (clear != 0) {
@@ -238,6 +251,7 @@ Drawable::Drawable(Drawable &src, int x, int y, int w, int h) :
 	tx(src.tx+x), ty(src.ty+y),
 	cx(imax(imax(-x,src.cx-x),0)), cy(imax(imax(-y,src.cy-y),0)),
 	cw(imax(0,imin(src.cw-x,w))), ch(imax(0,imin(src.ch-y,h))),
+	fw(w), fh(h),
 	x(imax(0,imin(src.tx-tx,cw))), y(imax(0,imin(src.ty-ty,cw)))
 {
 }
@@ -458,7 +472,7 @@ void Drawable::drawText(const Char c, bool interpret)
 		case Font::Tab: gotoXY((((int)(x/font->getWidth()/8))+1)*8*font->getWidth(),y); return;
 		default: break;
 		}
-		if (font->getWidth(c)+x > this->width) gotoXY(0,y+font->getHeight());
+		if (font->getWidth(c)+x > (this->fw)) gotoXY(0,y+font->getHeight());
 	}
 	font->drawChar(this,c);
 }
@@ -835,27 +849,34 @@ void ToplevelWindow::paint(Drawable &d) const
 	d.drawLine(0,height-2,width-2,height-2);
 	d.drawLine(width-2,0,width-2,height-2);
 
-	d.drawLine(5,4,width-7,4);
-	d.drawLine(5,4,5,30);
+	d.drawLine(5,titlebox_y_start,width-7,titlebox_y_start);
+	d.drawLine(5,titlebox_y_start,5,titlebox_y_start+titlebox_y_height-2);
 
 	d.setColor(Color::Light3D);
 	d.drawLine(1,1,width-3,1);
 	d.drawLine(1,1,1,height-3);
 
-	d.drawLine(5,31,width-6,31);
-	d.drawLine(width-6,5,width-6,31);
+	d.drawLine(5,titlebox_y_start+titlebox_y_height-1,width-6,titlebox_y_start+titlebox_y_height-1);
+	d.drawLine(width-6,5,width-6,titlebox_y_start+titlebox_y_height-1);
 
 	d.setColor(Color::Background3D^mask);
-	d.fillRect(6,5,26,26);
-	d.setColor(Color::Grey50^mask);
-	d.fillRect(9,17,20,4);
-	d.setColor(Color::Black^mask);
-	d.fillRect(8,16,20,4);
-	d.setColor(Color::White^mask);
-	d.fillRect(9,17,18,2);
+	d.fillRect(6,titlebox_y_start+1,titlebox_sysmenu_width-1,titlebox_y_height-2);
+	{
+		int y = titlebox_y_start+((titlebox_y_height-4)/2);
+		int x = 8;
+        int w = (titlebox_sysmenu_width * 20) / 27;
+        int h = 4;
+
+		d.setColor(Color::Grey50^mask);
+		d.fillRect(x+1,y+1,w,h);
+		d.setColor(Color::Black^mask);
+		d.fillRect(x,  y,  w,h);
+		d.setColor(Color::White^mask);
+		d.fillRect(x+1,y+1,w-2,h-2);
+	}
 
 	d.setColor(Color::Border);
-	d.drawLine(32,5,32,30);
+	d.drawLine(6+titlebox_sysmenu_width-1,titlebox_y_start+1,6+titlebox_sysmenu_width-1,titlebox_y_start+titlebox_y_height-2);
 
     bool active = hasFocus();
 
@@ -883,12 +904,12 @@ void ToplevelWindow::paint(Drawable &d) const
     }
 	 
  	d.setColor(active ? Color::Titlebar : Color::TitlebarInactive);
-	d.fillRect(33,5,width-39,26);
+	d.fillRect(6+titlebox_sysmenu_width,titlebox_y_start+1,width-(6+titlebox_sysmenu_width+6),titlebox_y_height-2);
 
 	const Font *font = Font::getFont("title");
 	d.setColor(active ? Color::TitlebarText : Color::TitlebarInactiveText);
 	d.setFont(font);
-	d.drawText(31+(width-39-font->getWidth(title))/2,5+(26-font->getHeight())/2+font->getAscent(),title,false,0);
+	d.drawText(31+(width-39-font->getWidth(title))/2,titlebox_y_start+(titlebox_y_height-font->getHeight())/2+font->getAscent(),title,false,0);
 }
 
 void Input::posToEnd(void) {

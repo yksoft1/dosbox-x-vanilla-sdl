@@ -42,6 +42,7 @@ GCC_ATTRIBUTE (packed);
 #pragma pack ()
 #endif
 
+RealPt DOS_DriveDataListHead=0;       // INT 2Fh AX=0803h DRIVER.SYS drive data table list
 RealPt DOS_TableUpCase;
 RealPt DOS_TableLowCase;
 
@@ -329,8 +330,9 @@ void DOS_SetupTables(void) {
         if ((i+1) < DOS_DRIVES)
             real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,RealMake(dos.tables.dpb,(i+1)*dos.tables.dpb_size));
         else
-            real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,0);
+            real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,0xFFFFFFFF); // ED4.EXE (provided by yksoft1) expects this, or else loops forever
 	}
+	dos_infoblock.SetFirstDPB(RealMake(dos.tables.dpb,0));
 
 	/* Create a fake disk buffer head */
 	seg=DOS_GetMemory(6,"Fake disk buffer head");
@@ -357,5 +359,31 @@ void DOS_SetupTables(void) {
 		host_writed(country_info + 0x12, CALLBACK_RealPointer(call_casemap));
 		dos.tables.country=country_info;
 	}
+
+    /* PC-98 INT 1Bh device list (60:6Ch-7Bh).
+     * For now, just write a fake list to satisfy any PC-98 game that
+     * requires a "master disk" to run even if running from an HDI.
+     * See also: [http://hackipedia.org/browse.cgi/Computer/Platform/PC%2c%20NEC%20PC%2d98/Collections/Undocumented%209801%2c%209821%20Volume%202%20%28webtech.co.jp%29/memdos%2etxt]
+     * This is needed to run "Legend of Heroes III" */
+    if (IS_PC98_ARCH) {
+        // FIXME: This is just a fake list. At some point in the future, this
+        //        list needs to reflect the state of all MOUNT/IMGMOUNT commands
+        //        while in the DOS environment provided by this emulation.
+        for (unsigned int i=0;i < 0x10;i++) real_writeb(0x60,0x6C+i,0);
+        real_writeb(0x60,0x6C,0xA0);    /* hard drive */
+        real_writeb(0x60,0x6D,0x90);    /* floppy drive */
+    }
+
+    /* fake DRIVER.SYS data table list, to satisfy Windows 95 setup.
+     * The list is supposed to be a linked list of drive BPBs, INT 13h info, etc.
+     * terminated by offset 0xFFFF. For now, just point at a 0xFFFF.
+     * Note that Windows 95 setup and SCANDISK.EXE have different criteria on
+     * the return value of INT 2Fh AX=803h and returning without a pointer
+     * really isn't an option. According to RBIL this interface is built into
+     * MS-DOS. */
+    DOS_DriveDataListHead = RealMake(DOS_GetMemory(1/*paragraph*/,"driver.sys.data.list"),0);
+    mem_writew(Real2Phys(DOS_DriveDataListHead)+0x00,0xFFFF); /* list termination */
+    mem_writew(Real2Phys(DOS_DriveDataListHead)+0x02,0xFFFF);
+    mem_writew(Real2Phys(DOS_DriveDataListHead)+0x04,0x0000);
 }
 
