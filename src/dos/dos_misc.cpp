@@ -93,6 +93,13 @@ extern RealPt DOS_DriveDataListHead;       // INT 2Fh AX=0803h DRIVER.SYS drive 
 // INT 2F
 static bool DOS_MultiplexFunctions(void) {
 	switch (reg_ax) {
+	case 0x0600:	/* Guess - ASSIGN - INSTALLATION CHECK */
+		LOG(LOG_MISC,LOG_DEBUG)("Unhandled 0600h call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+		//reg_al = 0x00; // not installed
+		break;
+	case 0x1500:	/* Guess - CD-ROM - INSTALLATION CHECK */
+		LOG(LOG_MISC,LOG_DEBUG)("Unhandled 1500h call AX=%04x BX=%04x CX=%04x DX=%04x BP=%04x",reg_ax,reg_bx,reg_cx,reg_dx,reg_bp);
+		break;
     case 0x0800:    /* DRIVER.SYS function */
     case 0x0801:    /* DRIVER.SYS function */
     case 0x0802:    /* DRIVER.SYS function */

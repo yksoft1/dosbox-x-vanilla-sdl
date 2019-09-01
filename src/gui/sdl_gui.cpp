@@ -636,9 +636,9 @@ public:
         int button_w = 70;
         int button_pad_w = 10;
         int button_row_w = ((button_pad_w + button_w) * 3) - button_pad_w;
-        int button_row_cx = first_column_x + (((columns * column_width) + first_column_x - button_row_w) / 2);
+        int button_row_cx = (((columns * column_width) - button_row_w) / 2);
 		
-        resize(first_column_x + (columns * column_width) + first_column_x + border_left + border_right,
+        resize((columns * column_width) + border_left + border_right,
                button_row_y + button_row_h + button_row_padding_y + border_top + border_bottom);
 	
         if ((this->y + this->getHeight()) > parent->getHeight())
@@ -745,7 +745,7 @@ public:
 	std::vector<GUI::Char> cfg_sname;
 public:
 	AutoexecEditor(GUI::Screen *parent, int x, int y, Section_line *section) :
-		ToplevelWindow(parent, x, y, 450, 300, ""), section(section) {
+		ToplevelWindow(parent, x, y, 450, 260 + GUI::titlebar_y_stop, ""), section(section) {
 		if (section == NULL) {
 			LOG_MSG("BUG: AutoexecEditor constructor called with section == NULL\n");
 			return;
@@ -755,7 +755,7 @@ public:
 		title[0] = std::toupper(title[0]);
 		setTitle("Edit "+title);
 		new GUI::Label(this, 5, 10, "Content:");
-		content = new GUI::Input(this, 5, 30, 420, 185);
+		content = new GUI::Input(this, 5, 30, 450 - 10 - border_left - border_right, 185);
 		content->setText(section->data);
 		if (first_shell) (new GUI::Button(this, 5, 220, "Append History"))->addActionHandler(this);
 		if (shell_idle) (new GUI::Button(this, 180, 220, "Execute Now"))->addActionHandler(this);
@@ -810,9 +810,9 @@ protected:
 	GUI::Input *name;
 public:
 	SaveDialog(GUI::Screen *parent, int x, int y, const char *title) :
-		ToplevelWindow(parent, x, y, 400, 150, title) {
+		ToplevelWindow(parent, x, y, 400, 100 + GUI::titlebar_y_stop, title) {
 		new GUI::Label(this, 5, 10, "Enter filename for configuration file:");
-		name = new GUI::Input(this, 5, 30, 350);
+		name = new GUI::Input(this, 5, 30, width - 10 - border_left - border_right);
 		extern std::string capturedir;
 		std::string fullpath,file;
 		Cross::GetPlatformConfigName(file);
@@ -824,8 +824,8 @@ public:
 		} else
 			fullpath = "dosbox.conf";
 		name->setText(fullpath.c_str());
-		(new GUI::Button(this, 120, 70, "Cancel", 70))->addActionHandler(this);
-		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
+		(new GUI::Button(this, 120, 60, "Cancel", 70))->addActionHandler(this);
+		(new GUI::Button(this, 210, 60, "OK", 70))->addActionHandler(this);
 	}
 
 	void actionExecuted(GUI::ActionEventSource *b, const GUI::String &arg) {
@@ -840,12 +840,12 @@ protected:
 	GUI::Input *name;
 public:
 	SaveLangDialog(GUI::Screen *parent, int x, int y, const char *title) :
-		ToplevelWindow(parent, x, y, 400, 150, title) {
+		ToplevelWindow(parent, x, y, 400, 100 + GUI::titlebar_y_stop, title) {
 		new GUI::Label(this, 5, 10, "Enter filename for language file:");
-		name = new GUI::Input(this, 5, 30, 350);
+		name = new GUI::Input(this, 5, 30, width - 10 - border_left - border_right);
 		name->setText("messages.txt");
-		(new GUI::Button(this, 120, 70, "Cancel", 70))->addActionHandler(this);
-		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
+		(new GUI::Button(this, 120, 60, "Cancel", 70))->addActionHandler(this);
+		(new GUI::Button(this, 210, 60, "OK", 70))->addActionHandler(this);
 	}
 
 	void actionExecuted(GUI::ActionEventSource *b, const GUI::String &arg) {
@@ -1113,7 +1113,7 @@ public:
 								;
 			new GUI::MessageBox2(getScreen(), 100, 150, 480, "About DOSBox-X", msg);
 		} else if (arg == "Introduction") {
-			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO"));
+			new GUI::MessageBox2(getScreen(), 20, 50, 540, "Introduction", MSG_Get("PROGRAM_INTRO"));
 		} else if (arg == "Getting Started") {
 			std::string msg = MSG_Get("PROGRAM_INTRO_MOUNT_START");
 #ifdef WIN32
@@ -1123,9 +1123,9 @@ public:
 #endif
 			msg += MSG_Get("PROGRAM_INTRO_MOUNT_END");
 
-			new GUI::MessageBox2(getScreen(), 20, 50, 600, std::string("Introduction"), msg);
+			new GUI::MessageBox2(getScreen(), 0, 50, 680, std::string("Getting Started"), msg);
 		} else if (arg == "CD-ROM Support") {
-			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO_CDROM"));
+			new GUI::MessageBox2(getScreen(), 20, 50, 640, "CD-ROM Support", MSG_Get("PROGRAM_INTRO_CDROM"));
 		} else if (arg == "Special Keys") {
 			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO_SPECIAL"));
 		} else if (arg == "Save...") {
