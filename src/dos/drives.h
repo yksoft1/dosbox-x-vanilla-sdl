@@ -275,6 +275,8 @@ private:
 
 	Bit8u fatSectBuffer[SECTOR_SIZE_MAX * 2];
 	Bit32u curFatSect;
+
+	DOS_Drive_Cache labelCache;
 public:
     /* the driver code must use THESE functions to read the disk, not directly from the disk drive,
      * in order to support a drive with a smaller sector size than the FAT filesystem's "sector".
@@ -292,6 +294,10 @@ public:
 	virtual Bit8u Read_AbsoluteSector_INT25(Bit32u sectnum, void * data);
 	virtual Bit8u Write_AbsoluteSector_INT25(Bit32u sectnum, void * data);
 	virtual void UpdateDPB(unsigned char dos_drive);
+
+	virtual char const * GetLabel(){return labelCache.GetLabel();};
+	virtual void SetLabel(const char *label, bool iscdrom, bool updatable);
+	virtual void UpdateBootVolumeLabel(const char *label);
 };
 
 PhysPt DOS_Get_DPB(unsigned int dos_drive);

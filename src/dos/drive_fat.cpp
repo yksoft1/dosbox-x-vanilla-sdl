@@ -517,6 +517,88 @@ bool fatDrive::getEntryName(const char *fullname, char *entname) {
 	return true;
 }
 
+void fatDrive::UpdateBootVolumeLabel(const char *label) {
+	/* if the extended boot signature is 0x29 there is a copy of the volume label at 0x2B */
+	unsigned char *p = (unsigned char*)(&bootbuffer);
+
+	if (p[0x26] == 0x29) {
+		unsigned int i = 0;
+
+		while (i < 11 && *label != 0) p[0x2B+(i++)] = toupper(*label++);
+		while (i < 11)                p[0x2B+(i++)] = ' ';
+
+		loadedDisk->Write_AbsoluteSector(0+partSectOff,&bootbuffer);
+	}
+}
+
+void fatDrive::SetLabel(const char *label, bool /*iscdrom*/, bool /*updatable*/) {
+	direntry sectbuf[MAX_DIRENTS_PER_SECTOR]; /* 16 directory entries per 512 byte sector */
+	size_t dirent_per_sector = getSectSize() / sizeof(direntry);
+	assert(dirent_per_sector <= MAX_DIRENTS_PER_SECTOR);
+	assert((dirent_per_sector * sizeof(direntry)) <= SECTOR_SIZE_MAX);
+
+	if (fattype == FAT32) return;
+
+	if (*label != 0) {
+		/* Add a volume label entry, by appending to the root directory.
+		 * The DOS program calling this entry is supposed to delete the
+		 * existing volume label. MS-DOS 7.0 and higher appear to automatically
+		 * rewrite the volume label and manage them tighter obviously due
+		 * to the way LFNs are stored in the filesystem. */
+		for (unsigned int i=0;i < bootbuffer.rootdirentries;i++) {
+			unsigned int di = i % dirent_per_sector;
+
+			if (di == 0) {
+				memset(sectbuf,0,sizeof(sectbuf));
+				readSector(firstRootDirSect+(i/dirent_per_sector),sectbuf);
+			}
+
+			if (sectbuf[di].entryname[0] == 0x00 ||
+				sectbuf[di].entryname[0] == 0xe5) {
+				memset(&sectbuf[di],0,sizeof(sectbuf[di]));
+				sectbuf[di].attrib = DOS_ATTR_VOLUME;
+				{
+					unsigned int i = 0;
+					const char *s = label;
+					while (i < 11 && *s != 0) sectbuf[di].entryname[i++] = toupper(*s++);
+					while (i < 11)            sectbuf[di].entryname[i++] = ' ';
+				}
+				writeSector(firstRootDirSect+(i/dirent_per_sector),sectbuf);
+				labelCache.SetLabel(label, false, true);
+				UpdateBootVolumeLabel(label);
+				break;
+			}
+		}
+	}
+	else {
+		/* erase ONE volume label from the root directory */
+		for (unsigned int i=0;i < bootbuffer.rootdirentries;i++) {
+			unsigned int di = i % dirent_per_sector;
+
+			if (di == 0) {
+				memset(sectbuf,0,sizeof(sectbuf));
+				readSector(firstRootDirSect+(i/dirent_per_sector),sectbuf);
+			}
+
+			if (sectbuf[di].entryname[0] == 0x00 ||
+				sectbuf[di].entryname[0] == 0xe5)
+				continue;
+
+			// TODO: If MS-DOS 7.0 or higher skip anything with attrib == 0x0F to avoid erasing LFNs
+			if (sectbuf[di].attrib & DOS_ATTR_VOLUME) {
+				/* TODO: There needs to be a way for FCB delete to erase the volume label by name instead
+				 *       of just picking the first one */
+				/* found one */
+				sectbuf[di].entryname[0] = 0xe5;
+				writeSector(firstRootDirSect+(i/dirent_per_sector),sectbuf);
+				labelCache.SetLabel("", false, true);
+				UpdateBootVolumeLabel("NO NAME");
+				break;
+			}
+		}
+	}
+}
+
 bool fatDrive::getFileDirEntry(char const * const filename, direntry * useEntry, Bit32u * dirClust, Bit32u * subEntry) {
 	size_t len = strlen(filename);
 	char dirtoken[DOS_PATHLENGTH];
@@ -1467,6 +1549,11 @@ bool fatDrive::FileCreate(DOS_File **file, const char *name, Bit16u attributes) 
 
 	Bit16u save_errorcode=dos.errorcode;
 
+	if (attributes & DOS_ATTR_VOLUME) {
+		SetLabel(name,false,true);
+		return true;
+	}
+
 	/* Check if file already exists */
 	if(getFileDirEntry(name, &fileEntry, &dirClust, &subEntry)) {
 		/* Truncate file */
@@ -1553,20 +1640,6 @@ bool fatDrive::FileUnlink(const char * name) {
 bool fatDrive::FindFirst(const char *_dir, DOS_DTA &dta,bool /*fcb_findfirst*/) {
 	direntry dummyClust;
 	if(fattype==FAT32) return false;
-#if 0
-	Bit8u attr;char pattern[DOS_NAMELENGTH_ASCII];
-	dta.GetSearchParams(attr,pattern);
-	if(attr==DOS_ATTR_VOLUME) {
-		if (strcmp(GetLabel(), "") == 0 ) {
-			DOS_SetError(DOSERR_NO_MORE_FILES);
-			return false;
-		}
-		dta.SetResult(GetLabel(),0,0,0,DOS_ATTR_VOLUME);
-		return true;
-	}
-	if(attr & DOS_ATTR_VOLUME) //check for root dir or fcb_findfirst
-		LOG(LOG_DOSMISC,LOG_WARN)("findfirst for volumelabel used on fatDrive. Unhandled!!!!!");
-#endif
 	if(!getDirClustNum(_dir, &cwdDirCluster, false)) {
 		DOS_SetError(DOSERR_PATH_NOT_FOUND);
 		return false;
@@ -1650,23 +1723,30 @@ nextfile:
 	memset(find_name,0,DOS_NAMELENGTH_ASCII);
 	memset(extension,0,4);
 	memcpy(find_name,&sectbuf[entryoffset].entryname[0],8);
-	memcpy(extension,&sectbuf[entryoffset].entryname[8],3);
-	trimString(&find_name[0]);
-	trimString(&extension[0]);
+    memcpy(extension,&sectbuf[entryoffset].entryname[8],3);
 	
+	if (!(sectbuf[entryoffset].attrib & DOS_ATTR_VOLUME)) {
+		trimString(&find_name[0]);
+		trimString(&extension[0]);
+	}
+
 	//if(!(sectbuf[entryoffset].attrib & DOS_ATTR_DIRECTORY))
 	if (extension[0]!=0) {
-		strcat(find_name, ".");
-		strcat(find_name, extension);
+		if (!(sectbuf[entryoffset].attrib & DOS_ATTR_VOLUME))
+			strcat(find_name, ".");
+
+        strcat(find_name, extension);
 	}
+
+	if (sectbuf[entryoffset].attrib & DOS_ATTR_VOLUME)
+		trimString(find_name);
 
 	/* Compare attributes to search attributes */
 
 	//TODO What about attrs = DOS_ATTR_VOLUME|DOS_ATTR_DIRECTORY ?
 	if (attrs == DOS_ATTR_VOLUME) {
 		if (!(sectbuf[entryoffset].attrib & DOS_ATTR_VOLUME)) goto nextfile;
-		DOS_Drive_Cache dirCache;
-		dirCache.SetLabel(find_name, false, true);
+		labelCache.SetLabel(find_name, false, true);
 	} else {
 		if (~attrs & sectbuf[entryoffset].attrib & (DOS_ATTR_DIRECTORY | DOS_ATTR_VOLUME | DOS_ATTR_SYSTEM | DOS_ATTR_HIDDEN) ) goto nextfile;
 	}
