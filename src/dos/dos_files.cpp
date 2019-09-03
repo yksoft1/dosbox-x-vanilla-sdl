@@ -1364,7 +1364,6 @@ bool DOS_FCBRenameFile(Bit16u seg, Bit16u offset){
 	DOS_FCB fcbnew(seg,offset);
 	fcbnew.SetPtPhys(fcbnew.GetPtPhys()+0x10u);//HACK: FCB NEW memory offset is affected by whether FCB OLD is extended
 	if(!fcbold.Valid()) return false;
-	if(!fcbold.Valid()) return false;
 	char oldname[DOS_FCBNAME];
 	char newname[DOS_FCBNAME];
 	fcbold.GetName(oldname);fcbnew.GetName(newname);
