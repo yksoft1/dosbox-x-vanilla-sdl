@@ -3049,7 +3049,7 @@ static Bitu INT18_PC98_Handler(void) {
 				unsigned char b597 = mem_readb(0x597);
 				unsigned char tstat = mem_readb(0x53C);
 				unsigned char b54C = mem_readb(0x54C);
-				unsigned char ret = 0x00;
+				unsigned char ret = 0x05; // according to NP2
 
                 // assume the same as AH=42h
 				while (!(IO_ReadB(0x60) & 0x20/*vertical retrace*/)) {
@@ -3110,12 +3110,13 @@ static Bitu INT18_PC98_Handler(void) {
 					else {
 						// according to Neko Project II, this case is ignored
 						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 640x480 mode with 24KHz hsync which is not supported by the platform");
-						ret = 1;
+						ret = 0;
 					}
 				}
 				else {
 					if ((reg_al & 0x0C) < 0x08) { /* bits [3:2] == 0x */
 						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 15KHz hsync which is not yet supported");
+						ret = 0;
 					}
 					else {
 						if (((reg_al ^ (((b54C & 0x20) ? 3 : 2) << 2)) & 0x0C) || ((b54C & 0x40)^(reg_bl & 0x30))) { /* change in bits [3:2] */
@@ -3197,6 +3198,8 @@ static Bitu INT18_PC98_Handler(void) {
 				pc98_update_text_layer_lineheight_from_bda();
 
 				reg_ah = ret;
+				reg_al = (ret == 0x05) ? 0x00 : 0x01; // according to NP2
+				reg_bh = (ret == 0x05) ? 0x00 : 0x01; // according to NP2
 			}
 			break;
         case 0x31: /* Return display mode and status */
