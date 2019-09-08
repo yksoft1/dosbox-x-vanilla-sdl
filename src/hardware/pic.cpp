@@ -29,6 +29,7 @@
 
 unsigned long PIC_irq_delay_ns = 0;
 
+bool never_mark_cascade_in_service = false;
 bool ignore_cascade_in_service = false;
 
 struct PIC_Controller {
@@ -155,8 +156,8 @@ void PIC_Controller::activate() {
 		//cycles 0, take care of the port IO stuff added in raise_irq base caller.
         if (!PIC_IRQCheckPending) {
             /* NTS: PIC_AddEvent by design caps CPU_Cycles to make the event happen on time */
+			PIC_IRQCheckPending = 1;
             PIC_AddEvent(PIC_IRQCheckDelayed,(double)PIC_irq_delay_ns / 1000000,0);
-            PIC_IRQCheckPending = 1;
         }
 	} else {
 		master.raise_irq(master_cascade_irq);
@@ -191,9 +192,14 @@ void PIC_Controller::deactivate() {
 void PIC_Controller::start_irq(Bit8u val){
 	irr&=~(1<<(val));
 	if (!auto_eoi) {
-        active_irq = val;
-		isr |= 1<<(val);
-		isrr = (~isr) | isr_ignore;
+        if (never_mark_cascade_in_service && this == &master && val == master_cascade_irq) {
+            /* do nothing */
+        }
+        else {
+			active_irq = val;
+			isr |= 1<<(val);
+			isrr = (~isr) | isr_ignore;
+		}
 	} else if (GCC_UNLIKELY(rotate_on_auto_eoi)) {
 		LOG_MSG("rotate on auto EOI not handled");
 	}
@@ -505,16 +511,13 @@ void PIC_runIRQs(void) {
     if (master.auto_eoi)
         master.check_for_irq();
 		 
-	/* if we cleared all IRQs, then stop checking.
-	 * otherwise, keep the flag set for the next IRQ to process. */
-	if (i == max && (master.irr&master.imrr) == 0 && (slave.irr&slave.imrr) == 0) {
-        PIC_IRQCheckPending = 0;
-        PIC_IRQCheck = 0;
-    }
-    else if (PIC_IRQCheck) {
-        PIC_AddEvent(PIC_IRQCheckDelayed,(double)PIC_irq_delay_ns / 1000000,0);
-        PIC_IRQCheckPending = 1;
-        PIC_IRQCheck = 0;
+	/* continue (delayed) processing if more interrupts to handle */
+	PIC_IRQCheck = 0;
+	if (i != max) {
+		if (!PIC_IRQCheckPending) {
+			PIC_IRQCheckPending = 1;
+			PIC_AddEvent(PIC_IRQCheckDelayed,(double)PIC_irq_delay_ns / 1000000,0);
+		}
     }
 }
 
@@ -817,7 +820,25 @@ void PIC_Reset(Section *sec) {
 
 	enable_slave_pic = section->Get_bool("enable slave pic");
 	enable_pc_xt_nmi_mask = section->Get_bool("enable pc nmi mask");
-	ignore_cascade_in_service = section->Get_bool("cascade interrupt ignore in service");
+	never_mark_cascade_in_service = section->Get_bool("cascade interrupt never in service");
+
+	{
+		std::string x = section->Get_string("cascade interrupt ignore in service");
+
+		if (x == "1" || x == "true")
+			ignore_cascade_in_service = true;
+		else if (x == "0" || x == "false")
+			ignore_cascade_in_service = false;
+		else {
+			// auto
+			if (IS_PC98_ARCH)
+				ignore_cascade_in_service = true;
+			else
+				ignore_cascade_in_service = false;
+		}
+
+		LOG(LOG_MISC,LOG_DEBUG)("PIC: Ignore cascade in service=%u",ignore_cascade_in_service);
+	}
 
 	if (enable_slave_pic && machine == MCH_PCJR && enable_pc_xt_nmi_mask) {
 		LOG(LOG_MISC,LOG_DEBUG)("PIC_Reset(): PCjr emulation with NMI mask register requires disabling slave PIC (IRQ 8-15)");
