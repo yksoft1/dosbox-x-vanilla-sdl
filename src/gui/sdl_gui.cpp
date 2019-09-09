@@ -577,6 +577,14 @@ public:
         int column_width = 250;
         int button_row_h = 26;
         int button_row_padding_y = 5 + 5;
+        bool showSettingsText = true;
+
+        if (parent->getHeight() < 550) {
+            first_row_y = 5;
+            row_height = 25;
+            showSettingsText = false;
+            button_row_padding_y = 3 + 3;
+        }
 
         int num_prop = 0;
 		while (section->Get_prop(num_prop) != NULL) num_prop++;
@@ -612,7 +620,8 @@ public:
 		std::string title(section->GetName());
 		title[0] = std::toupper(title[0]);
 		setTitle("Configuration for "+title);
-		new GUI::Label(this, 5, 10, "Settings:");
+		if (showSettingsText)
+			new GUI::Label(this, 5, 10, "Settings:");
 		GUI::Button *b = new GUI::Button(this, button_row_cx, button_row_y, "Cancel", button_w);
 		b->addActionHandler(this);
 		closeButton = b;
