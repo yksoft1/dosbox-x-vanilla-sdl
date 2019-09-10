@@ -1849,6 +1849,17 @@ void WindowInWindow::paintAll(Drawable &d) const {
             dscroll.setColor(Color::Black);
             dscroll.drawLine(xleft,ytop-1,xleft+thumbwidth-1,ytop-1);
             dscroll.drawLine(xleft,ytop+thumbheight,xleft+thumbwidth-1,ytop+thumbheight);
+			
+            // Windows 3.1 also draws an inverted dotted rectangle around the thumb where it WOULD be
+			// before quantization to scroll position.
+			if (vscroll_dragging) {
+				xleft = 0;
+				ytop = drag_y - ((thumbheight + 2) / 2);
+				if (ytop < 0) ytop = 0;
+				if (ytop > thumbtravel) ytop = thumbtravel;
+				dscroll.setColor(Color::Light3D);
+				dscroll.drawDotRect(xleft,ytop,thumbwidth+1,thumbheight+1);
+			}
         }
     }
 }
@@ -1894,7 +1905,7 @@ bool WindowInWindow::mouseDragged(int x, int y, MouseButton button)
 
 bool WindowInWindow::mouseDown(int x, int y, MouseButton button)
 {
-    if (vscroll && x >= (width - vscroll_display_width)) {
+    if (vscroll && x >= (width - vscroll_display_width) && button == GUI::Left) {
         mouseChild = this;
         vscroll_dragging = true;
         drag_x = x;
@@ -1912,6 +1923,21 @@ bool WindowInWindow::mouseDown(int x, int y, MouseButton button)
 
         return true;
     }
+
+	if (mouseChild == NULL && button == GUI::WheelUp) {
+		scroll_pos_y -= 50;
+		if (scroll_pos_y < 0) scroll_pos_y = 0;
+		mouseChild = this;
+		dragging = true;
+		return true;
+	}
+	if (mouseChild == NULL && button == GUI::WheelDown) {
+		scroll_pos_y += 50;
+		if (scroll_pos_y > scroll_pos_h) scroll_pos_y = scroll_pos_h;
+		mouseChild = this;
+		dragging = true;
+		return true;
+	}
 
     int xadj = -scroll_pos_x;
     int yadj = -scroll_pos_y;
