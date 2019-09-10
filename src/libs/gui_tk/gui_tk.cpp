@@ -32,6 +32,7 @@
 #include "config.h"
 
 #include <SDL.h>
+#include <cmath>
 #include "gui_tk.h"
 
 namespace GUI {
@@ -818,6 +819,13 @@ bool BorderedWindow::mouseDown(int x, int y, MouseButton button)
 	return Window::mouseDown(x,y,button);
 }
 
+bool BorderedWindow::mouseUp(int x, int y, MouseButton button) {
+	if (mouseChild == NULL && (x > width-border_right || y > height-border_bottom)) return false;
+	x -= border_left; y -= border_top;
+    if (mouseChild == NULL && (x < 0 || y < 0)) return false;
+	return Window::mouseUp(x,y,button);
+}
+
 bool BorderedWindow::mouseMoved(int x, int y)
 {
 	if (x > width-border_right || y > height-border_bottom) return false;
@@ -828,9 +836,9 @@ bool BorderedWindow::mouseMoved(int x, int y)
 
 bool BorderedWindow::mouseDragged(int x, int y, MouseButton button)
 {
-	if (x > width-border_right || y > height-border_bottom) return false;
+	if (mouseChild == NULL && (x > width-border_right || y > height-border_bottom)) return false;
 	x -= border_left; y -= border_top;
-	if (x < 0 || y < 0) return false;
+    if (mouseChild == NULL && (x < 0 || y < 0)) return false;
 	return Window::mouseDragged(x,y,button);
 }
 
@@ -1763,6 +1771,294 @@ bool ScreenSDL::event(const SDL_Event &event) {
 	}
 
 	return false;
+}
+
+void WindowInWindow::paintAll(Drawable &d) const {
+    int xadj = -scroll_pos_x;
+    int yadj = -scroll_pos_y;
+
+    if (border) {
+        xadj++;
+        yadj++;
+    }
+
+	Drawable dchild(d,0,0,width,height);
+	for (std::list<Window *>::const_iterator i = children.begin(); i != children.end(); ++i) {
+		Window *child = *i;
+		if (child->isVisible()) {
+			Drawable cd(dchild,child->getX() + xadj,child->getY() + yadj,child->getWidth(),child->getHeight());
+			child->paintAll(cd);
+		}
+	}
+
+    if (border) {
+        int w = width-1;
+        int h = height-1;
+
+        if (vscroll)
+            w -= (vscroll?vscroll_display_width:0);
+
+        dchild.setColor(Color::Shadow3D);
+        dchild.drawLine(0,0,w,0);
+        dchild.drawLine(0,0,0,h);
+
+        dchild.setColor(Color::Light3D);
+        dchild.drawLine(0,h,w,h);
+        dchild.drawLine(w,0,w,h);
+    }
+
+    if (vscroll && vscroll_display_width >= 4) {
+        // TODO: Need a vertical scrollbar window object
+
+        Drawable dscroll(d,width - vscroll_display_width,0,vscroll_display_width,height);
+
+        bool disabled = (scroll_pos_h == 0);
+
+        /* scroll bar border, gray background */
+        dscroll.setColor(disabled ? Color::Shadow3D : Color::Black);
+        dscroll.drawRect(0,0,vscroll_display_width-1,height-1);
+
+        dscroll.setColor(Color::Background3D);
+        dscroll.fillRect(1,1,vscroll_display_width-2,height-2);
+
+        /* the "thumb". make it fixed size, Windows 3.1 style.
+         * this code could adapt to the more range-aware visual style of Windows 95 later. */
+        int thumbwidth = vscroll_display_width - 2;
+        int thumbheight = vscroll_display_width - 2;
+        int thumbtravel = height - 2 - thumbheight;
+        if (thumbtravel < 0) thumbtravel = 0;
+        int xleft = 1;
+        int ytop = 1 + ((scroll_pos_h > 0) ?
+            ((thumbtravel * scroll_pos_y) / scroll_pos_h) :
+            0);
+
+        if (thumbheight <= (height + 2) && !disabled) {
+            dscroll.setColor(Color::Light3D);
+            dscroll.drawLine(xleft,ytop,xleft+thumbwidth-1,ytop);
+            dscroll.drawLine(xleft,ytop,xleft,ytop+thumbheight-1);
+
+            // Windows 3.1 renders the shadow two pixels wide
+            dscroll.setColor(Color::Shadow3D);
+            dscroll.drawLine(xleft,ytop+thumbheight-1,xleft+thumbwidth-1,ytop+thumbheight-1);
+            dscroll.drawLine(xleft+thumbwidth-1,ytop,xleft+thumbwidth-1,ytop+thumbheight-1);
+
+            dscroll.drawLine(xleft+1,ytop+thumbheight-2,xleft+thumbwidth-2,ytop+thumbheight-2);
+            dscroll.drawLine(xleft+thumbwidth-2,ytop+1,xleft+thumbwidth-2,ytop+thumbheight-2);
+
+            // Windows 3.1 also draws a hard black line around the thumb that can coincide with the border
+            dscroll.setColor(Color::Black);
+            dscroll.drawLine(xleft,ytop-1,xleft+thumbwidth-1,ytop-1);
+            dscroll.drawLine(xleft,ytop+thumbheight,xleft+thumbwidth-1,ytop+thumbheight);
+        }
+    }
+}
+
+bool WindowInWindow::mouseDragged(int x, int y, MouseButton button)
+{
+    if (vscroll_dragging) {
+        int thumbheight = vscroll_display_width - 2;
+        int thumbtravel = height - 2 - thumbheight;
+        if (thumbtravel < 0) thumbtravel = 0;
+
+        double npos = (double(y - 1 - (thumbheight / 2)) * scroll_pos_h) / thumbtravel;
+        int nipos = int(floor(npos + 0.5));
+        if (nipos < 0) nipos = 0;
+        if (nipos > scroll_pos_h) nipos = scroll_pos_h;
+        scroll_pos_y = nipos;
+
+        return true;
+    }
+
+    if (dragging) {
+        scroll_pos_x -= x - drag_x;
+        scroll_pos_y -= y - drag_y;
+        if (scroll_pos_x < 0) scroll_pos_x = 0;
+        if (scroll_pos_y < 0) scroll_pos_y = 0;
+        if (scroll_pos_x > scroll_pos_w) scroll_pos_x = scroll_pos_w;
+        if (scroll_pos_y > scroll_pos_h) scroll_pos_y = scroll_pos_h;
+        drag_x = x;
+        drag_y = y;
+        return true;
+    }
+
+    int xadj = -scroll_pos_x;
+    int yadj = -scroll_pos_y;
+
+    if (border) {
+        xadj++;
+        yadj++;
+    }
+
+    return Window::mouseDragged(x-xadj,y-yadj,button);
+}
+
+bool WindowInWindow::mouseDown(int x, int y, MouseButton button)
+{
+    if (vscroll && x >= (width - vscroll_display_width)) {
+        mouseChild = this;
+        vscroll_dragging = true;
+        drag_x = x;
+        drag_y = y;
+
+        int thumbheight = vscroll_display_width - 2;
+        int thumbtravel = height - 2 - thumbheight;
+        if (thumbtravel < 0) thumbtravel = 0;
+
+        double npos = (double(y - 1 - (thumbheight / 2)) * scroll_pos_h) / thumbtravel;
+        int nipos = int(floor(npos + 0.5));
+        if (nipos < 0) nipos = 0;
+        if (nipos > scroll_pos_h) nipos = scroll_pos_h;
+        scroll_pos_y = nipos;
+
+        return true;
+    }
+
+    int xadj = -scroll_pos_x;
+    int yadj = -scroll_pos_y;
+
+    if (border) {
+        xadj++;
+        yadj++;
+    }
+
+    bool ret = Window::mouseDown(x-xadj,y-yadj,button);
+
+    if (!ret && mouseChild == NULL && button == GUI::Left) {
+        drag_x = x;
+        drag_y = y;
+        mouseChild = this;
+        dragging = true;
+        ret = true;
+    }
+
+    return ret;
+}
+
+bool WindowInWindow::mouseUp(int x, int y, MouseButton button)
+{
+    if (vscroll_dragging) {
+        int thumbheight = vscroll_display_width - 2;
+        int thumbtravel = height - 2 - thumbheight;
+        if (thumbtravel < 0) thumbtravel = 0;
+
+        double npos = (double(y - 1 - (thumbheight / 2)) * scroll_pos_h) / thumbtravel;
+        int nipos = int(floor(npos + 0.5));
+        if (nipos < 0) nipos = 0;
+        if (nipos > scroll_pos_h) nipos = scroll_pos_h;
+        scroll_pos_y = nipos;
+
+        vscroll_dragging = false;
+        mouseChild = NULL;
+        return true;
+    }
+
+    if (hscroll_dragging) {
+        hscroll_dragging = false;
+        mouseChild = NULL;
+        return true;
+    }
+
+    if (dragging) {
+        mouseChild = NULL;
+        dragging = false;
+        return true;
+    }
+
+    int xadj = -scroll_pos_x;
+    int yadj = -scroll_pos_y;
+
+    if (border) {
+        xadj++;
+        yadj++;
+    }
+
+    return Window::mouseUp(x-xadj,y-xadj,button);
+}
+
+bool WindowInWindow::mouseMoved(int x, int y) {
+    if (dragging) return true;
+
+    int xadj = -scroll_pos_x;
+    int yadj = -scroll_pos_y;
+
+    if (border) {
+        xadj++;
+        yadj++;
+    }
+
+    return Window::mouseMoved(x-xadj,y-xadj);
+}
+
+bool WindowInWindow::mouseClicked(int x, int y, MouseButton button) {
+    if (dragging) return true;
+
+    int xadj = -scroll_pos_x;
+    int yadj = -scroll_pos_y;
+
+    if (border) {
+        xadj++;
+        yadj++;
+    }
+
+    return Window::mouseClicked(x-xadj,y-xadj,button);
+}
+
+bool WindowInWindow::mouseDoubleClicked(int x, int y, MouseButton button) {
+    if (dragging) return true;
+
+    int xadj = -scroll_pos_x;
+    int yadj = -scroll_pos_y;
+
+    if (border) {
+        xadj++;
+        yadj++;
+    }
+
+    return Window::mouseDoubleClicked(x-xadj,y-xadj,button);
+}
+
+void WindowInWindow::resize(int w, int h) {
+    int mw = 0,mh = 0;
+    int cmpw = w;
+    int cmph = h;
+
+    if (vscroll) cmpw -= vscroll_display_width;
+    if (border) {
+        cmpw -= 2;
+        cmph -= 2;
+    }
+
+	for (std::list<Window *>::const_iterator i = children.begin(); i != children.end(); ++i) {
+		Window *child = *i;
+        int mx = child->getX() + child->getWidth();
+        int my = child->getY() + child->getHeight();
+        if (mw < mx) mw = mx;
+        if (mh < my) mh = my;
+	}
+
+    mw -= cmpw;
+    mh -= cmph;
+    if (mw < 0) mw = 0;
+    if (mh < 0) mh = 0;
+    scroll_pos_w = mw;
+    scroll_pos_h = mh;
+
+    Window::resize(w,h);
+}
+
+void WindowInWindow::enableBorder(bool en) {
+    if (border != en) {
+        border = en;
+        resize(width, height);
+    }
+}
+
+void WindowInWindow::enableScrollBars(bool hs,bool vs) {
+    if (hs != hscroll || vs != vscroll) {
+        hscroll = hs;
+        vscroll = vs;
+        resize(width, height);
+    }
 }
 
 } /* end namespace GUI */
