@@ -1207,7 +1207,7 @@ static Bitu DOS_21Handler(void) {
                 Bit16u nuread = (Bit16u)(0x10000UL - (reg_dx & 0xF)); /* FIXME: If MS-DOS 5.0 truncates it any farther I need to know! */
 
                 if (nuread > toread) nuread = toread;
-                LOG_MSG("INT 21h READ warning: DX=%04xh CX=%04xh exceeds 64KB, truncating to %04xh",reg_dx,toread,nuread);
+                LOG(LOG_MISC,LOG_DEBUG)("INT 21h READ warning: DX=%04xh CX=%04xh exceeds 64KB, truncating to %04xh",reg_dx,toread,nuread);
                 toread = nuread;
             }
 
@@ -1240,7 +1240,7 @@ static Bitu DOS_21Handler(void) {
                 Bit16u nuwrite = (Bit16u)(0x10000UL - (reg_dx & 0xF)); /* FIXME: If MS-DOS 5.0 truncates it any farther I need to know! */
 
                 if (nuwrite > towrite) nuwrite = towrite;
-                LOG_MSG("INT 21h WRITE warning: DX=%04xh CX=%04xh exceeds 64KB, truncating to %04xh",reg_dx,towrite,nuwrite);
+                LOG(LOG_MISC,LOG_DEBUG)("INT 21h WRITE warning: DX=%04xh CX=%04xh exceeds 64KB, truncating to %04xh",reg_dx,towrite,nuwrite);
                 towrite = nuwrite;
             }
 
