@@ -886,7 +886,7 @@ void DOSBOX_SetupConfigSections(void) {
 	const char* tandys[] = { "auto", "on", "off", 0};
 	const char* ps1opt[] = { "on", "off", 0};
 	const char* truefalseautoopt[] = { "true", "false", "1", "0", "auto", 0};
-    const char* pc98fmboards[] = { "auto", "off", "false", "board26k", "board86", "board86c", 0};
+    const char* pc98fmboards[] = { "auto", "off", "false", "board14", "board26k", "board86", "board86c", 0};
     const char* pc98videomodeopt[] = { "", "24khz", "31khz", "15khz", 0};
 	const char *vga_ac_mapping_settings[] = { "", "auto", "4x4", "4low", "first16", 0 };
 	
