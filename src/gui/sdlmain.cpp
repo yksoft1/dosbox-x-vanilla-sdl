@@ -565,6 +565,8 @@ struct SDL_Block {
 	unsigned int gfx_force_redraw_count; //= 0; //already inited in main()
 };
 
+void ShutDownMemHandles(Section * sec);
+
 static SDL_Block sdl;
 
 void UpdateWindowDimensions(void) {
@@ -7067,6 +7069,9 @@ bool VM_Boot_DOSBox_Kernel() {
     }
 
 	if (dos_kernel_disabled) {
+		/* in case of reboot */
+		Init_MemHandles();
+
 		DispatchVMEvent(VM_EVENT_DOS_BOOT); // <- just starting the DOS kernel now
 
 		/* DOS kernel init */
@@ -8686,6 +8691,9 @@ fresh_boot:
             XMS_DoShutDown();
             /* and the DOS API in general */
             DOS_DoShutDown();
+
+			/* mem handles too */
+			ShutDownMemHandles(NULL);
 
             /* set the "disable DOS kernel" flag so other parts of this program
              * do not attempt to manipulate now-defunct parts of the kernel
