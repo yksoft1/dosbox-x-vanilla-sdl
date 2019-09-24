@@ -2588,6 +2588,13 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 
 		htotal = vga.other.htotal + 1;
 		hdend = vga.other.hdend;
+		
+		if (machine == MCH_MCGA) {
+			// it seems MCGA follows the EGA/VGA model of encoding active display
+			// as N - 1 rather than CGA/MDA model of N.
+			hdend++;
+		}
+		 
 		hbstart = hdend;
 		hbend = htotal;
 		hrstart = vga.other.hsyncp;
@@ -2639,9 +2646,7 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 			break;
         case MCH_MCGA:
             clock = 25175000 / 2 / 8;//FIXME: Guess. Verify
-			if (vga.mode != M_TANDY2) {
-				if (!(vga.tandy.mode_control & 1)) clock /= 2;
-			}
+			if (!(vga.tandy.mode_control & 1)) clock /= 2;
 			oscclock = clock * 2 * 8;
             break;
 		case MCH_MDA:

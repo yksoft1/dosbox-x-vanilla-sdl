@@ -772,12 +772,30 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 
 	/* Setup the CRTC */
 	Bitu crtc_base=(machine==MCH_HERC || machine==MCH_MDA) ? 0x3b4 : 0x3d4;
+	
+	if (machine == MCH_MCGA) {
+		// unlock CRTC regs 0-7
+		unsigned char x;
+
+		IO_WriteB(crtc_base,0x10);
+		x = IO_ReadB(crtc_base+1);
+		IO_WriteB(crtc_base+1,x & 0x7F);
+	}
+	 
 	//Horizontal total
 	IO_WriteW(crtc_base,0x00 | (CurMode->htotal) << 8);
-	//Horizontal displayed
-	IO_WriteW(crtc_base,0x01 | (CurMode->hdispend) << 8);
-	//Horizontal sync position
-	IO_WriteW(crtc_base,0x02 | (CurMode->hdispend+1) << 8);
+    if (machine == MCH_MCGA) {
+		//Horizontal displayed
+		IO_WriteW(crtc_base,(Bit16u)(0x01 | (CurMode->hdispend-1) << 8));
+		//Horizontal sync position
+		IO_WriteW(crtc_base,(Bit16u)(0x02 | (CurMode->hdispend) << 8));
+	}
+	else {
+		//Horizontal displayed
+		IO_WriteW(crtc_base,(Bit16u)(0x01 | (CurMode->hdispend) << 8));
+		//Horizontal sync position
+		IO_WriteW(crtc_base,(Bit16u)(0x02 | (CurMode->hdispend+1) << 8));
+	}
 	//Horizontal sync width, seems to be fixed to 0xa, for cga at least, hercules has 0xf
 	// PCjr doubles sync width in high resolution modes, good for aspect correction
 	// newer "compatible" CGA BIOS does the same
@@ -907,6 +925,11 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 			if (CurMode->swidth >= 500)
 				mcga_mode |= 0x20;//unknown bit?
 
+			/* write protect registers 0-7 if INT 10h mode 2 or 3 to mirror real hardware
+			 * behavior observed through CRTC register dumps on MCGA hardware */
+			if (CurMode->mode == 2 || CurMode->mode == 3)
+				mcga_mode |= 0x80;
+				 
             IO_WriteW(crtc_base,0x10 | (mcga_mode) << 8);
         }
 		break;
