@@ -686,6 +686,24 @@ public:
 		}
 		b->addActionHandler(this);
 		
+		/* first child is first tabbable */
+		{
+			Window *w = wiw->getChild(0);
+			if (w) w->first_tabbable = true;
+		}
+
+		/* last child is first tabbable */
+		{
+			Window *w = wiw->getChild(wiw->getChildCount()-1);
+			if (w) w->last_tabbable = true;
+		}
+		 
+		/* the FIRST field needs to come first when tabbed to */
+		{
+			Window *w = wiw->getChild(0);
+			if (w) w->raise();  /* NTS: This CHANGES the child element order, getChild(0) will return something else */
+		}
+		 
         wiw->resize((columns * column_width) + 2/*border*/ + wiw->vscroll_display_width, scroll_h);
         wiw->enableScrollBars(false/*h*/,true/*v*/);
         wiw->enableBorder(true);
@@ -905,18 +923,18 @@ protected:
 	InputWithEnterKey *name;
 public:
 	SetCycles(GUI::Screen *parent, int x, int y, const char *title) :
-		ToplevelWindow(parent, x, y, 400, 150, title) {
+		ToplevelWindow(parent, x, y, 400, 100 + GUI::titlebar_y_stop, title) {
 		new GUI::Label(this, 5, 10, "Enter CPU cycles:");
 //		name = new GUI::Input(this, 5, 30, 350);
-		name = new InputWithEnterKey(this, 5, 30, 350);
+		name = new InputWithEnterKey(this, 5, 30, width - 10 - border_left - border_right);
 		name->set_trigger_target(this);
 		std::ostringstream str;
 		str << "fixed " << CPU_CycleMax;
 
 		std::string cycles=str.str();
 		name->setText(cycles.c_str());
-		(new GUI::Button(this, 120, 70, "Cancel", 70))->addActionHandler(this);
-		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
+		(new GUI::Button(this, 120, 60, "Cancel", 70))->addActionHandler(this);
+		(new GUI::Button(this, 210, 60, "OK", 70))->addActionHandler(this);
 
 		name->raise(); /* make sure keyboard focus is on the text field, ready for the user */
 
