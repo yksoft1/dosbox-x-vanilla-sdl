@@ -599,7 +599,9 @@ Window::Window(Window *parent, int x, int y, int w, int h) :
 	mouseChild(NULL),
 	transient(false),
 	toplevel(false),
-	mouse_in_window(false)
+	mouse_in_window(false),
+	first_tabbable(false),
+	last_tabbable(false)
 {
 	parent->addChild(this);
 }
@@ -681,27 +683,116 @@ bool Window::keyDown(const Key &key)
 	if ((*children.rbegin())->keyDown(key)) return true;
 	if (key.ctrl || key.alt || key.windows || key.special != Key::Tab) return false;
 
+	bool tab_quit = false;
+
 	if (key.shift) {
 		std::list<Window *>::reverse_iterator i = children.rbegin(), e = children.rend();
 		++i;
         while (i != e) {
+			if ((*i)->last_tabbable)
+				tab_quit = true;
+ 
             if ((*i)->tabbable) {
                 if ((*i)->raise())
                     break;
             }
             ++i;
         }
+		if (tab_quit) return false;
         return (i != e) || toplevel/*prevent TAB escape to another window*/;
 	} else {
 		std::list<Window *>::iterator i = children.begin(), e = children.end();
 		--e;
 		while (i != e) {
+			if ((*i)->first_tabbable)
+				tab_quit = true;
+
             if ((*i)->tabbable) {
                 if ((*i)->raise())
                     break;
             }
             ++i;
         }
+		if (tab_quit) return false;
+		return (i != e) || toplevel/*prevent TAB escape to another window*/;
+	}
+}
+
+void WindowInWindow::scrollToWindow(Window *child) {
+	if (child->parent != this) {
+		fprintf(stderr,"BUG: scrollToWindow given a window not a child of this parent\n");
+		return;
+	}
+
+	int xadj = -scroll_pos_x;
+	int yadj = -scroll_pos_y;
+	int bw = width;
+	int bh = height;
+
+	if (border) {
+		bw -= 2 + (vscroll?vscroll_display_width:0);
+		bh -= 2;
+	}
+
+	int rx = child->getX() + xadj;
+	int ry = child->getY() + yadj;
+
+	if (rx < 0)
+		scroll_pos_x += rx;
+	if (ry < 0)
+		scroll_pos_y += ry;
+
+	{/*UNTESTED*/
+		int ext = (rx+child->getWidth()) - bw;
+		if (ext > 0) scroll_pos_x += ext;
+	}
+
+	{
+		int ext = (ry+child->getHeight()) - bh;
+		if (ext > 0) scroll_pos_y += ext;
+	}
+
+	if (scroll_pos_x < 0) scroll_pos_x = 0;
+	if (scroll_pos_y < 0) scroll_pos_y = 0;
+	if (scroll_pos_x > scroll_pos_w) scroll_pos_x = scroll_pos_w;
+	if (scroll_pos_y > scroll_pos_h) scroll_pos_y = scroll_pos_h;
+}
+
+bool WindowInWindow::keyDown(const Key &key)
+{
+	if (children.empty()) return false;
+	if ((*children.rbegin())->keyDown(key)) return true;
+	if (key.ctrl || key.alt || key.windows || key.special != Key::Tab) return false;
+
+	if (key.shift) {
+		std::list<Window *>::reverse_iterator i = children.rbegin(), e = children.rend();
+		++i;
+		while (i != e) {
+			if ((*i)->tabbable) {
+				// WARNING: remember raise() changes the order of children, therefore using
+				//          *i after raise() is invalid (stale reference)
+				scrollToWindow(*i);
+				if ((*i)->raise())
+					break;
+			}
+
+			++i;
+		}
+		return (i != e) || toplevel/*prevent TAB escape to another window*/;
+	} else {
+		std::list<Window *>::iterator i = children.begin(), e = children.end();
+		--e;
+		while (i != e) {
+			if ((*i)->tabbable) {
+				// WARNING: remember raise() changes the order of children, therefore using
+				//          *i after raise() is invalid (stale reference)
+				scrollToWindow(*i);
+				if ((*i)->raise())
+					break;
+			}
+
+			++i;
+		}
 		return (i != e) || toplevel/*prevent TAB escape to another window*/;
 	}
 }
@@ -1218,6 +1309,11 @@ void Checkbox::paint(Drawable &d) const
 	d.drawLine(3,(height/2)-6,12,(height/2)-6);
 	d.drawLine(3,(height/2)-6,3,(height/2)+4);
 
+	if (hasFocus()) {
+		d.setColor(Color::Black);
+		d.drawDotRect(1,(height/2)-8,14,14);
+	}
+	 
 	if (checked) {
 		d.setColor(Color::Text);
 		d.drawLine(5,(height/2)-2,7,(height/2)  );

@@ -575,6 +575,7 @@ class Window : public Refcount {
 protected:
 	friend class ToplevelWindow;
 	friend class TransientWindow;
+	friend class WindowInWindow;
 	friend class Menu;
 
 	/// Width of the window.
@@ -610,7 +611,14 @@ protected:
 	
     /// \c mouse is within the boundaries of the window
     bool mouse_in_window;
+public:
+	/// \c first element of a tabbable list
+	bool first_tabbable;
+
+	/// \c last element of a tabbable list
+	bool last_tabbable;
 	 
+protected:
 	/// Child windows.
 	/** Z ordering is done in list order. The first element is the lowermost
 	 *  window. This window's content is below all children. */
@@ -755,9 +763,13 @@ public:
 	/// Return the \p n th child
 	Window *getChild(int n) {
 		for (std::list<Window *>::const_iterator i = children.begin(); i != children.end(); ++i) {
-			if (n--) return *i;
+			if ((n--) == 0) return *i;
 		}
 		return NULL;
+	}
+
+	unsigned int getChildCount(void) {
+		return children.size();
 	}
 
 };
@@ -765,7 +777,7 @@ public:
 /* Window wrapper to make scrollable regions */
 class WindowInWindow : public Window {
 protected:
-
+	void scrollToWindow(Window *child);
 public:
 	WindowInWindow(Window *parent, int x, int y, int w, int h) :
 		Window(parent,x,y,w,h) {
@@ -799,6 +811,9 @@ public:
 	/// Mouse was double-clicked. Returns true if event was handled.
 	virtual bool mouseDoubleClicked(int x, int y, MouseButton button);
 
+	/// Key was pressed. Returns true if event was handled.
+	virtual bool keyDown(const Key &key);
+	
 	virtual void paintAll(Drawable &d) const;
 
 	virtual void resize(int w, int h);
