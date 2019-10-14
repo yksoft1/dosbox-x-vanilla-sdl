@@ -3491,6 +3491,8 @@ void PC98_BIOS_SCSI_CALL(void) {
         return;
     }
 
+	/* FIXME: According to NPKai, command is reg_ah & 0x1F not reg_ah & 0x0F. Right? */
+
     /* what to do is in the lower 4 bits of AH */
     switch (reg_ah & 0x0F) {
         case 0x05: /* write */
@@ -3574,6 +3576,11 @@ void PC98_BIOS_SCSI_CALL(void) {
                 CALLBACK_SCF(true);
             }
             break;
+		case 0x03: /* according to NPKai source code: "negate ack" (cbus/scsicmd.c line 211, and 61) */
+			reg_ah = 0x35;      /* according to scsicmd_negate() line 61, as translated by stat2ret[] by code line 228 */
+			CALLBACK_SCF(false);
+			// NTS: This is needed for an HDI image to boot that apparently contains FreeDOS98
+			break;
         case 0x07: /* unknown, always succeeds */
             reg_ah = 0x00;
             CALLBACK_SCF(false);
