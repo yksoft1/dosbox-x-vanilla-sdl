@@ -555,8 +555,8 @@ void SVGA_Setup_S3Trio(void) {
 	svga.hardware_cursor_active = &SVGA_S3_HWCursorActive;
 	svga.accepts_mode = &SVGA_S3_AcceptsMode;
 
-	//if (vga.vmemsize == 0)
-	//	vga.vmemsize = 2*1024*1024; // the most common S3 configuration
+	if (vga.vmemsize == 0)
+		vga.vmemsize = 2*1024*1024; // the most common S3 configuration
 
 	// Set CRTC 36 to specify amount of VRAM and PCI
 	if (vga.vmemsize < 1024*1024) {
