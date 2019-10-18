@@ -575,6 +575,7 @@ class Window : public Refcount {
 protected:
 	friend class ToplevelWindow;
 	friend class TransientWindow;
+	friend class WindowInWindow;
 	friend class Menu;
 
 	/// Width of the window.
@@ -610,7 +611,14 @@ protected:
 	
     /// \c mouse is within the boundaries of the window
     bool mouse_in_window;
+public:
+	/// \c first element of a tabbable list
+	bool first_tabbable;
+
+	/// \c last element of a tabbable list
+	bool last_tabbable;
 	 
+protected:
 	/// Child windows.
 	/** Z ordering is done in list order. The first element is the lowermost
 	 *  window. This window's content is below all children. */
@@ -755,11 +763,82 @@ public:
 	/// Return the \p n th child
 	Window *getChild(int n) {
 		for (std::list<Window *>::const_iterator i = children.begin(); i != children.end(); ++i) {
-			if (n--) return *i;
+			if ((n--) == 0) return *i;
 		}
 		return NULL;
 	}
 
+	unsigned int getChildCount(void) {
+		return children.size();
+	}
+
+};
+
+/* Window wrapper to make scrollable regions */
+class WindowInWindow : public Window {
+protected:
+	void scrollToWindow(Window *child);
+public:
+	WindowInWindow(Window *parent, int x, int y, int w, int h) :
+		Window(parent,x,y,w,h) {
+			hscroll = false;
+			vscroll = false;
+			hscroll_dragging = false;
+			vscroll_dragging = false;
+			dragging = false;
+			scroll_pos_x = 0;
+			scroll_pos_y = 0;
+			scroll_pos_w = 0;
+			scroll_pos_h = 0;
+			hscroll_display_width = 16;
+			vscroll_display_width = 16;
+
+			border = false;	
+		}
+
+    /// Mouse was moved while a button was pressed. Returns true if event was handled.
+	virtual bool mouseDragged(int x, int y, MouseButton button);
+	/// Mouse was pressed. Returns true if event was handled.
+	virtual bool mouseDown(int x, int y, MouseButton button);
+	/// Mouse was released. Returns true if event was handled.
+	virtual bool mouseUp(int x, int y, MouseButton button);
+
+	/// Mouse was moved. Returns true if event was handled.
+	virtual bool mouseMoved(int x, int y);
+	/// Mouse was clicked. Returns true if event was handled.
+	/** Clicking means pressing and releasing the mouse button while not moving it. */
+	virtual bool mouseClicked(int x, int y, MouseButton button);
+	/// Mouse was double-clicked. Returns true if event was handled.
+	virtual bool mouseDoubleClicked(int x, int y, MouseButton button);
+
+	/// Key was pressed. Returns true if event was handled.
+	virtual bool keyDown(const Key &key);
+	
+	virtual void paintAll(Drawable &d) const;
+
+	virtual void resize(int w, int h);
+
+    virtual void enableScrollBars(bool hs,bool vs);
+    virtual void enableBorder(bool en);
+
+    bool    hscroll_dragging;
+    bool    vscroll_dragging;
+
+    bool    dragging;
+    int     drag_x,drag_y;
+
+    int     scroll_pos_x;
+    int     scroll_pos_y;
+    int     scroll_pos_w;
+    int     scroll_pos_h;
+
+    bool    hscroll;
+    bool    vscroll;
+
+    int     hscroll_display_width;
+    int     vscroll_display_width;
+
+    bool    border;
 };
 
 /** \brief A Screen represents the framebuffer that is the final destination of the GUI.
@@ -1029,6 +1108,10 @@ protected:
 	const int cw;
 	/// clip height.
 	const int ch;
+	/// functional width.
+	const int fw;
+	/// functional height.
+	const int fh;
 
 	/// Current position x coordinate.
 	int x;
@@ -1468,6 +1551,7 @@ public:
 	virtual bool mouseMoved(int x, int y);
 	virtual bool mouseDown(int x, int y, MouseButton button);
 	virtual bool mouseDragged(int x, int y, MouseButton button);
+	virtual bool mouseUp(int x, int y, MouseButton button);
 	virtual int getScreenX() const { return Window::getScreenX()+border_left; }
 	virtual int getScreenY() const { return Window::getScreenY()+border_top; }
 };
@@ -1491,11 +1575,14 @@ class Label : public Window {
 	bool interpret;
 
 public:
+
+	bool allow_focus;
+
 	/// Create a text label with given position, \p text, \p font and \p color.
 	/** If \p width is given, the resulting label is a word-wrapped multiline label */
 	template <typename STR> Label(Window *parent, int x, int y, const STR text, int width = 0, const Font *font = Font::getFont("default"), RGB color = Color::Text) :
 		Window(parent, x, y, (width?width:1), 1), font(font), color(color), text(text), interpret(width != 0)
-	{ resize(); tabbable = false; }
+	{ resize(); tabbable = false; allow_focus = false;}
 
 	/// Set a new text. Size of the label is adjusted accordingly.
 	template <typename STR> void setText(const STR text) { this->text = text; resize(); }
@@ -1522,6 +1609,9 @@ public:
 		if (interpret) Window::resize(w, d.getY()-font->getAscent()+font->getHeight());
 		else Window::resize(d.getX(), font->getHeight());
 	}
+
+	/// Returns \c true if this window has currently the keyboard focus.
+	virtual bool hasFocus() const { return allow_focus && Window::hasFocus(); }
 
 	/// Paint label
 	virtual void paint(Drawable &d) const { d.setColor(color); d.drawText(0, font->getAscent(), text, interpret, 0); if (hasFocus()) d.drawDotRect(0,0,width-1,height-1); }
@@ -2359,12 +2449,14 @@ class MessageBox2 : public GUI::ToplevelWindow {
 protected:
 	Label *message;
 	Button *close;
+	WindowInWindow *wiw;
 public:
 	/// Create a new message box
 	template <typename STR> MessageBox2(Screen *parent, int x, int y, int width, const STR title, const STR text) :
 		ToplevelWindow(parent, x, y, width, 1, title) {
-		message = new Label(this, 5, 5, text, width-10);
-		close = new GUI::Button(this, width/2-40, 10, "Close", 70);
+		wiw = new WindowInWindow(this, 5, 5, width-border_left-border_right-10, 70);
+		message = new Label(wiw, 0, 0, text, width-border_left-border_right-10);
+		close = new GUI::Button(this, (width-border_left-border_right-70)/2, 10, "Close", 70);
 		close->addActionHandler(this);
 		setText(text);
 
@@ -2374,9 +2466,34 @@ public:
 
 	/// Set a new text. Size of the box is adjusted accordingly.
 	template <typename STR> void setText(const STR text) {
+        int sfh;
+        int msgw;
+        bool scroll = true;
+
+        msgw = width-border_left-border_right-10;
+        message->resize(msgw, message->getHeight());
 		message->setText(text);
-		close->move(width/2-40, 20+message->getHeight());
-		resize(width, message->getHeight()+100);
+
+        {
+            Screen *s = getScreen();
+            sfh = s->getHeight() - 70 - border_top - border_bottom;
+            if (sfh > (15+message->getHeight())) {
+                sfh = (15+message->getHeight());
+                scroll = false;
+            }
+        }
+
+        wiw->enableBorder(scroll);
+        wiw->enableScrollBars(false/*h*/,scroll/*v*/);
+        if (scroll) {
+            msgw -= wiw->vscroll_display_width;
+            msgw -= 2/*border*/;
+            message->resize(msgw, message->getHeight());
+        }
+
+		close->move((width-border_left-border_right-70)/2, sfh);
+        wiw->resize(width-border_left-border_right-10, sfh-10);
+		resize(width, sfh+close->getHeight()+border_bottom+border_top+5);
 	}
 
 	virtual bool keyDown(const GUI::Key &key) {
@@ -2396,8 +2513,14 @@ public:
     }	
 };
 
+extern int titlebar_y_start;
+extern int titlebar_y_stop;
+
+extern int titlebox_y_start;
+extern int titlebox_y_height;
+
 template <typename STR> ToplevelWindow::ToplevelWindow(Screen *parent, int x, int y, int w, int h, const STR title) :
-	BorderedWindow(parent, x, y, w, h, 6, 33, 6, 3), title(title),
+	BorderedWindow(parent, x, y, w, h, 6, titlebar_y_stop, 6, 3), title(title),
 	dragx(-1), dragy(-1), closehandlers(), systemMenu(new Menu(this,-1,-2,"System Menu")) {
 /* If these commands don't do anything, then why have them there?? --J.C. */
 #if 0 /* TODO: Allow selective enabling these if the Window object wants us to */
@@ -2419,6 +2542,7 @@ template <typename STR> Button::Button(Window *parent, int x, int y, const STR t
 {
 
 	Label *l = new Label(this,0,0,text);
+	l->allow_focus = true;
 	if (width < 0) resize(l->getWidth()+border_left+border_right+10,height);
 	if (height < 0) resize(width,l->getHeight()+border_top+border_bottom+6);
 	l->move((width-border_left-border_right-l->getWidth())/2,

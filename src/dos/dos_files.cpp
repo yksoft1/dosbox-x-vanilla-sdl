@@ -482,7 +482,10 @@ bool DOS_FlushFile(Bit16u entry) {
 		DOS_SetError(DOSERR_INVALID_HANDLE);
 		return false;
 	};
-	LOG(LOG_DOSMISC,LOG_NORMAL)("FFlush used.");
+
+	LOG(LOG_DOSMISC,LOG_DEBUG)("FFlush used.");
+
+	Files[handle]->Flush();
 	return true;
 }
 
@@ -985,6 +988,19 @@ savefcb:
 	return ret;
 }
 
+static void DTAExtendNameVolumeLabel(char * const name,char * const filename,char * const ext) {
+	size_t i,s;
+
+	i=0;
+	s=0;
+	while (i < 8 && name[s] != 0) filename[i++] = name[s++];
+	while (i < 8) filename[i++] = ' ';
+
+	i=0;
+	while (i < 3 && name[s] != 0) ext[i++] = name[s++];
+	while (i < 3) ext[i++] = ' ';
+}
+
 static void DTAExtendName(char * const name,char * const filename,char * const ext) {
 	char * find=strchr(name,'.');
 	if (find && find!=name) {
@@ -1008,7 +1024,11 @@ static void SaveFindResult(DOS_FCB & find_fcb) {
 	Bit8u find_attr = DOS_ATTR_ARCHIVE;
 	find_fcb.GetAttr(find_attr); /* Gets search attributes if extended */
 	/* Create a correct file and extention */
-	DTAExtendName(name,file_name,ext);	
+	if (attr & DOS_ATTR_VOLUME)
+		DTAExtendNameVolumeLabel(name,file_name,ext);
+	else
+		DTAExtendName(name,file_name,ext);	
+
 	DOS_FCB fcb(RealSeg(dos.dta()),RealOff(dos.dta()));//TODO
 	fcb.Create(find_fcb.Extended());
 	fcb.SetName(drive,file_name,ext);
@@ -1019,10 +1039,16 @@ static void SaveFindResult(DOS_FCB & find_fcb) {
 bool DOS_FCBCreate(Bit16u seg,Bit16u offset) { 
 	DOS_FCB fcb(seg,offset);
 	char shortname[DOS_FCBNAME];Bit16u handle;
-	fcb.GetName(shortname);
 	Bit8u attr = DOS_ATTR_ARCHIVE;
 	fcb.GetAttr(attr);
 	if (!attr) attr = DOS_ATTR_ARCHIVE; //Better safe than sorry 
+
+	if (attr & DOS_ATTR_VOLUME) {
+		fcb.GetVolumeName(shortname);
+		return Drives[fcb.GetDrive()]->FileCreate(NULL,shortname,attr);
+	}
+
+	fcb.GetName(shortname);
 	if (!DOS_CreateFile(shortname,attr,&handle)) return false;
 	fcb.FileOpen((Bit8u)handle);
 	return true;
@@ -1272,6 +1298,43 @@ bool DOS_FCBGetFileSize(Bit16u seg,Bit16u offset) {
 }
 
 bool DOS_FCBDeleteFile(Bit16u seg,Bit16u offset){
+	/* Special case: ????????.??? and DOS_ATTR_VOLUME */
+	{
+		char shortname[DOS_FCBNAME];
+		DOS_FCB fcb(seg,offset);
+		Bit8u attr = 0;
+		fcb.GetAttr(attr);
+		Bit8u drive = fcb.GetDrive();
+		std::string label = Drives[drive]->GetLabel();
+
+		if (attr & DOS_ATTR_VOLUME) {
+			fcb.GetVolumeName(shortname);
+
+			if (!strcmp(shortname,"???????????")) {
+				if (!label.empty()) {
+					Drives[drive]->SetLabel("",false,true);
+					LOG(LOG_DOSMISC,LOG_NORMAL)("FCB delete volume label");
+					return true;
+				}
+			}
+			else {
+				/* MS-DOS 6.22 LABEL.EXE will explicitly request to delete the volume label by the volume label not ????????.???? */
+				if (!label.empty()) {
+					while (label.length() < 11) label += ' ';
+					if (!memcmp(label.c_str(),shortname,11)) {
+						Drives[drive]->SetLabel("",false,true);
+						LOG(LOG_DOSMISC,LOG_NORMAL)("FCB delete volume label deleted");
+						return true;
+					}
+				}
+			}
+
+			LOG(LOG_DOSMISC,LOG_NORMAL)("FCB delete volume label not found (current='%s' asking='%s')",label.c_str(),shortname);
+			DOS_SetError(DOSERR_FILE_NOT_FOUND); // right?
+			return false;
+		}
+	}
+
 /* FCB DELETE honours wildcards. it will return true if one or more
  * files get deleted. 
  * To get this: the dta is set to temporary dta in which found files are
@@ -1294,13 +1357,53 @@ bool DOS_FCBDeleteFile(Bit16u seg,Bit16u offset){
 	return  return_value;
 }
 
+char* trimString(char* str);
+
 bool DOS_FCBRenameFile(Bit16u seg, Bit16u offset){
 	DOS_FCB fcbold(seg,offset);
-	DOS_FCB fcbnew(seg,offset+16);
+	DOS_FCB fcbnew(seg,offset);
+	fcbnew.SetPtPhys(fcbnew.GetPtPhys()+0x10u);//HACK: FCB NEW memory offset is affected by whether FCB OLD is extended
 	if(!fcbold.Valid()) return false;
 	char oldname[DOS_FCBNAME];
 	char newname[DOS_FCBNAME];
 	fcbold.GetName(oldname);fcbnew.GetName(newname);
+
+	{
+		Bit8u drive = fcbold.GetDrive();
+		std::string label = Drives[drive]->GetLabel();
+		Bit8u attr = 0;
+
+		fcbold.GetAttr(attr);
+		/* According to RBIL and confirmed with SETLABEL.ASM in DOSLIB2, you can rename a volume label dirent as well with this function */
+		if (attr & DOS_ATTR_VOLUME) {
+			fcbold.GetVolumeName(oldname);
+			fcbnew.GetVolumeName(newname);
+
+			for (unsigned int i=0;i < 11;i++)
+				oldname[i] = toupper(oldname[i]);
+
+			trimString(oldname);
+			trimString(newname);
+
+            if (!label.empty()) {
+                if (!strcmp(oldname,"???????????") || label == oldname) {
+					Drives[drive]->SetLabel(newname,false,true);
+					LOG(LOG_DOSMISC,LOG_NORMAL)("FCB rename volume label to '%s' from '%s'",newname,oldname);
+					return true;
+				}
+				else {
+					LOG(LOG_DOSMISC,LOG_NORMAL)("FCB rename volume label rejected, does not match current label '%s' from '%s'",newname,oldname);
+					DOS_SetError(DOSERR_FILE_NOT_FOUND); // right?
+					return false;
+				}
+			}
+			else {
+				LOG(LOG_DOSMISC,LOG_NORMAL)("FCB rename volume label rejected, no label set");
+				DOS_SetError(DOSERR_FILE_NOT_FOUND); // right?
+				return false;
+			}
+		}
+	}
 
 	/* Check, if sourcefile is still open. This was possible in DOS, but modern oses don't like this */
 	Bit8u drive; char fullname[DOS_PATHLENGTH];
@@ -1347,7 +1450,7 @@ bool DOS_GetAllocationInfo(Bit8u drive,Bit16u * _bytes_sector,Bit8u * _sectors_c
 	Bit16u _free_clusters;
 	Drives[drive]->AllocationInfo(_bytes_sector,_sectors_cluster,_total_clusters,&_free_clusters);
 	SegSet16(ds,RealSeg(dos.tables.mediaid));
-	reg_bx=RealOff(dos.tables.mediaid+drive*9);
+	reg_bx=RealOff(dos.tables.mediaid+drive*dos.tables.dpb_size);
 	return true;
 }
 

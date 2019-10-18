@@ -225,12 +225,15 @@ public:
 	virtual bool isRemovable(void);
 	virtual Bits UnMount(void);
 public:
+	Bit8u readSector(Bit32u sectnum, void * data);
+	Bit8u writeSector(Bit32u sectnum, void * data);
 	Bit32u getAbsoluteSectFromBytePos(Bit32u startClustNum, Bit32u bytePos);
 	Bit32u getSectorSize(void);
+	Bit32u getClusterSize(void);
 	Bit32u getAbsoluteSectFromChain(Bit32u startClustNum, Bit32u logicalSector);
 	bool allocateCluster(Bit32u useCluster, Bit32u prevCluster);
 	Bit32u appendCluster(Bit32u startCluster);
-	void deleteClustChain(Bit32u startCluster);
+	void deleteClustChain(Bit32u startCluster, Bit32u bytePos);
 	Bit32u getFirstFreeClust(void);
 	bool directoryBrowse(Bit32u dirClustNumber, direntry *useEntry, Bit32s entNum, Bit32s start=0);
 	bool directoryChange(Bit32u dirClustNumber, direntry *useEntry, Bit32s entNum);
@@ -260,6 +263,7 @@ private:
 	} allocation;
 	
 	bootstrap bootbuffer;
+	bool absolute;
 	Bit8u fattype;
 	Bit32u CountOfClusters;
 	Bit32u partSectOff;
@@ -271,6 +275,8 @@ private:
 
 	Bit8u fatSectBuffer[SECTOR_SIZE_MAX * 2];
 	Bit32u curFatSect;
+
+	DOS_Drive_Cache labelCache;
 public:
     /* the driver code must use THESE functions to read the disk, not directly from the disk drive,
      * in order to support a drive with a smaller sector size than the FAT filesystem's "sector".
@@ -281,8 +287,20 @@ public:
 	virtual Bit8u Write_AbsoluteSector(Bit32u sectnum, void * data);
 	virtual Bit32u getSectSize(void);
 	Bit32u sector_size;
+
+    // INT 25h/INT 26h
+    virtual Bit32u GetSectorCount(void);
+    virtual Bit32u GetSectorSize(void);
+	virtual Bit8u Read_AbsoluteSector_INT25(Bit32u sectnum, void * data);
+	virtual Bit8u Write_AbsoluteSector_INT25(Bit32u sectnum, void * data);
+	virtual void UpdateDPB(unsigned char dos_drive);
+
+	virtual char const * GetLabel(){return labelCache.GetLabel();};
+	virtual void SetLabel(const char *label, bool iscdrom, bool updatable);
+	virtual void UpdateBootVolumeLabel(const char *label);
 };
 
+PhysPt DOS_Get_DPB(unsigned int dos_drive);
 
 class cdromDrive : public localDrive
 {

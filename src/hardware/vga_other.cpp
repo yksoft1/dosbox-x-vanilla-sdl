@@ -32,8 +32,23 @@
 static Bitu read_cga(Bitu /*port*/,Bitu /*iolen*/);
 static void write_cga(Bitu port,Bitu val,Bitu /*iolen*/);
 
+void UpdateCGAFromSaveState(void) {
+	if (machine==MCH_CGA || machine==MCH_MCGA || machine==MCH_AMSTRAD) {
+		write_cga(0x3D8,vga.tandy.mode_control,1); // restore CGA
+		write_cga(0x3D9,vga.tandy.color_select,1); // restore CGA
+	}
+}
+
+static unsigned char mcga_crtc_dat_org = 0x00;
+
 static void write_crtc_index_other(Bitu /*port*/,Bitu val,Bitu /*iolen*/) {
 	vga.other.index=(Bit8u)(val & 0x1f);
+
+	if (machine == MCH_MCGA) {
+		/* odd real hardware behavior.
+		 * registers 0x20-0x3F are a mirror of 0x00-0x1F ORed by 0x40 */
+		mcga_crtc_dat_org = (val & 0x20) ? 0x40 : 0x00;
+	}
 }
 
 static Bitu read_crtc_index_other(Bitu /*port*/,Bitu /*iolen*/) {
@@ -227,12 +242,12 @@ static void write_crtc_data_mcga(Bitu port,Bitu val,Bitu iolen) {
 static Bitu read_crtc_data_mcga(Bitu port,Bitu iolen) {
     if (vga.other.index < 0x10) {
         /* 0x00 through 0x0F are the same as CGA */
-        return read_crtc_data_other(port,iolen);
+        return read_crtc_data_other(port,iolen) | mcga_crtc_dat_org;
     }
     else {
         switch (vga.other.index) {
             case 0x10: /* MCGA Mode Control */
-                return vga.other.mcga_mode_control;
+                return vga.other.mcga_mode_control | mcga_crtc_dat_org;
             default:
 		        LOG(LOG_VGAMISC,LOG_NORMAL)("MC6845:MCGA Read from illegal index %x",vga.other.index);
                 break;

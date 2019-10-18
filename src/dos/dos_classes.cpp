@@ -162,6 +162,10 @@ void DOS_InfoBlock::SetBlockDevices(Bit8u _count) {
 	sSave(sDIB,blockDevices,_count);
 }
 
+void DOS_InfoBlock::SetFirstDPB(Bit32u _first_dpb) {
+    sSave(sDIB,firstDPB,_first_dpb);
+}
+
 RealPt DOS_InfoBlock::GetPointer(void) {
 	return RealMake(seg,offsetof(sDIB,firstDPB));
 }
@@ -523,6 +527,12 @@ Bit8u DOS_FCB::GetDrive(void) {
 	Bit8u drive=(Bit8u)sGet(sFCB,drive);
 	if (!drive) return  DOS_GetDefaultDrive();
 	else return drive-1;
+}
+
+void DOS_FCB::GetVolumeName(char * fillname) {
+	MEM_BlockRead(pt+offsetof(sFCB,filename),&fillname[0],8);
+	MEM_BlockRead(pt+offsetof(sFCB,ext),&fillname[8],3);
+	fillname[11]=0;
 }
 
 void DOS_FCB::GetName(char * fillname) {

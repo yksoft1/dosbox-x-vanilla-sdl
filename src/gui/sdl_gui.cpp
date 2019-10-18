@@ -405,7 +405,7 @@ protected:
 	Property *prop;
 public:
 	PropertyEditor(Window *parent, int x, int y, Section_prop *section, Property *prop) :
-		Window(parent, x, y, 240, 30), section(section), prop(prop) { }
+		Window(parent, x, y, 500, 25), section(section), prop(prop) { }
 
 	virtual bool prepare(std::string &buffer) = 0;
 
@@ -415,14 +415,28 @@ public:
 			prop->SetValue(GUI::String(line));
 		}
 	}
+
+    void paintVisGuideLineBetween(GUI::Drawable &d,const GUI::Window *lm,const GUI::Window *rm,const GUI::Window *pm) const {
+        int sx = lm->getX() + lm->getWidth();
+        int ex = rm->getX();
+        int y = pm->getHeight() / 2;
+
+        sx += 4;
+        ex -= 4;
+
+        d.setColor(GUI::Color::Shadow3D);
+        d.drawDotLine(sx,y,ex,y);
+    }
 };
 
 class PropertyEditorBool : public PropertyEditor {
 	GUI::Checkbox *input;
+	GUI::Label *label;
 public:
 	PropertyEditorBool(Window *parent, int x, int y, Section_prop *section, Property *prop) :
 		PropertyEditor(parent, x, y, section, prop) {
-		input = new GUI::Checkbox(this, 0, 3, prop->propname.c_str());
+        label = new GUI::Label(this, 0, 5, prop->propname);
+        input = new GUI::Checkbox(this, 480, 3, "");
 		input->setChecked(static_cast<bool>(prop->GetValue()));
 	}
 
@@ -431,16 +445,22 @@ public:
 		buffer.append(input->isChecked()?"true":"false");
 		return true;
 	}
+
+    /// Paint label
+	virtual void paint(GUI::Drawable &d) const {
+        paintVisGuideLineBetween(d,label,input,this);
+    }
 };
 
 class PropertyEditorString : public PropertyEditor {
 protected:
 	GUI::Input *input;
+    GUI::Label *label;
 public:
 	PropertyEditorString(Window *parent, int x, int y, Section_prop *section, Property *prop) :
 		PropertyEditor(parent, x, y, section, prop) {
-		new GUI::Label(this, 0, 5, prop->propname);
-		input = new GUI::Input(this, 130, 0, 110);
+        label = new GUI::Label(this, 0, 5, prop->propname);
+        input = new GUI::Input(this, 270, 0, 230);
 		std::string temps = prop->GetValue().ToString();
 		input->setText(stringify(temps));
 	}
@@ -451,16 +471,22 @@ public:
 		buffer.append(static_cast<const std::string&>(input->getText()));
 		return true;
 	}
+
+    /// Paint label
+	virtual void paint(GUI::Drawable &d) const {
+        paintVisGuideLineBetween(d,label,input,this);
+    }
 };
 
 class PropertyEditorFloat : public PropertyEditor {
 protected:
 	GUI::Input *input;
+	GUI::Label *label;
 public:
 	PropertyEditorFloat(Window *parent, int x, int y, Section_prop *section, Property *prop) :
 		PropertyEditor(parent, x, y, section, prop) {
-		new GUI::Label(this, 0, 5, prop->propname);
-		input = new GUI::Input(this, 130, 0, 50);
+        label = new GUI::Label(this, 0, 5, prop->propname);
+        input = new GUI::Input(this, 380, 0, 120);
 		input->setText(stringify((double)prop->GetValue()));
 	}
 
@@ -471,16 +497,22 @@ public:
 		buffer.append(stringify(val));
 		return true;
 	}
+
+    /// Paint label
+	virtual void paint(GUI::Drawable &d) const {
+        paintVisGuideLineBetween(d,label,input,this);
+    }
 };
 
 class PropertyEditorHex : public PropertyEditor {
 protected:
 	GUI::Input *input;
+	GUI::Label *label;
 public:
 	PropertyEditorHex(Window *parent, int x, int y, Section_prop *section, Property *prop) :
 		PropertyEditor(parent, x, y, section, prop) {
-		new GUI::Label(this, 0, 5, prop->propname);
-		input = new GUI::Input(this, 130, 0, 50);
+        label = new GUI::Label(this, 0, 5, prop->propname);
+        input = new GUI::Input(this, 380, 0, 120);
 		std::string temps = prop->GetValue().ToString();
 		input->setText(temps.c_str());
 	}
@@ -492,16 +524,22 @@ public:
 		buffer.append(stringify(val, std::hex));
 		return true;
 	}
+
+    /// Paint label
+	virtual void paint(GUI::Drawable &d) const {
+        paintVisGuideLineBetween(d,label,input,this);
+    }
 };
 
 class PropertyEditorInt : public PropertyEditor {
 protected:
 	GUI::Input *input;
+	GUI::Label *label;
 public:
 	PropertyEditorInt(Window *parent, int x, int y, Section_prop *section, Property *prop) :
 		PropertyEditor(parent, x, y, section, prop) {
-		new GUI::Label(this, 0, 5, prop->propname);
-		input = new GUI::Input(this, 130, 0, 50);
+        label = new GUI::Label(this, 0, 5, prop->propname);
+        input = new GUI::Input(this, 380, 0, 120);
 		//Maybe use ToString() of Value
 		input->setText(stringify(static_cast<int>(prop->GetValue())));
 	};
@@ -513,6 +551,11 @@ public:
 		buffer.append(stringify(val));
 		return true;
 	};
+
+    /// Paint label
+	virtual void paint(GUI::Drawable &d) const {
+        paintVisGuideLineBetween(d,label,input,this);
+    }
 };
 
 static std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* > cfg_windows_active;
@@ -561,6 +604,7 @@ public:
 class SectionEditor : public GUI::ToplevelWindow {
 	Section_prop * section;
 	GUI::Button * closeButton;
+	GUI::WindowInWindow * wiw;
 public:
 	std::vector<GUI::Char> cfg_sname;
 public:
@@ -571,40 +615,36 @@ public:
 			return;
 		}
 
-        int first_row_y = 40;
-        int row_height = 30;
-        int first_column_x = 5;
-        int column_width = 250;
-        int button_row_h = 26;
-        int button_row_padding_y = 5 + 5;
+		int first_row_y = 5;
+		int row_height = 25;
+		int column_width = 500;
+		int button_row_h = 26;
+		int button_row_padding_y = 5 + 5;
 
         int num_prop = 0;
 		while (section->Get_prop(num_prop) != NULL) num_prop++;
-        int allowed_dialog_y = parent->getHeight() - 25 - (border_top + border_bottom);
-		
-        int items_per_col_max =
-            (allowed_dialog_y - (button_row_h + button_row_padding_y + row_height - 1)) / row_height;
-        if (items_per_col_max < 4) items_per_col_max = 4;
-        int items_per_col = 1;
-        int columns = 1;
 
-        /* HACK: The titlebar doesn't look very good if the dialog is one column wide
-         *       and the text spills over the nearby UI elements... */
-        if ((strlen(section->GetName())+18) > 26)
-            columns++;
-		
-        /* NTS: Notice assign from compute then compare */
-        while ((items_per_col=((num_prop+columns-1)/columns)) > items_per_col_max)
-            columns++;
+		int allowed_dialog_y = parent->getHeight() - 25 - (border_top + border_bottom) - 50;
 
-        int button_row_y = first_row_y + (items_per_col * row_height);
+		int items_per_col = num_prop;
+		int columns = 1;
+
+		int scroll_h = items_per_col * row_height;
+		if (scroll_h > allowed_dialog_y)
+			scroll_h = allowed_dialog_y;
+
+		scroll_h += 2; /* border */
+		
+		wiw = new GUI::WindowInWindow(this, 5, 5, width-border_left-border_right-10, scroll_h);
+
+        int button_row_y = first_row_y + scroll_h + 5;
         int button_w = 70;
         int button_pad_w = 10;
         int button_row_w = ((button_pad_w + button_w) * 3) - button_pad_w;
-        int button_row_cx = first_column_x + (((columns * column_width) + first_column_x - button_row_w) / 2);
+        int button_row_cx = (((columns * column_width) - button_row_w) / 2) + 5;
 		
-        resize(first_column_x + (columns * column_width) + first_column_x + border_left + border_right,
-               button_row_y + button_row_h + button_row_padding_y + border_top + border_bottom);
+		resize((columns * column_width) + border_left + border_right + 2/*wiw border*/ + wiw->vscroll_display_width/*scrollbar*/ + 10,
+				button_row_y + button_row_h + button_row_padding_y + border_top + border_bottom);
 	
         if ((this->y + this->getHeight()) > parent->getHeight())
             move(this->x,parent->getHeight() - this->getHeight());
@@ -612,7 +652,7 @@ public:
 		std::string title(section->GetName());
 		title[0] = std::toupper(title[0]);
 		setTitle("Configuration for "+title);
-		new GUI::Label(this, 5, 10, "Settings:");
+
 		GUI::Button *b = new GUI::Button(this, button_row_cx, button_row_y, "Cancel", button_w);
 		b->addActionHandler(this);
 		closeButton = b;
@@ -633,18 +673,40 @@ public:
 			Prop_multival_remain* pmulti_remain = dynamic_cast<Prop_multival_remain*>(prop);
 
 			PropertyEditor *p;
-			if (pbool) p = new PropertyEditorBool(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
-			else if (phex) p = new PropertyEditorHex(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
-			else if (pint) p = new PropertyEditorInt(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
-			else if (pdouble) p = new PropertyEditorFloat(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
-			else if (pstring) p = new PropertyEditorString(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
-			else if (pmulti) p = new PropertyEditorString(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
-			else if (pmulti_remain) p = new PropertyEditorString(this, first_column_x+column_width*(i/items_per_col), first_row_y+(i%items_per_col)*row_height, section, prop);
+            if (pbool) p = new PropertyEditorBool(wiw, column_width*(i/items_per_col), (i%items_per_col)*row_height, section, prop);
+            else if (phex) p = new PropertyEditorHex(wiw, column_width*(i/items_per_col), (i%items_per_col)*row_height, section, prop);
+            else if (pint) p = new PropertyEditorInt(wiw, column_width*(i/items_per_col), (i%items_per_col)*row_height, section, prop);
+            else if (pdouble) p = new PropertyEditorFloat(wiw, column_width*(i/items_per_col), (i%items_per_col)*row_height, section, prop);
+            else if (pstring) p = new PropertyEditorString(wiw, column_width*(i/items_per_col), (i%items_per_col)*row_height, section, prop);
+            else if (pmulti) p = new PropertyEditorString(wiw, column_width*(i/items_per_col), (i%items_per_col)*row_height, section, prop);
+            else if (pmulti_remain) p = new PropertyEditorString(wiw, column_width*(i/items_per_col), (i%items_per_col)*row_height, section, prop);
 			else { i++; continue; }
 			b->addActionHandler(p);
 			i++;
 		}
 		b->addActionHandler(this);
+		
+		/* first child is first tabbable */
+		{
+			Window *w = wiw->getChild(0);
+			if (w) w->first_tabbable = true;
+		}
+
+		/* last child is first tabbable */
+		{
+			Window *w = wiw->getChild(wiw->getChildCount()-1);
+			if (w) w->last_tabbable = true;
+		}
+		 
+		/* the FIRST field needs to come first when tabbed to */
+		{
+			Window *w = wiw->getChild(0);
+			if (w) w->raise();  /* NTS: This CHANGES the child element order, getChild(0) will return something else */
+		}
+		 
+        wiw->resize((columns * column_width) + 2/*border*/ + wiw->vscroll_display_width, scroll_h);
+        wiw->enableScrollBars(false/*h*/,true/*v*/);
+        wiw->enableBorder(true);
 	}
 
 	~SectionEditor() {
@@ -672,7 +734,11 @@ public:
 	
 			std::map< std::vector<GUI::Char>, GUI::ToplevelWindow* >::iterator lookup = cfg_windows_active.find(new_cfg_sname);
 			if (lookup == cfg_windows_active.end()) {
-				HelpWindow *np = new HelpWindow(static_cast<GUI::Screen*>(parent), getX()-10, getY()-10, section);
+				int nx = getX() - 10;
+				int ny = getY() - 10;
+				if (nx < 0) nx = 0;
+				if (ny < 0) ny = 0;
+				HelpWindow *np = new HelpWindow(static_cast<GUI::Screen*>(parent), nx, ny, section);
 				cfg_windows_active[new_cfg_sname] = np;
 				np->cfg_sname = new_cfg_sname;
 				np->raise();
@@ -710,7 +776,7 @@ public:
 	std::vector<GUI::Char> cfg_sname;
 public:
 	AutoexecEditor(GUI::Screen *parent, int x, int y, Section_line *section) :
-		ToplevelWindow(parent, x, y, 450, 300, ""), section(section) {
+		ToplevelWindow(parent, x, y, 450, 260 + GUI::titlebar_y_stop, ""), section(section) {
 		if (section == NULL) {
 			LOG_MSG("BUG: AutoexecEditor constructor called with section == NULL\n");
 			return;
@@ -720,7 +786,7 @@ public:
 		title[0] = std::toupper(title[0]);
 		setTitle("Edit "+title);
 		new GUI::Label(this, 5, 10, "Content:");
-		content = new GUI::Input(this, 5, 30, 420, 185);
+		content = new GUI::Input(this, 5, 30, 450 - 10 - border_left - border_right, 185);
 		content->setText(section->data);
 		if (first_shell) (new GUI::Button(this, 5, 220, "Append History"))->addActionHandler(this);
 		if (shell_idle) (new GUI::Button(this, 180, 220, "Execute Now"))->addActionHandler(this);
@@ -775,9 +841,9 @@ protected:
 	GUI::Input *name;
 public:
 	SaveDialog(GUI::Screen *parent, int x, int y, const char *title) :
-		ToplevelWindow(parent, x, y, 400, 150, title) {
+		ToplevelWindow(parent, x, y, 400, 100 + GUI::titlebar_y_stop, title) {
 		new GUI::Label(this, 5, 10, "Enter filename for configuration file:");
-		name = new GUI::Input(this, 5, 30, 350);
+		name = new GUI::Input(this, 5, 30, width - 10 - border_left - border_right);
 		extern std::string capturedir;
 		std::string fullpath,file;
 		Cross::GetPlatformConfigName(file);
@@ -789,8 +855,8 @@ public:
 		} else
 			fullpath = "dosbox.conf";
 		name->setText(fullpath.c_str());
-		(new GUI::Button(this, 120, 70, "Cancel", 70))->addActionHandler(this);
-		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
+		(new GUI::Button(this, 120, 60, "Cancel", 70))->addActionHandler(this);
+		(new GUI::Button(this, 210, 60, "OK", 70))->addActionHandler(this);
 	}
 
 	void actionExecuted(GUI::ActionEventSource *b, const GUI::String &arg) {
@@ -805,12 +871,12 @@ protected:
 	GUI::Input *name;
 public:
 	SaveLangDialog(GUI::Screen *parent, int x, int y, const char *title) :
-		ToplevelWindow(parent, x, y, 400, 150, title) {
+		ToplevelWindow(parent, x, y, 400, 100 + GUI::titlebar_y_stop, title) {
 		new GUI::Label(this, 5, 10, "Enter filename for language file:");
-		name = new GUI::Input(this, 5, 30, 350);
+		name = new GUI::Input(this, 5, 30, width - 10 - border_left - border_right);
 		name->setText("messages.txt");
-		(new GUI::Button(this, 120, 70, "Cancel", 70))->addActionHandler(this);
-		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
+		(new GUI::Button(this, 120, 60, "Cancel", 70))->addActionHandler(this);
+		(new GUI::Button(this, 210, 60, "OK", 70))->addActionHandler(this);
 	}
 
 	void actionExecuted(GUI::ActionEventSource *b, const GUI::String &arg) {
@@ -857,18 +923,18 @@ protected:
 	InputWithEnterKey *name;
 public:
 	SetCycles(GUI::Screen *parent, int x, int y, const char *title) :
-		ToplevelWindow(parent, x, y, 400, 150, title) {
+		ToplevelWindow(parent, x, y, 400, 100 + GUI::titlebar_y_stop, title) {
 		new GUI::Label(this, 5, 10, "Enter CPU cycles:");
 //		name = new GUI::Input(this, 5, 30, 350);
-		name = new InputWithEnterKey(this, 5, 30, 350);
+		name = new InputWithEnterKey(this, 5, 30, width - 10 - border_left - border_right);
 		name->set_trigger_target(this);
 		std::ostringstream str;
 		str << "fixed " << CPU_CycleMax;
 
 		std::string cycles=str.str();
 		name->setText(cycles.c_str());
-		(new GUI::Button(this, 120, 70, "Cancel", 70))->addActionHandler(this);
-		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
+		(new GUI::Button(this, 120, 60, "Cancel", 70))->addActionHandler(this);
+		(new GUI::Button(this, 210, 60, "OK", 70))->addActionHandler(this);
 
 		name->raise(); /* make sure keyboard focus is on the text field, ready for the user */
 
@@ -973,11 +1039,14 @@ public:
 		bar->addItem(0,"Close");
 		bar->addMenu("Settings");
 		bar->addMenu("Help");
-		bar->addItem(2,"Introduction");
-		bar->addItem(2,"Getting Started");
-		bar->addItem(2,"CD-ROM Support");
-		bar->addItem(2,"Special Keys");
-		bar->addItem(2,"");
+		if (!dos_kernel_disabled) {
+			/* these do not work until shell help text is registerd */
+			bar->addItem(2,"Introduction");
+			bar->addItem(2,"Getting Started");
+			bar->addItem(2,"CD-ROM Support");
+			bar->addItem(2,"Special Keys");
+			bar->addItem(2,"");
+		}
 		bar->addItem(2,"About");
 		bar->addActionHandler(this);
 
@@ -1078,7 +1147,7 @@ public:
 								;
 			new GUI::MessageBox2(getScreen(), 100, 150, 480, "About DOSBox-X", msg);
 		} else if (arg == "Introduction") {
-			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO"));
+			new GUI::MessageBox2(getScreen(), 20, 50, 540, "Introduction", MSG_Get("PROGRAM_INTRO"));
 		} else if (arg == "Getting Started") {
 			std::string msg = MSG_Get("PROGRAM_INTRO_MOUNT_START");
 #ifdef WIN32
@@ -1088,9 +1157,9 @@ public:
 #endif
 			msg += MSG_Get("PROGRAM_INTRO_MOUNT_END");
 
-			new GUI::MessageBox2(getScreen(), 20, 50, 600, std::string("Introduction"), msg);
+			new GUI::MessageBox2(getScreen(), 0, 50, 680, std::string("Getting Started"), msg);
 		} else if (arg == "CD-ROM Support") {
-			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO_CDROM"));
+			new GUI::MessageBox2(getScreen(), 20, 50, 640, "CD-ROM Support", MSG_Get("PROGRAM_INTRO_CDROM"));
 		} else if (arg == "Special Keys") {
 			new GUI::MessageBox2(getScreen(), 20, 50, 600, "Introduction", MSG_Get("PROGRAM_INTRO_SPECIAL"));
 		} else if (arg == "Save...") {

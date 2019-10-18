@@ -79,6 +79,23 @@ checkext:
 }
 
 void Set_Label(char const * const input, char * const output, bool cdrom) {
+	/* I don't know what MSCDEX.EXE does but don't put dots in the 11-char volume label for non-CD-ROM drives */
+	if (!cdrom) {
+		Bitu togo     = 11;
+		Bitu vnamePos = 0;
+		Bitu labelPos = 0;
+
+		while (togo > 0) {
+			if (input[vnamePos]==0) break;
+			output[labelPos] = toupper(input[vnamePos]);
+			labelPos++;
+			vnamePos++;
+			togo--;
+		}
+		output[labelPos] = 0;
+		return;
+	}
+	
 	Bitu togo     = 8;
 	Bitu vnamePos = 0;
 	Bitu labelPos = 0;
@@ -137,6 +154,7 @@ void DriveManager::InitializeDrive(int drive) {
 		DOS_Drive* disk = driveInfo.disks[driveInfo.currentDisk];
 		Drives[currentDrive] = disk;
 		if (driveInfo.disks.size() > 1) disk->Activate();
+		disk->UpdateDPB(currentDrive);
 	}
 }
 
@@ -187,6 +205,7 @@ void DriveManager::CycleAllDisks(void) {
 			// copy working directory, acquire system resources and finally switch to next drive		
 			strcpy(newDisk->curdir, oldDisk->curdir);
 			newDisk->Activate();
+			newDisk->UpdateDPB(currentDrive);
 			Drives[idrive] = newDisk;
 			LOG_MSG("Drive %c: disk %d of %d now active", 'A'+idrive, currentDisk+1, numDisks);
 		}

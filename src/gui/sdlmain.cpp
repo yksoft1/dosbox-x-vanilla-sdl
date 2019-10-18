@@ -565,6 +565,8 @@ struct SDL_Block {
 	unsigned int gfx_force_redraw_count; //= 0; //already inited in main()
 };
 
+void ShutDownMemHandles(Section * sec);
+
 static SDL_Block sdl;
 
 void UpdateWindowDimensions(void) {
@@ -1422,7 +1424,7 @@ void MenuShadeRect(int x,int y,int w,int h) {
             x = 0;
         }
         if (y < 0) {
-            y += h;
+            h += y;
             y = 0;
         }
         if ((x+w) > sdl.surface->w)
@@ -1509,7 +1511,7 @@ void MenuDrawRect(int x,int y,int w,int h,Bitu color) {
             x = 0;
         }
         if (y < 0) {
-            y += h;
+            h += y;
             y = 0;
         }
         if ((x+w) > sdl.surface->w)
@@ -4956,6 +4958,18 @@ static void HandleMouseButton(SDL_MouseButtonEvent * button) {
 								runloop = false;
 							}
 							break;
+#if defined(C_SDL2)
+                        case SDL_WINDOWEVENT:
+                            switch (event.window.event) {
+                                case SDL_WINDOWEVENT_RESIZED:
+                                    GFX_HandleVideoResize(event.window.data1, event.window.data2);
+                                    runloop = false;
+                                    resized = true;
+                                    break;
+                                default:
+                                    break;
+                            }
+#endif
 #if !defined(C_SDL2)
 						case SDL_VIDEORESIZE:
 							UpdateWindowDimensions(); // FIXME: Use SDL window dimensions, except that on Windows, SDL won't tell us our actual dimensions
@@ -7055,6 +7069,9 @@ bool VM_Boot_DOSBox_Kernel() {
     }
 
 	if (dos_kernel_disabled) {
+		/* in case of reboot */
+		Init_MemHandles();
+
 		DispatchVMEvent(VM_EVENT_DOS_BOOT); // <- just starting the DOS kernel now
 
 		/* DOS kernel init */
@@ -8674,6 +8691,9 @@ fresh_boot:
             XMS_DoShutDown();
             /* and the DOS API in general */
             DOS_DoShutDown();
+
+			/* mem handles too */
+			ShutDownMemHandles(NULL);
 
             /* set the "disable DOS kernel" flag so other parts of this program
              * do not attempt to manipulate now-defunct parts of the kernel

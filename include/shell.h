@@ -119,7 +119,6 @@ public:
 	void CMD_ADDKEY(char * args);
 	void CMD_VOL(char * args);
 	void CMD_PROMPT(char * args);
-	void CMD_LABEL(char * args);
 	void CMD_MORE(char * args);
 	void CMD_CTTY(char * args);
 	void CMD_DXCAPTURE(char * args);

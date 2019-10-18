@@ -63,6 +63,7 @@ const unsigned char pc98_epson_check_2[0x27] = {
 bool enable_pc98_copyright_string = false;
 
 /* mouse.cpp */
+extern bool pc98_40col_text;
 extern bool en_bios_ps2mouse;
 extern bool rom_bios_8x8_cga_font;
 extern bool pcibus_enable;
@@ -77,6 +78,7 @@ bool int15_wait_force_unmask_irq = false;
 
 int unhandled_irq_method = UNHANDLED_IRQ_SIMPLE;
 
+Bitu call_irq_default = 0;
 Bit16u biosConfigSeg=0;
 
 Bitu BIOS_DEFAULT_IRQ0_LOCATION = ~0;		// (RealMake(0xf000,0xfea5))
@@ -84,7 +86,8 @@ Bitu BIOS_DEFAULT_IRQ1_LOCATION = ~0;		// (RealMake(0xf000,0xe987))
 Bitu BIOS_DEFAULT_IRQ07_DEF_LOCATION = ~0;	// (RealMake(0xf000,0xff55))
 Bitu BIOS_DEFAULT_IRQ815_DEF_LOCATION = ~0;	// (RealMake(0xf000,0xe880))
 
-Bitu BIOS_DEFAULT_HANDLER_LOCATION = ~0;	// (RealMake(0xf000,0xff53))
+Bitu BIOS_DEFAULT_HANDLER_LOCATION = ~0u;    // (RealMake(0xf000,0xff53))
+Bitu BIOS_DEFAULT_INT5_LOCATION = ~0u;       // (RealMake(0xf000,0xff54))
 
 Bitu BIOS_VIDEO_TABLE_LOCATION = ~0;		// RealMake(0xf000,0xf0a4)
 Bitu BIOS_VIDEO_TABLE_SIZE = 0;
@@ -2900,11 +2903,10 @@ static Bitu INT18_PC98_Handler(void) {
 			//TODO: set 25/20 lines mode and 80/40 columns mode.
 			//Attribute bit (bit 2)
 			pc98_attr4_graphic = !!(reg_al & 0x04);
+			pc98_40col_text = !!(reg_al & 0x02);
 
             mem_writeb(0x53C,(mem_readb(0x53C) & 0xF0u) | (reg_al & 0x0Fu));
 
-            if (reg_al & 2)
-                LOG_MSG("INT 18H AH=0Ah warning: 40-column PC-98 text mode not supported");
             if (reg_al & 8)
                 LOG_MSG("INT 18H AH=0Ah warning: K-CG dot access mode not supported");
 
@@ -3049,7 +3051,7 @@ static Bitu INT18_PC98_Handler(void) {
 				unsigned char b597 = mem_readb(0x597);
 				unsigned char tstat = mem_readb(0x53C);
 				unsigned char b54C = mem_readb(0x54C);
-				unsigned char ret = 0x00;
+				unsigned char ret = 0x05; // according to NP2
 
                 // assume the same as AH=42h
 				while (!(IO_ReadB(0x60) & 0x20/*vertical retrace*/)) {
@@ -3110,12 +3112,13 @@ static Bitu INT18_PC98_Handler(void) {
 					else {
 						// according to Neko Project II, this case is ignored
 						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 640x480 mode with 24KHz hsync which is not supported by the platform");
-						ret = 1;
+						ret = 0;
 					}
 				}
 				else {
 					if ((reg_al & 0x0C) < 0x08) { /* bits [3:2] == 0x */
 						LOG_MSG("PC-98 INT 18h AH=30h attempt to set 15KHz hsync which is not yet supported");
+						ret = 0;
 					}
 					else {
 						if (((reg_al ^ (((b54C & 0x20) ? 3 : 2) << 2)) & 0x0C) || ((b54C & 0x40)^(reg_bl & 0x30))) { /* change in bits [3:2] */
@@ -3196,7 +3199,11 @@ static Bitu INT18_PC98_Handler(void) {
 				pc98_update_text_lineheight_from_bda();
 				pc98_update_text_layer_lineheight_from_bda();
 
-				reg_ah = ret;
+				// according to real hardware (PC-9821Lt2), AH=5 on success (same as NP2)
+				// or AH is unchanged on failure and AL=1 and BH=1 (NOT the same as NP2)
+				if (ret == 0x05) reg_ah = ret;
+				reg_al = (ret == 0x05) ? 0x00 : 0x01; // according to NP2
+				reg_bh = (ret == 0x05) ? 0x00 : 0x01; // according to NP2
 			}
 			break;
         case 0x31: /* Return display mode and status */
@@ -3484,6 +3491,8 @@ void PC98_BIOS_SCSI_CALL(void) {
         return;
     }
 
+	/* FIXME: According to NPKai, command is reg_ah & 0x1F not reg_ah & 0x0F. Right? */
+
     /* what to do is in the lower 4 bits of AH */
     switch (reg_ah & 0x0F) {
         case 0x05: /* write */
@@ -3567,6 +3576,11 @@ void PC98_BIOS_SCSI_CALL(void) {
                 CALLBACK_SCF(true);
             }
             break;
+		case 0x03: /* according to NPKai source code: "negate ack" (cbus/scsicmd.c line 211, and 61) */
+			reg_ah = 0x35;      /* according to scsicmd_negate() line 61, as translated by stat2ret[] by code line 228 */
+			CALLBACK_SCF(false);
+			// NTS: This is needed for an HDI image to boot that apparently contains FreeDOS98
+			break;
         case 0x07: /* unknown, always succeeds */
             reg_ah = 0x00;
             CALLBACK_SCF(false);
@@ -3989,7 +4003,9 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 			
             // Hack for Ys II
             FDC_WAIT_TIMER_HACK();
-			
+
+			fdc_cyl[drive] = 0;
+
             reg_ah = 0x00;
             CALLBACK_SCF(false);
             break;
@@ -4232,6 +4248,8 @@ static Bitu INT1C_PC98_Handler(void) {
     return CBRET_NONE;
 }
 
+// NTS: According to this PDF, chapter 5, INT 1Dh has additional functions on "High Resolution" PC-98 systems.
+//      [https://ia801305.us.archive.org/8/items/PC9800TechnicalDataBookBIOS1992/PC-9800TechnicalDataBook_BIOS_1992_text.pdf]
 static Bitu INT1D_PC98_Handler(void) {
     LOG_MSG("PC-98 INT 1Dh unknown call AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
         reg_ax,
@@ -4696,18 +4714,81 @@ static Bitu INTF2_PC98_Handler(void) {
     return CBRET_NONE;
 }
 
+// for more information see [https://ia801305.us.archive.org/8/items/PC9800TechnicalDataBookBIOS1992/PC-9800TechnicalDataBook_BIOS_1992_text.pdf]
 static Bitu PC98_BIOS_LIO(void) {
-    /* on entry, AL (from our BIOS code) is set to the call number that lead here */
-    LOG_MSG("PC-98 BIOS LIO graphics call 0x%02x with AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
-        reg_al,
-        reg_ax,
-        reg_bx,
-        reg_cx,
-        reg_dx,
-        reg_si,
-        reg_di,
-        SegValue(ds),
-        SegValue(es));
+    const char *call_name = "?";
+
+	switch (reg_al) {
+		case 0xA0: // GINIT
+			call_name = "GINIT";
+			goto unknown;
+		case 0xA1: // GSCREEN
+			call_name = "GSCREEN";
+			goto unknown;
+		case 0xA2: // GVIEW
+			call_name = "GVIEW";
+			goto unknown;
+		case 0xA3: // GCOLOR1
+			call_name = "GCOLOR1";
+			goto unknown;
+		case 0xA4: // GCOLOR2
+			call_name = "GCOLOR2";
+			goto unknown;
+		case 0xA5: // GCLS
+			call_name = "GCLS";
+			goto unknown;
+		case 0xA6: // GPSET
+			call_name = "GPSET";
+			goto unknown;
+		case 0xA7: // GLINE
+			call_name = "GLINE";
+			goto unknown;
+		case 0xA8: // GCIRCLE
+			call_name = "GCIRCLE";
+			goto unknown;
+		case 0xA9: // GPAINT1
+			call_name = "GPAINT1";
+			goto unknown;
+		case 0xAA: // GPAINT2
+			call_name = "GPAINT2";
+			goto unknown;
+		case 0xAB: // GGET
+			call_name = "GGET";
+			goto unknown;
+		case 0xAC: // GPUT1
+			call_name = "GPUT1";
+			goto unknown;
+		case 0xAD: // GPUT2
+			call_name = "GPUT2";
+			goto unknown;
+		case 0xAE: // GROLL
+			call_name = "GROLL";
+			goto unknown;
+		case 0xAF: // GPOINT2
+			call_name = "GPOINT2";
+			goto unknown;
+		case 0xCE: // GCOPY
+			call_name = "GCOPY";
+			goto unknown;
+		case 0x00: // GRAPH BIO
+			call_name = "GRAPH BIO";
+			goto unknown;
+		default:
+		unknown:
+			/* on entry, AL (from our BIOS code) is set to the call number that lead here */
+				LOG_MSG("PC-98 BIOS LIO graphics call 0x%02x '%s' with AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
+						reg_al,
+						call_name,
+						reg_ax,
+						reg_bx,
+						reg_cx,
+						reg_dx,
+						reg_si,
+						reg_di,
+						SegValue(ds),
+						SegValue(es));
+				break;
+	};
 
     // from yksoft1's patch
     reg_ah = 0;
@@ -5927,6 +6008,31 @@ void BIOS_SetupDisks(void);
 void CPU_Snap_Back_To_Real_Mode();
 void CPU_Snap_Back_Restore();
 
+static Bitu Default_IRQ_Handler(void) {
+	IO_WriteB(0x20, 0x0b);
+	Bit8u master_isr = IO_ReadB(0x20);
+	if (master_isr) {
+		IO_WriteB(0xa0, 0x0b);
+		Bit8u slave_isr = IO_ReadB(0xa0);
+		if (slave_isr) {
+			IO_WriteB(0xa1, IO_ReadB(0xa1) | slave_isr);
+			IO_WriteB(0xa0, 0x20);
+		}
+		else IO_WriteB(0x21, IO_ReadB(0x21) | (master_isr & ~4));
+		IO_WriteB(0x20, 0x20);
+#if C_DEBUG
+		Bit16u irq = 0;
+		Bit16u isr = master_isr;
+		if (slave_isr) isr = slave_isr << 8;
+		while (isr >>= 1) irq++;
+		LOG(LOG_BIOS, LOG_WARN)("Unexpected IRQ %u", irq);
+#endif 
+	}
+	else master_isr = 0xff;
+	mem_writeb(BIOS_LAST_UNEXPECTED_IRQ, master_isr);
+	return CBRET_NONE;
+}
+
 void restart_program(std::vector<std::string> & parameters);
 
 static Bitu IRQ14_Dummy(void) {
@@ -6365,6 +6471,10 @@ void gdc_16color_enable_update_vars(void) {
 	}
 }
 
+Bit32u BIOS_get_PC98_INT_STUB(void) {
+	return callback[18].Get_RealPointer();
+}
+
 /* NTS: Remember the 8259 is non-sentient, and the term "slave" is used in a computer programming context */
  static Bitu Default_IRQ_Handler_Cooperative_Slave_Pic(void) {
      /* PC-98 style IRQ 8-15 handling.
@@ -6680,7 +6790,7 @@ private:
 			ISAPNP_PNP_READ_PORT=NULL;
 		}
 
-		extern Bitu call_default,call_default2;
+		extern Bitu call_default;
 
         if (IS_PC98_ARCH) {
             /* INT 00h-FFh generic stub routine */
@@ -6886,6 +6996,7 @@ private:
                 RealSetVec(ct+(IS_PC98_ARCH ? 0x10 : 0x70),BIOS_DEFAULT_IRQ815_DEF_LOCATION);
 
             // LIO graphics interface (number of entry points, unknown WORD value and offset into the segment).
+			// For more information see Chapter 6 of this PDF [https://ia801305.us.archive.org/8/items/PC9800TechnicalDataBookBIOS1992/PC-9800TechnicalDataBook_BIOS_1992_text.pdf]
             {
                 callback_pc98_lio.Install(&PC98_BIOS_LIO,CB_IRET,"LIO graphics library");
 
@@ -6926,18 +7037,35 @@ private:
             }
         }
 
-		// setup a few interrupt handlers that point to bios IRETs by default
-        if (!IS_PC98_ARCH)
-            real_writed(0,0x0e*4,CALLBACK_RealPointer(call_default2));	//design your own railroad
-
         if (IS_PC98_ARCH) {
             real_writew(0,0x58A,0x0001U); // countdown timer value
 	        PIC_SetIRQMask(0,true); /* PC-98 keeps the timer off unless INT 1Ch is called to set a timer interval */
         }
 
+		bool null_68h = false;
+
+		{
+			Section_prop * section=static_cast<Section_prop *>(control->GetSection("dos"));
+			null_68h = section->Get_bool("zero unused int 68h");
+		}
+
+		/* Default IRQ handler */
+		if (call_irq_default == 0)
+			call_irq_default = CALLBACK_Allocate();
+		CALLBACK_Setup(call_irq_default, &Default_IRQ_Handler, CB_IRET, "irq default");
+		RealSetVec(0x0b, CALLBACK_RealPointer(call_irq_default)); // IRQ 3
+		RealSetVec(0x0c, CALLBACK_RealPointer(call_irq_default)); // IRQ 4
+		RealSetVec(0x0d, CALLBACK_RealPointer(call_irq_default)); // IRQ 5
+		RealSetVec(0x0f, CALLBACK_RealPointer(call_irq_default)); // IRQ 7
+		if (!IS_PC98_ARCH) {
+			RealSetVec(0x72, CALLBACK_RealPointer(call_irq_default)); // IRQ 10
+			RealSetVec(0x73, CALLBACK_RealPointer(call_irq_default)); // IRQ 11
+		}
+
+		// setup a few interrupt handlers that point to bios IRETs by default
 		real_writed(0,0x66*4,CALLBACK_RealPointer(call_default));	//war2d
 		real_writed(0,0x67*4,CALLBACK_RealPointer(call_default));
-		real_writed(0,0x68*4,CALLBACK_RealPointer(call_default));
+		if (machine==MCH_CGA || null_68h) real_writed(0,0x68*4,0);  //Popcorn
 		real_writed(0,0x5c*4,CALLBACK_RealPointer(call_default));	//Network stuff
 		//real_writed(0,0xf*4,0); some games don't like it
 
@@ -6996,7 +7124,13 @@ private:
 		//	iret
 
         if (!IS_PC98_ARCH) {
-            mem_writed(BIOS_TIMER,0);			//Calculate the correct time
+			mem_writed(BIOS_TIMER,0);           //Calculate the correct time
+
+			// INT 05h: Print Screen
+			// IRQ1 handler calls it when PrtSc key is pressed; does nothing unless hooked
+			phys_writeb(Real2Phys(BIOS_DEFAULT_INT5_LOCATION), 0xcf);
+			RealSetVec(0x05, BIOS_DEFAULT_INT5_LOCATION);
+
             phys_writew(Real2Phys(RealGetVec(0x12))+0x12,0x20); //Hack for Jurresic
         }
 
@@ -7437,6 +7571,17 @@ private:
 			PIC_SetIRQMask(0,true); /* PC-98 keeps the timer off unless INT 1Ch is called to set a timer interval */
 		}
 
+		if (!IS_PC98_ARCH) {
+			Section_prop * section=static_cast<Section_prop *>(control->GetSection("speaker"));
+			bool bit0en = section->Get_bool("pcspeaker clock gate enable at startup");
+
+			if (bit0en) {
+				Bit8u x = IO_Read(0x61);
+				IO_Write(0x61,(x & (~3u)) | 1u); /* set bits[1:0] = 01  (clock gate enable but output gate disable) */
+				LOG_MSG("xxxx");
+			}
+		}
+
         CPU_STI();
 
 		return CBRET_NONE;
@@ -7734,6 +7879,9 @@ private:
 				case CPU_ARCHTYPE_P55CSLOW:
 					cpu = "Pentium MMX";
 					break;
+				case CPU_ARCHTYPE_MIXED:
+					cpu = "Auto (mixed)";
+					break;
 			};
 
 			extern bool enable_fpu;
@@ -7833,6 +7981,10 @@ private:
             }
 
             IO_Write(0x6A,0x00);    // switch back to 8-color mode
+
+			reg_eax = 0x4200;   // setup 640x200 graphics
+ 			reg_ecx = 0x8000;   // lower
+ 			CALLBACK_RunRealInt(0x18);
         }
         else {
             // restore 80x25 text mode
@@ -7967,9 +8119,10 @@ public:
 
 		/* pick locations */
 		BIOS_DEFAULT_RESET_LOCATION = PhysToReal416(ROMBIOS_GetMemory(64/*several callbacks*/,"BIOS default reset location",/*align*/4));
-		BIOS_DEFAULT_HANDLER_LOCATION = PhysToReal416(ROMBIOS_GetMemory(1/*IRET*/,"BIOS default handler location",/*align*/4));
+        BIOS_DEFAULT_HANDLER_LOCATION = PhysToReal416(ROMBIOS_GetMemory(1/*IRET*/,"BIOS default handler location",/*align*/4));
+		BIOS_DEFAULT_INT5_LOCATION = PhysToReal416(ROMBIOS_GetMemory(1/*IRET*/, "BIOS default INT5 location",/*align*/4));
 		BIOS_DEFAULT_IRQ0_LOCATION = PhysToReal416(ROMBIOS_GetMemory(0x13/*see callback.cpp for IRQ0*/,"BIOS default IRQ0 location",/*align*/4));
-		BIOS_DEFAULT_IRQ1_LOCATION = PhysToReal416(ROMBIOS_GetMemory(0x15/*see callback.cpp for IRQ1*/,"BIOS default IRQ1 location",/*align*/4));
+		BIOS_DEFAULT_IRQ1_LOCATION = PhysToReal416(ROMBIOS_GetMemory(0x20/*see callback.cpp for IRQ1*/,"BIOS default IRQ1 location",/*align*/4));
 		BIOS_DEFAULT_IRQ07_DEF_LOCATION = PhysToReal416(ROMBIOS_GetMemory(7/*see callback.cpp for EOI_PIC1*/,"BIOS default IRQ2-7 location",/*align*/4));
 		BIOS_DEFAULT_IRQ815_DEF_LOCATION = PhysToReal416(ROMBIOS_GetMemory(9/*see callback.cpp for EOI_PIC1*/,"BIOS default IRQ8-15 location",/*align*/4));
 
@@ -8098,7 +8251,8 @@ public:
 		cb_bios_startup_screen.Install(&cb_bios_startup_screen__func,CB_RETF,"BIOS Startup screen");
 		cb_bios_boot.Install(&cb_bios_boot__func,CB_RETF,"BIOS BOOT");
 		cb_bios_bootfail.Install(&cb_bios_bootfail__func,CB_RETF,"BIOS BOOT FAIL");
-		cb_pc98_rombasic.Install(&cb_pc98_entry__func,CB_RETF,"N88 ROM BASIC");
+		if (IS_PC98_ARCH)
+			cb_pc98_rombasic.Install(&cb_pc98_entry__func,CB_RETF,"N88 ROM BASIC");
 		
 		// Compatible POST routine location: jump to the callback
 		{

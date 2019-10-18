@@ -670,7 +670,7 @@ static void write_p61(Bitu, Bitu val, Bitu) {
 	Bit8u diff = port_61_data ^ (Bit8u)val;
 	if (diff & 0x1) TIMER_SetGate2(val & 0x1);
 	if ((diff & 0x3) && !IS_PC98_ARCH) {
-		bool pit_clock_gate_enabled = val & 0x1;
+		bool pit_clock_gate_enabled = !!(val & 0x1);
 		bool pit_output_enabled = !!(val & 0x2);
 		PCSPEAKER_SetType(pit_clock_gate_enabled, pit_output_enabled);
 	}
@@ -1551,9 +1551,13 @@ void KEYBOARD_AddKey1(KBD_KEYS keytype,bool pressed) {
 		keyb.repeat.wait=0;
 		return;
 	case KBD_printscreen:
-		extend=true;
-		if (pressed) { ret=0x2a; ret2=0x37; }
-		else         { ret=0xb7; ret2=0xaa; }
+		KEYBOARD_AddBuffer(0xe0);
+		KEYBOARD_AddBuffer(0x2a  | (pressed ? 0 : 0x80)); /* 0x2a == 42 */
+		KEYBOARD_AddBuffer(0xe0);
+		KEYBOARD_AddBuffer(0x37  | (pressed ? 0 : 0x80)); /* 0x37 == 55 */
+		/* pressing this key also disables any previous key repeat */
+		keyb.repeat.key = KBD_NONE;
+		keyb.repeat.wait = 0;
 		return;
 	case KBD_lwindows:extend=true;ret=0x5B;break;
 	case KBD_rwindows:extend=true;ret=0x5C;break;
@@ -2294,6 +2298,9 @@ static Bitu read_p7fd9_mouse(Bitu port,Bitu /*iolen*/) {
 
 static void write_pbfdb_mouse(Bitu port,Bitu val,Bitu /*iolen*/) {
     (void)port;
+	
+	unsigned int p_pc98_mouse_rate_hz = pc98_mouse_rate_hz;
+	
     /* bits [7:2] = ??
      * bits [1:0] = 120hz clock divider
      *              00 = 120hz (at reset)
@@ -2301,7 +2308,9 @@ static void write_pbfdb_mouse(Bitu port,Bitu val,Bitu /*iolen*/) {
      *              10 = 30hz
      *              11 = 15hz */
     pc98_mouse_rate_hz = 120u >> (val & 3u);
-    LOG(LOG_MISC,LOG_DEBUG)("PC-98 mouse interrupt rate: %u",pc98_mouse_rate_hz);
+
+	if (pc98_mouse_rate_hz != p_pc98_mouse_rate_hz)
+		LOG(LOG_MISC,LOG_DEBUG)("PC-98 mouse interrupt rate: %u",pc98_mouse_rate_hz);
 }
 //////////
 

@@ -35,6 +35,8 @@ extern bool dos_shell_running_program;
 
 Bitu shell_psp = 0;
 
+Bitu call_int2e = 0;
+
 void CALLBACK_DeAllocate(Bitu in);
 
 Bitu call_shellstop = 0;
@@ -1010,7 +1012,8 @@ void SHELL_Init() {
 	real_writed(0,0x23*4,((Bit32u)psp_seg<<16));
 	
 	/* Set up int 2e handler */
-	Bitu call_int2e=CALLBACK_Allocate();
+	if (call_int2e == 0)
+		call_int2e = CALLBACK_Allocate();
 
     //	RealPt addr_int2e=RealMake(psp_seg+16+1,8);
     // NTS: It's apparently common practice to enumerate MCBs by reading the segment value of INT 2Eh and then

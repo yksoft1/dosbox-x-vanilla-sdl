@@ -171,11 +171,18 @@ VideoModeBlock ModeList_VGA[]={
 { 0x191  ,M_LIN32  ,320 ,400 ,40 ,50 ,8 ,8  ,1 ,0xA0000 ,0x10000, 50 ,449 ,40 ,400 ,0 },
 { 0x192  ,M_LIN32  ,320 ,480 ,40 ,60 ,8 ,8  ,1 ,0xA0000 ,0x10000, 50 ,525 ,40 ,480 ,0 },
 
-// S3 specific modes
+// S3 specific modes (OEM modes). See also [http://www.ctyme.com/intr/rb-0275.htm]
+{ 0x201  ,M_LIN8    ,640 ,480, 80,30 ,8 ,16 ,1 ,0xA0000 ,0x10000,100 ,525 ,80 ,480 , _VGA_PIXEL_DOUBLE },
+{ 0x202  ,M_LIN4    ,800 ,600,100,37 ,8 ,16 ,1 ,0xA0000 ,0x10000,132 ,628 ,100,600 ,0	},
+{ 0x203  ,M_LIN8    ,800 ,600,100,37 ,8 ,16 ,1 ,0xA0000 ,0x10000,132 ,628 ,100,600 ,0	}, // Line Wars II, S3 accelerated 800x600
+{ 0x204  ,M_LIN4    ,1024,768,128,48 ,8 ,16 ,1 ,0xA0000 ,0x10000,168 ,806 ,128,768 ,0	},
+{ 0x205  ,M_LIN8    ,1024,768,128,48 ,8 ,16 ,1 ,0xA0000 ,0x10000,168 ,806 ,128,768 ,0	},
+{ 0x206  ,M_LIN4    ,1280,960,160,64 ,8 ,16 ,1 ,0xA0000 ,0x10000,212 ,1024,160,960 ,0	}, // TODO VERIFY THIS
 { 0x207  ,M_LIN8	,1152,864,160,64 ,8 ,16 ,1 ,0xA0000 ,0x10000,182 ,948 ,144,864 ,0	},
+{ 0x208  ,M_LIN4    ,1280,1024,160,64 ,8 ,16 ,1 ,0xA0000 ,0x10000,212 ,1066,160,1024,0	},
 { 0x209  ,M_LIN15	,1152,864,160,64 ,8 ,16 ,1 ,0xA0000 ,0x10000,364 ,948 ,288,864 ,0	},
 { 0x20A  ,M_LIN16	,1152,864,160,64 ,8 ,16 ,1 ,0xA0000 ,0x10000,364 ,948 ,288,864 ,0	},
-{ 0x20B  ,M_LIN32	,1152, 864,160,64 ,8 ,16 ,1 ,0xA0000 ,0x10000,182 ,948 ,144,864 ,0	},
+{ 0x20B  ,M_LIN32	,1152,864,160,64 ,8 ,16 ,1 ,0xA0000 ,0x10000,182 ,948 ,144,864 ,0	},
 { 0x213  ,M_LIN32   ,640 ,400,80 ,25 ,8 ,16 ,1 ,0xA0000 ,0x10000,100 ,449 ,80 ,400 ,0	},
 
 // Some custom modes
@@ -765,12 +772,30 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 
 	/* Setup the CRTC */
 	Bitu crtc_base=(machine==MCH_HERC || machine==MCH_MDA) ? 0x3b4 : 0x3d4;
+	
+	if (machine == MCH_MCGA) {
+		// unlock CRTC regs 0-7
+		unsigned char x;
+
+		IO_WriteB(crtc_base,0x10);
+		x = IO_ReadB(crtc_base+1);
+		IO_WriteB(crtc_base+1,x & 0x7F);
+	}
+	 
 	//Horizontal total
 	IO_WriteW(crtc_base,0x00 | (CurMode->htotal) << 8);
-	//Horizontal displayed
-	IO_WriteW(crtc_base,0x01 | (CurMode->hdispend) << 8);
-	//Horizontal sync position
-	IO_WriteW(crtc_base,0x02 | (CurMode->hdispend+1) << 8);
+    if (machine == MCH_MCGA) {
+		//Horizontal displayed
+		IO_WriteW(crtc_base,(Bit16u)(0x01 | (CurMode->hdispend-1) << 8));
+		//Horizontal sync position
+		IO_WriteW(crtc_base,(Bit16u)(0x02 | (CurMode->hdispend) << 8));
+	}
+	else {
+		//Horizontal displayed
+		IO_WriteW(crtc_base,(Bit16u)(0x01 | (CurMode->hdispend) << 8));
+		//Horizontal sync position
+		IO_WriteW(crtc_base,(Bit16u)(0x02 | (CurMode->hdispend+1) << 8));
+	}
 	//Horizontal sync width, seems to be fixed to 0xa, for cga at least, hercules has 0xf
 	// PCjr doubles sync width in high resolution modes, good for aspect correction
 	// newer "compatible" CGA BIOS does the same
@@ -900,6 +925,11 @@ bool INT10_SetVideoMode_OTHER(Bit16u mode,bool clearmem) {
 			if (CurMode->swidth >= 500)
 				mcga_mode |= 0x20;//unknown bit?
 
+			/* write protect registers 0-7 if INT 10h mode 2 or 3 to mirror real hardware
+			 * behavior observed through CRTC register dumps on MCGA hardware */
+			if (CurMode->mode == 2 || CurMode->mode == 3)
+				mcga_mode |= 0x80;
+				 
             IO_WriteW(crtc_base,0x10 | (mcga_mode) << 8);
         }
 		break;

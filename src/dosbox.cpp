@@ -886,7 +886,7 @@ void DOSBOX_SetupConfigSections(void) {
 	const char* tandys[] = { "auto", "on", "off", 0};
 	const char* ps1opt[] = { "on", "off", 0};
 	const char* truefalseautoopt[] = { "true", "false", "1", "0", "auto", 0};
-    const char* pc98fmboards[] = { "auto", "off", "false", "board26k", "board86", "board86c", 0};
+    const char* pc98fmboards[] = { "auto", "off", "false", "board14", "board26k", "board86", "board86c", 0};
     const char* pc98videomodeopt[] = { "", "24khz", "31khz", "15khz", 0};
 	const char *vga_ac_mapping_settings[] = { "", "auto", "4x4", "4low", "first16", 0 };
 	
@@ -971,13 +971,14 @@ void DOSBOX_SetupConfigSections(void) {
 			"will do nothing but cause a significant drop in frame rate which is probably not\n"
 			"what you want. Recommended values -1, 0 to 2000.");
 
-	Pint = secprop->Add_int("vmemsize", Property::Changeable::WhenIdle,2);
-	Pint->SetMinMax(0,8);
+	Pint = secprop->Add_int("vmemsize", Property::Changeable::WhenIdle,-1);
+	Pint->SetMinMax(-1,8);
 	Pint->Set_help(
 		"Amount of video memory in megabytes.\n"
 		"  The maximum resolution and color depth the svga_s3 will be able to display\n"
 		"  is determined by this value.\n "
-		"  0: 512k (800x600  at 256 colors)\n"
+		" -1: auto (vmemsizekb is ignored)\n"
+		"  0: 512k (800x600  at 256 colors) if vmemsizekb=0\n"
 		"  1: 1024x768  at 256 colors or 800x600  at 64k colors\n"
 		"  2: 1600x1200 at 256 colors or 1024x768 at 64k colors or 640x480 at 16M colors\n"
 		"  4: 1600x1200 at 64k colors or 1024x768 at 16M colors\n"
@@ -1237,7 +1238,12 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool = secprop->Add_bool("pc-98 sound bios",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("Set Sound BIOS enabled bit in MEMSW 4 for some games that require it.\n"
 					"TODO: Real emulation of PC-9801-26K/86 Sound BIOS");
-	
+
+	Pbool = secprop->Add_bool("pc-98 load sound bios rom file",Property::Changeable::WhenIdle,true);
+	Pbool->Set_help("If set, load SOUND.ROM if available and prsent that to the guest instead of trying to emulate directly.\n"
+					"This is strongly recommended, and is default enabled.\n"
+					"SOUND.ROM is a snapshot of the FM board BIOS taken from real PC-98 hardware.");
+
 	Pbool = secprop->Add_bool("pc-98 buffer page flip",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("If set, the game's request to page flip will be delayed to vertical retrace, which can eliminate tearline artifacts.\n"
                     "Note that this is NOT the behavior of actual hardware. This option is provided for the user's preference.");
@@ -1349,7 +1355,8 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool = secprop->Add_bool("cgasnow",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("When machine=cga, determines whether or not to emulate CGA snow in 80x25 text mode");
 
-	Phex = secprop->Add_hex("vga 3da undefined bits",Property::Changeable::WhenIdle,0);
+	/* Default changed to 0x04 for "Blues Brothers" at Allofich's request [https://github.com/joncampbell123/dosbox-x/issues/1273] */
+	Phex = secprop->Add_hex("vga 3da undefined bits",Property::Changeable::WhenIdle,0x04);
 	Phex->Set_help("VGA status port 3BA/3DAh only defines bits 0 and 3. This setting allows you to assign a bit pattern to the undefined bits.\n"
                    "The purpose of this hack is to deal with demos that read and handle port 3DAh in ways that might crash if all are zero.\n"
                    "By default, this value is zero.");
@@ -1395,9 +1402,19 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool = secprop->Add_bool("dma page registers write-only",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("Normally (on AT hardware) the DMA page registers are read/write. Set this option if you want to emulate PC/XT hardware where the page registers are write-only.");
 
-	Pbool = secprop->Add_bool("cascade interrupt ignore in service",Property::Changeable::WhenIdle,false);
-	Pbool->Set_help("If set, PIC emulation will allow slave pic interrupts even if the cascade interrupt is still \"in service\". This is OFF by default. It is a hack for troublesome games.");
-						 
+	Pbool = secprop->Add_bool("cascade interrupt never in service",Property::Changeable::WhenIdle,false);
+	Pbool->Set_help("If set, PIC emulation will never mark cascade interrupt as in service. This is OFF by default. It is a hack for troublesome games.");
+
+	// TODO: "Special mode" which apparently triggers this alternate behavior and used by default on PC-98, is configurable
+	//       by software through the PIC control words, and should control this setting if this is "auto".
+	//       It's time for "auto" default setting to end once and for all the running gag that PC-98 games will not run
+	//       properly without having to add "cascade interrupt ignore in service=true" to your dosbox.conf all the time.
+	Pstring = secprop->Add_string("cascade interrupt ignore in service",Property::Changeable::WhenIdle,"auto");
+	Pstring->Set_values(truefalseautoopt);
+	Pstring->Set_help("If true, PIC emulation will allow slave pic interrupts even if the cascade interrupt is still \"in service\" (common PC-98 behavior)\n"
+					"If false, PIC emulation will consider cascade in-service state when deciding which interrupt to signal (common IBM PC behavior)\n"
+					"If auto, setting is chosen based on machine type and other configuration.");
+					 
 	Pbool = secprop->Add_bool("enable slave pic",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Enable slave PIC (IRQ 8-15). Set this to 0 if you want to emulate a PC/XT type arrangement with IRQ 0-7 and no IRQ 2 cascade.");
 
@@ -1749,7 +1766,7 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool->Set_help("Swaps the left and right stereo channels."); 
 
 	Pint = secprop->Add_int("rate",Property::Changeable::OnlyAtStart,44100);
-	Pint->Set_values(rates);
+	Pint->SetMinMax(8000,192000);
 	Pint->Set_help("Mixer sample rate, setting any device's rate higher than this will probably lower their sound quality.");
 
 	Pint = secprop->Add_int("blocksize",Property::Changeable::OnlyAtStart,1024);
@@ -1849,8 +1866,6 @@ void DOSBOX_SetupConfigSections(void) {
 
 	Pstring = secprop->Add_string("mt32.rompath",Property::Changeable::WhenIdle,"");
 	Pstring->Set_help("Path of MT-32 ROM files, defaults to DOSBox-X working directory");
-	
-	secprop=control->AddSection_prop("debug",&Null_Init);
 
 	secprop=control->AddSection_prop("sblaster",&Null_Init,true);//done
 	
@@ -1945,7 +1960,7 @@ void DOSBOX_SetupConfigSections(void) {
 		"To emulate Adlib, set sbtype=none and oplmode=opl2. To emulate a Game Blaster, set\n"
 		"sbtype=none and oplmode=cms");
 
-	Pbool = secprop->Add_bool("adlib force timer overflow on detect",Property::Changeable::WhenIdle,true);
+	Pbool = secprop->Add_bool("adlib force timer overflow on detect",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("If set, Adlib/OPL emulation will signal 'overflow' on timers after 50 I/O reads.\n"
 			"This is a temporary hack to work around timing bugs noted in DOSBox-X. Certain\n"
 			"games (Wolfenstein 3D) poll the Adlib status port a fixed number of times assuming\n"
@@ -2174,6 +2189,17 @@ void DOSBOX_SetupConfigSections(void) {
 	secprop = control->AddSection_prop("speaker",&Null_Init,true);//done
 	Pbool = secprop->Add_bool("pcspeaker",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Enable PC-Speaker emulation.");
+
+	/* added for "baoxiao-sanguozhi" which for some reason uses both port 61h bit 4 (DRAM refresh) and PIT timer 2 (PC speaker)
+	 * for game timing IN ADDITION TO the BIOS timer counter in the BIOS data area. Game does not set bit 0 itself, so if the
+	 * bit wasn't set, the game will hang when asking for a password. Setting this option to "true" tells the BIOS to start the system
+	 * with that bit set so games like that can run. [https://github.com/joncampbell123/dosbox-x/issues/1274].
+	 *
+	 * Note that setting clock gate enable will not make audible sound through the PC speaker unless bit 1 (output gate enable)
+	 * is also set. Setting bits [1:0] = to 01 is a way to cycle PIT timer 2 without making audible noise. */
+	Pbool = secprop->Add_bool("pcspeaker clock gate enable at startup",Property::Changeable::WhenIdle,false);
+	Pbool->Set_help("Start system with the clock gate (bit 0 of port 61h) on. Needed for some games that use the PC speaker for timing on IBM compatible systems.\n"
+					"This option has no effect in PC-98 mode.");
 
 	Pint = secprop->Add_int("initial frequency",Property::Changeable::WhenIdle,-1);
 	Pint->Set_help("PC speaker PIT timer is programmed to this frequency on startup. If the DOS game\n"
@@ -2526,6 +2552,12 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool->Set_help("If ems=false, leave interrupt vector 67h zeroed out (default true).\n"
 			"This is a workaround for games or demos that try to detect EMS by whether or not INT 67h is 0000:0000 rather than a proper test.\n"
 			"This option also affects whether INT 67h is zeroed when booting a guest OS");
+
+	Pbool = secprop->Add_bool("zero unused int 68h",Property::Changeable::OnlyAtStart,false);
+	Pbool->Set_help("Leave INT 68h zero at startup.\n"
+			"Set this to true for certain games that use INT 68h in unusual ways that require a zero value.\n"
+			"Note that the vector is left at zero anyway when machine=cga.\n"
+			"This is needed to properly run 1988 game 'PopCorn'.");
 
 	/* FIXME: The vm86 monitor in src/ints/ems.cpp is not very stable! Option is default OFF until stabilized! */
 	Pbool = secprop->Add_bool("emm386 startup active",Property::Changeable::OnlyAtStart,false);

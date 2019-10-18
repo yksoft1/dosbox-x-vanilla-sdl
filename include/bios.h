@@ -85,6 +85,7 @@
 #define BIOS_VDU_CONTROL                0x465
 #define BIOS_VDU_COLOR_REGISTER         0x466
 /* 0x467-0x468 is reserved */
+#define BIOS_LAST_UNEXPECTED_IRQ        0x46b
 #define BIOS_TIMER                      0x46c
 #define BIOS_24_HOURS_FLAG              0x470
 #define BIOS_CTRL_BREAK_FLAG            0x471
@@ -157,6 +158,7 @@ extern Bitu BIOS_DEFAULT_IRQ0_LOCATION;		// (RealMake(0xf000,0xfea5))
 extern Bitu BIOS_DEFAULT_IRQ1_LOCATION;		// (RealMake(0xf000,0xe987))
 extern Bitu BIOS_DEFAULT_IRQ2_LOCATION;		// (RealMake(0xf000,0xff55))
 extern Bitu BIOS_DEFAULT_HANDLER_LOCATION;	// (RealMake(0xf000,0xff53))
+extern Bitu BIOS_DEFAULT_INT5_LOCATION;		// (RealMake(0xf000,0xff54))
 extern Bitu BIOS_VIDEO_TABLE_LOCATION;		// (RealMake(0xf000,0xf0a4))
 extern Bitu BIOS_DEFAULT_RESET_LOCATION;	// RealMake(0xf000,0xe05b)
 extern Bitu BIOS_VIDEO_TABLE_SIZE;

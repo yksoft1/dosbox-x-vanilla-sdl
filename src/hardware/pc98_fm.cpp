@@ -37,6 +37,7 @@ MixerChannel *pc98_mixer = NULL;
 NP2CFG pccore;
 
 extern unsigned char pc98_mem_msw_m[8];
+bool pc98_soundbios_rom_load = true;
 bool pc98_soundbios_enabled = false;
 
 extern "C" unsigned char *CGetMemBase() {
@@ -266,22 +267,107 @@ void pc98_set_msw4_soundbios(void)
 static CALLBACK_HandlerObject soundbios_callback;
 
 static Bitu SOUNDROM_INTD2_PC98_Handler(void) {
-    LOG_MSG("PC-98 SOUND BIOS (INT D2h) call with AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
-        reg_ax,
-        reg_bx,
-        reg_cx,
-        reg_dx,
-        reg_si,
-        reg_di,
-        SegValue(ds),
-        SegValue(es));
+    const char *call_name = "?";
+
+	switch (reg_ah) {
+		case 0x00:  // INITIALIZE
+			call_name = "INITIALIZE";
+			goto unknown;
+		case 0x01:  // PLAY
+			call_name = "PLAY";
+			goto unknown;
+		case 0x02:  // CLEAR
+			call_name = "CLEAR";
+			goto unknown;
+		case 0x10:  // READ REG
+			call_name = "READ REG";
+			goto unknown;
+		case 0x11:  // WRITE REG
+			call_name = "WRITE REG";
+			goto unknown;
+		case 0x12:  // SET TOUCH
+			call_name = "SET TOUCH";
+			goto unknown;
+		case 0x13:  // NOTE
+			call_name = "NOTE";
+			goto unknown;
+		case 0x14:  // SET LENGTH
+			call_name = "SET LENGTH";
+			goto unknown;
+		case 0x15:  // SET TEMPO
+			call_name = "SET TEMPO";
+			goto unknown;
+		case 0x16:  // SET PARA BLOCK
+			call_name = "SET PARA BLOCK";
+			goto unknown;
+		case 0x17:  // READ PARA
+			call_name = "READ PARA";
+			goto unknown;
+		case 0x18:  // WRITE PARA
+			call_name = "WRITE PARA";
+			goto unknown;
+		case 0x19:  // ALL STOP
+			call_name = "ALL STOP";
+			goto unknown;
+		case 0x1A:  // CONT PLAY
+			call_name = "CONT PLAY";
+			goto unknown;
+		case 0x1B:  // MODU ON
+			call_name = "MODU ON";
+			goto unknown;
+		case 0x1C:  // MODU OFF
+			call_name = "MODU OFF";
+			goto unknown;
+		case 0x1D:  // SET INT COND
+			call_name = "SET INT COND";
+			goto unknown;
+		case 0x1E:  // HOLD STATE
+			call_name = "HOLD STATE";
+			goto unknown;
+		case 0x1F:  // SET VOLUME
+			call_name = "SET VOLUME";
+			goto unknown;
+		default:
+		unknown:
+			LOG_MSG("PC-98 SOUND BIOS (INT D2h) call '%s' with AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
+					call_name,
+					reg_ax,
+					reg_bx,
+					reg_cx,
+					reg_dx,
+					reg_si,
+					reg_di,
+					SegValue(ds),
+					SegValue(es));
+			break;
+	}
 
     // guessing, from yksoft1's patch
     reg_ah = 0;
 
     return CBRET_NONE;
 }
-  
+
+bool LoadSoundBIOS(void) {
+	FILE *fp;
+
+	if (!pc98_soundbios_rom_load) return false;
+
+	fp = fopen("SOUND.ROM","rb");
+	if (!fp) fp = fopen("sound.rom","rb");
+	if (!fp) return false;
+
+	if (fread(MemBase+0xCC000,0x4000,1,fp) != 1) {
+		LOG_MSG("PC-98 SOUND.ROM failed to read 16k");
+		fclose(fp);
+		return false;
+	}
+
+	LOG_MSG("PC-98 SOUND.ROM loaded into memory");
+	fclose(fp);
+	return true;
+}
+
 bool PC98_FM_SoundBios_Enabled(void) {
      return pc98_soundbios_enabled;
 }
@@ -310,12 +396,13 @@ void PC98_FM_OnEnterPC98(Section *sec) {
         baseio = section->Get_hex("pc-98 fm board io port");
 		
 		pc98_soundbios_enabled = section->Get_bool("pc-98 sound bios");
+		pc98_soundbios_rom_load = section->Get_bool("pc-98 load sound bios rom file");
 		pc98_set_msw4_soundbios();
         if (pc98_soundbios_enabled) {
             /* TODO: Load SOUND.ROM to CC000h - CFFFFh when Sound BIOS is enabled? 
              * Or simulate Sound BIOS calls ourselves? */
-            if (false/*TODO: Loaded SOUND.ROM*/) {
-                /* TODO */
+			if (LoadSoundBIOS()) {
+				/* good! */
             }
             else {
                 soundbios_callback.Install(&SOUNDROM_INTD2_PC98_Handler,CB_IRET,"Sound ROM INT D2h");
@@ -378,9 +465,6 @@ void PC98_FM_OnEnterPC98(Section *sec) {
                 baseio = 0x288;
             }
 
-			if (pc98_soundbios_enabled)
-				pccore.snd86opt |= 0x02; //see board86_reset 
-				
             pccore.snd86opt += board86_encodeirqidx(fmirqidx);
 
             LOG_MSG("PC-98 FM board is PC-9801-86c at baseio=0x%x irq=%d",baseio,fmtimer_index2irq(fmirqidx));
@@ -394,10 +478,7 @@ void PC98_FM_OnEnterPC98(Section *sec) {
             else {
                 baseio = 0x288;
             }
-
-			if (pc98_soundbios_enabled)
-				pccore.snd86opt |= 0x02; //see board86_reset
-				
+	
             pccore.snd86opt += board86_encodeirqidx(fmirqidx);
 
             LOG_MSG("PC-98 FM board is PC-9801-86 at baseio=0x%x irq=%d",baseio,fmtimer_index2irq(fmirqidx));
@@ -412,14 +493,16 @@ void PC98_FM_OnEnterPC98(Section *sec) {
                 baseio = 0x088;
             }
 
-			if (pc98_soundbios_enabled)
-				pccore.snd26opt |= 0x01; //see board26_reset and soundrom_loadex, this will load sound.rom to 0xcc000
-
 			pccore.snd26opt += board26k_encodeirqidx(fmirqidx);
 
             LOG_MSG("PC-98 FM board is PC-9801-26k at baseio=0x%x irq=%d",baseio,fmtimer_index2irq(fmirqidx));
             fmboard_reset(&np2cfg, 0x02);
         }
+		else if (board == "board14") {
+			/* Apparently board14 is always IRQ 12, port 88h */
+			LOG_MSG("PC-98 FM board is PC-9801-14 at baseio=0x%x irq=%d",0x88,12);
+			fmboard_reset(&np2cfg, 0x01);
+		}
         else {
             if (baseio == 0 || baseio == 0x188) { /* default */
                 pccore.snd86opt |= 0x01;
@@ -438,13 +521,6 @@ void PC98_FM_OnEnterPC98(Section *sec) {
         fmboard_bind();
         fmboard_extenable(true);
 
-		if(pc98_soundbios_enabled)
-			if(soundrom.name[0])
-				LOG_MSG("PC-98 FM board BIOS file \"%s\" loaded at 0x%5x", soundrom.name, soundrom.address);
-			else
-				LOG_MSG("PC-98 FM board BIOS failed to load");
-		//TODO: Initialize sound BIOS, hook INT D2h for it
-		
         // WARNING: Some parts of the borrowed code assume 44100, 22050, or 11025 and
         //          will misrender if given any other sample rate (especially the OPNA synth).
 

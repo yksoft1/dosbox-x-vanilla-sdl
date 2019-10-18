@@ -340,7 +340,7 @@ static INLINE Bit16u DOS_PackDate(Bit16u year,Bit16u mon,Bit16u day) {
 
 class MemStruct {
 public:
-	Bitu GetIt(Bitu size,PhysPt addr) {
+	inline Bit32u GetIt(Bitu size,PhysPt addr) {
 		switch (size) {
 		case 1:return mem_readb(pt+addr);
 		case 2:return mem_readw(pt+addr);
@@ -348,16 +348,18 @@ public:
 		}
 		return 0;
 	}
-	void SaveIt(Bitu size,PhysPt addr,Bitu val) {
+	inline void SaveIt(Bitu size,PhysPt addr,Bitu val) {
 		switch (size) {
 		case 1:mem_writeb(pt+addr,(Bit8u)val);break;
 		case 2:mem_writew(pt+addr,(Bit16u)val);break;
 		case 4:mem_writed(pt+addr,(Bit32u)val);break;
 		}
 	}
-	void SetPt(Bit16u seg) { pt=PhysMake(seg,0);}
-	void SetPt(Bit16u seg,Bit16u off) { pt=PhysMake(seg,off);}
-	void SetPt(RealPt addr) { pt=Real2Phys(addr);}
+	inline void SetPt(Bit16u seg) { pt=PhysMake(seg,0);}
+	inline void SetPt(Bit16u seg,Bit16u off) { pt=PhysMake(seg,off);}
+	inline void SetPt(RealPt addr) { pt=Real2Phys(addr);}
+    inline PhysPt GetPtPhys(void) const { return pt; }
+	inline void SetPtPhys(const PhysPt _pt) { pt=_pt; }
 protected:
 	PhysPt pt;
 };
@@ -463,6 +465,7 @@ class DOS_InfoBlock:public MemStruct {
 public:
 	DOS_InfoBlock			() {};
 	void SetLocation(Bit16u  seg);
+	void SetFirstDPB(Bit32u _first_dpb);
 	void SetFirstMCB(Bit16u _first_mcb);
 	void SetBuffers(Bit16u x,Bit16u y);
 	void SetCurDirStruct(Bit32u _curdirstruct);
@@ -552,6 +555,7 @@ public:
 	void	SetDirIDCluster(Bit16u entry)	{ sSave(sDTA,dirCluster,entry); };
 	Bit16u	GetDirID(void)				{ return (Bit16u)sGet(sDTA,dirID); };
 	Bit16u	GetDirIDCluster(void)		{ return (Bit16u)sGet(sDTA,dirCluster); };
+	Bit8u   GetAttr(void)               { return (Bit8u)sGet(sDTA,sattr); }
 private:
 	#ifdef _MSC_VER
 	#pragma pack(1)
@@ -582,6 +586,7 @@ public:
 	void SetName(Bit8u _drive,char * _fname,char * _ext);
 	void SetSizeDateTime(Bit32u _size,Bit16u _date,Bit16u _time);
 	void GetSizeDateTime(Bit32u & _size,Bit16u & _date,Bit16u & _time);
+	void GetVolumeName(char * fillname);
 	void GetName(char * fillname);
 	void FileOpen(Bit8u _fhandle);
 	void FileClose(Bit8u & _fhandle);
@@ -721,6 +726,8 @@ struct DOS_Block {
 		RealPt upcase;
 		Bit8u* country;//Will be copied to dos memory. resides in real mem
 		Bit16u dpb; //Fake Disk parameter system using only the first entry so the drive letter matches
+        Bit16u dpb_size; // bytes per DPB entry (MS-DOS 4.x-6.x size)
+        Bit16u mediaid_offset; // media ID offset in DPB (MS-DOS 4.x-6.x case)
 	} tables;
 	Bit16u loaded_codepage;
 };

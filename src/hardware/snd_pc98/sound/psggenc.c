@@ -70,6 +70,7 @@ void psggen_reset(PSGGEN psg) {
 	for (i=0; i<3; i++) {
 		psg->tone[i].pvol = psggencfg.volume + 0;
 	}
+	psg->noise.lfsr = 1;
 	for (i=0; i<sizeof(psggen_deftbl); i++) {
 		psggen_setreg(psg, i, psggen_deftbl[i]);
 	}
@@ -116,12 +117,10 @@ void psggen_setreg(PSGGEN psg, UINT reg, REG8 value) {
 			if (freq == 0) {
 				freq = 1;
 			}
-			psg->noise.freq = psggencfg.base / freq;
-			psg->noise.freq <<= PSGFREQPADBIT;
+			psg->noise.freq = (psggencfg.base / freq) << PSGFREQPADBIT;
 			break;
 
 		case 7:
-			keydisp_psgmix(psg);
 			psg->mixer = ~value;
 			psg->puchicount = psggencfg.puchidec;
 //			TRACEOUT(("psg %x 7 %d", (long)psg, value));

@@ -219,7 +219,7 @@ public:
 					switch (DriveManager::UnmountDrive(i_drive)) {
 					case 0:
 						Drives[i_drive] = 0;
-						mem_writeb(Real2Phys(dos.tables.mediaid)+i_drive*9,0);
+						mem_writeb(Real2Phys(dos.tables.mediaid)+i_drive*dos.tables.dpb_size,0);
 						if(i_drive == DOS_GetDefaultDrive()) 
 							DOS_SetDrive(ZDRIVE_NUM);
 						if (!quiet)
@@ -524,7 +524,7 @@ public:
 		if (!newdrive) E_Exit("DOS:Can't create drive");
 		Drives[drive-'A']=newdrive;
 		/* Set the correct media byte in the table */
-		mem_writeb(Real2Phys(dos.tables.mediaid)+(drive-'A')*9,newdrive->GetMediaByte());
+		mem_writeb(Real2Phys(dos.tables.mediaid)+(drive-'A')*dos.tables.dpb_size,newdrive->GetMediaByte());
 		if (!quiet) WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_2"),drive,newdrive->GetInfo());
 		/* check if volume label is given and don't allow it to updated in the future */
 		if (cmd->FindString("-label",label,true)) newdrive->SetLabel(label.c_str(),iscdrom,false);
@@ -612,18 +612,19 @@ public:
         return PC98_ITF_ROM+(phys_page&0x7)*MEM_PAGESIZE;
     }
     void writeb(PhysPt addr,Bitu val){
-        LOG(LOG_CPU,LOG_ERROR)("Write %x to rom at %x",(int)val,(int)addr);
+        LOG(LOG_CPU,LOG_DEBUG)("Write %x to rom at %x",(int)val,(int)addr);
     }
     void writew(PhysPt addr,Bitu val){
-        LOG(LOG_CPU,LOG_ERROR)("Write %x to rom at %x",(int)val,(int)addr);
+        LOG(LOG_CPU,LOG_DEBUG)("Write %x to rom at %x",(int)val,(int)addr);
     }
     void writed(PhysPt addr,Bitu val){
-        LOG(LOG_CPU,LOG_ERROR)("Write %x to rom at %x",(int)val,(int)addr);
+        LOG(LOG_CPU,LOG_DEBUG)("Write %x to rom at %x",(int)val,(int)addr);
     }
 };
 
 PC98ITFPageHandler          mem_itf_rom;
 
+bool FDC_AssignINT13Disk(unsigned char drv);
 void MEM_RegisterHandler(Bitu phys_page,PageHandler * handler,Bitu page_range);
 void MEM_ResetPageHandler_Unmapped(Bitu phys_page, Bitu pages);
 bool MEM_map_ROM_physmem(Bitu start,Bitu end);
@@ -775,21 +776,11 @@ private:
 		WriteOut(MSG_Get("PROGRAM_BOOT_PRINT_ERROR"));
 	}
 
-	void disable_umb_ems_xms(void) {
-		Section* dos_sec = control->GetSection("dos");
-		char test[20];
-		strcpy(test,"umb=false");
-		dos_sec->HandleInputline(test);
-		strcpy(test,"xms=false");
-		dos_sec->HandleInputline(test);
-		strcpy(test,"ems=false");
-		dos_sec->HandleInputline(test);
-	}
-
 public:
    
 	void Run(void) {
 		std::string bios;
+		bool pc98_640x200 = true;
 		bool bios_boot = false;
         bool swaponedrive = false;
 		bool force = false;
@@ -809,6 +800,12 @@ public:
 			
 		if (cmd->FindString("-bios",bios,true))
 			bios_boot = true;
+
+		// debugging options
+ 		if (cmd->FindExist("-pc98-640x200",true))
+ 			pc98_640x200 = true;
+ 		if (cmd->FindExist("-pc98-640x400",true))
+ 			pc98_640x200 = false;
 
 		/* In secure mode don't allow people to boot stuff. 
 		 * They might try to corrupt the data on it */
@@ -1211,7 +1208,6 @@ public:
 					}
 				}
 
-				disable_umb_ems_xms();
 				void PreparePCJRCartRom(void);
 				PreparePCJRCartRom();
 
@@ -1327,8 +1323,6 @@ public:
 				return;
 			}
 
-			disable_umb_ems_xms();
-
 			WriteOut(MSG_Get("PROGRAM_BOOT_BOOT"), drive);
 
             if (IS_PC98_ARCH) {
@@ -1341,10 +1335,23 @@ public:
 			/* debug */
 			LOG_MSG("Booting guest OS stack_seg=0x%04x load_seg=0x%04x\n",(int)stack_seg,(int)load_seg);
             RunningProgram = "Guest OS";
- 
-            /* WARNING: PC-98 mode does not allocate DMA channel 2 for the floppy! */
+
+			if (drive == 'A' || drive == 'B') {
+				FDC_AssignINT13Disk(drive - 'A');
+				if (!IS_PC98_ARCH) incrementFDD();
+			}
+
+			/* NTS: IBM PC and PC-98 both use DMA channel 2 for the floppy, though according to
+			 *      Neko Project II source code, DMA 3 is used for the double density drives (but we don't emulate that yet) */
 			/* create appearance of floppy drive DMA usage (Demon's Forge) */
-			if (!IS_TANDY_ARCH && !IS_PC98_ARCH && floppysize!=0) GetDMAChannel(2)->tcount=true;
+			if (IS_PC98_ARCH) {
+				GetDMAChannel(2)->tcount=true;
+				GetDMAChannel(3)->tcount=true;
+			}
+			else {
+				if (!IS_TANDY_ARCH && floppysize!=0) GetDMAChannel(2)->tcount=true;
+			}
+
 
 			/* standard method */
             if (IS_PC98_ARCH) {
@@ -1378,10 +1385,11 @@ public:
                 reg_eax = 0x30;
                 reg_edx = 0x1;
 
-				/* Guess: If the boot sector is smaller than 512 bytes/sector, the PC-98 BIOS
-				 * probably sets the graphics layer to 640x200. Some games (Ys) do not
-				 * set but assume instead that is the mode of the graphics layer */
-				if (pc98_sect128) {
+				/* It seems 640x200 8-color digital mode is the state of the graphics hardware when the
+ 				 * BIOS boots the OS, and some games like Ys II assume the hardware is in this state.
+   
+                 * If I am wrong, you can pass --pc98-640x400 as a command line option to disable this. */
+ 				if (pc98_640x200) {
 					reg_eax = 0x4200; // setup 640x200 graphics
 					reg_ecx = 0x8000; // lower
 					CALLBACK_RunRealInt(0x18);
@@ -1431,9 +1439,8 @@ public:
 
                 for (unsigned int i=0;i < 2;i++) {
                     if (imageDiskList[i] != NULL) {
-                        disk_equip |= (0x1111u << i);
+                        disk_equip |= (0x0111u << i); /* 320KB[15:12] 1MB[11:8] 640KB[7:4] unit[1:0] */
                         disk_equip_144 |= (1 << i);
-						RDISK_EQUIP |= (0x11u << i);
 						F2HD_MODE |= (0x11u << i);
                     }
                 }
@@ -1453,7 +1460,7 @@ public:
 				mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
 				mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
 				mem_writeb(0x482,scsi_equip);
-				mem_writeb(0x488,RDISK_EQUIP);
+				mem_writeb(0x488,RDISK_EQUIP); /* RAM disk equip */
 				mem_writeb(0x493,F2HD_MODE);
 				mem_writeb(0x5CA,F2DD_MODE);
 				
@@ -3667,7 +3674,7 @@ private:
 		DriveManager::InitializeDrive(drive - 'A');
 
 		// Set the correct media byte in the table 
-		mem_writeb(Real2Phys(dos.tables.mediaid) + (drive - 'A') * 9, mediaid);
+		mem_writeb(Real2Phys(dos.tables.mediaid) + (drive - 'A') * dos.tables.dpb_size, mediaid);
 
 		/* Command uses dta so set it to our internal dta */
 		RealPt save_dta = dos.dta();
@@ -3841,7 +3848,7 @@ private:
 		DriveManager::InitializeDrive(drive - 'A');
 
 		// Set the correct media byte in the table 
-		mem_writeb(Real2Phys(dos.tables.mediaid) + (drive - 'A') * 9, mediaid);
+		mem_writeb(Real2Phys(dos.tables.mediaid) + (drive - 'A') * dos.tables.dpb_size, mediaid);
 
 		// If instructed, attach to IDE controller as ATAPI CD-ROM device
 		if (ide_index >= 0) IDE_CDROM_Attach(ide_index, ide_slave, drive - 'A');
@@ -4233,6 +4240,106 @@ public:
 void CAPMOUSE_ProgramStart(Program** make)
 {
 	*make = new CAPMOUSE;
+}
+
+class LABEL : public Program
+{
+public:
+	void Help() {
+		WriteOut("LABEL [drive:][label]\n");
+	}
+	void Run() //override
+	{
+		/* MS-DOS behavior: If no label provided at the command line, prompt for one.
+		 *
+		 * LABEL [drive:] [label]
+		 *
+		 * No options are supported in MS-DOS, and the label can have spaces in it.
+		 * This is valid, apparently:
+		 *
+		 * LABEL H E L L O
+		 *
+		 * Will set the volume label to "H E L L O"
+		 *
+		 * Label /? will print help.
+		 */
+		std::string label;
+		Bit8u drive = DOS_GetDefaultDrive();
+		const char *raw = cmd->GetRawCmdline().c_str();
+
+		/* skip space */
+		while (*raw == ' ') raw++;
+
+        /* options */
+		if (raw[0] == '/') {
+			raw++;
+			if (raw[0] == '?') {
+				raw++;
+				Help();
+				return;
+			}
+		}
+
+		/* is the next part a drive letter? */
+		if (raw[0] != 0 && raw[1] != 0) {
+			if (isalpha(raw[0]) && raw[1] == ':') {
+				drive = tolower(raw[0]) - 'a';
+				raw += 2;
+				while (*raw == ' ') raw++;
+			}
+		}
+
+		/* then the label. MS-DOS behavior is to treat the rest of the command line, spaces and all, as the label */
+		if (*raw != 0) {
+			label = raw;
+		}
+
+		/* if the label is longer than 11 chars or contains a dot, MS-DOS will reject it and then prompt for another label */
+		if (label.length() > 11) {
+			WriteOut("Label is too long (more than 11 chars)\n");
+			label.clear();
+		}
+		else if (label.find_first_of(".:/\\") != std::string::npos) {
+			WriteOut("Label has invalid chars.\n");
+			label.clear();
+		}
+
+		/* if no label provided, MS-DOS will display the current label and serial number and prompt the user to type in a new label. */
+		if (label.empty()) {
+			std::string clabel = Drives[drive]->GetLabel();
+
+			if (!clabel.empty())
+				WriteOut("Volume in drive %c is %s\n",drive+'A',clabel.c_str());
+			else
+				WriteOut("Volume in drive %c has no label\n",drive+'A');
+		}
+
+		/* If no label is provided, MS-DOS will prompt the user whether to delete the label. */
+		if (label.empty()) {
+			Bit8u c,ans=0;
+			Bit16u s;
+
+			do {
+				WriteOut("Delete the volume label (Y/N)? ");
+				s = 1;
+				DOS_ReadFile(STDIN,&c,&s);
+				WriteOut("\n");
+				if (s != 1) return;
+				ans = Bit8u(tolower(char(c)));
+			} while (!(ans == 'y' || ans == 'n'));
+
+			if (ans != 'y') return;
+		}
+
+		/* delete then create the label */
+		Drives[drive]->SetLabel("",false,true);
+		Drives[drive]->SetLabel(label.c_str(),false,true);
+	}
+};
+
+void LABEL_ProgramStart(Program** make)
+{
+	*make = new LABEL;
 }
 
 void DOS_SetupPrograms(void) {
@@ -4707,4 +4814,5 @@ void DOS_SetupPrograms(void) {
         PROGRAMS_MakeFile("PC98UTIL.COM",PC98UTIL_ProgramStart);
 	
 	PROGRAMS_MakeFile("CAPMOUSE.COM", CAPMOUSE_ProgramStart);
+	PROGRAMS_MakeFile("LABEL.COM", LABEL_ProgramStart);
 }
