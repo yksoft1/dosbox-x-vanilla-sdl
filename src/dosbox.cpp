@@ -2626,6 +2626,17 @@ void DOSBOX_SetupConfigSections(void) {
 					"If not set, the mouse pointer position is rounded to the top-left corner of a character cell in text modes.\n"
 					"This option is OFF by default.");
 
+    /* Explanation: NEC's mouse driver MOUSE.COM enables the graphics layer on startup and when INT 33h AX=0 is called.
+ 	 *              Some games by "Orange House" assume this behavior and do not make any effort on their
+ 	 *              own to show and enable graphics. Without this option, those games will not show any
+ 	 *              graphics. PC-98 systems have been confirmed to boot up with the graphics layer disabled
+ 	 *              and set to 640x200 8-color planar mode. This has been confirmed on real hardware.
+ 	 *              See also [https://github.com/joncampbell123/dosbox-x/issues/1305] */
+ 	Pbool = secprop->Add_bool("pc-98 show graphics layer on initialize",Property::Changeable::WhenIdle,true);
+ 	Pbool->Set_help("If PC-98 mode and INT 33h emulation is enabled, the graphics layer will be automatically enabled\n"
+ 					"at driver startup AND when INT 33h AX=0 is called. This is NEC MOUSE.COM behavior and default\n"
+ 					"enabled. To emulate other drivers like QMOUSE that do not follow this behavior, set to false.");
+			
 	Pbool = secprop->Add_bool("int 13 extensions",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Enable INT 13h extensions (functions 0x40-0x48). You will need this enabled if the virtual hard drive image is 8.4GB or larger.");
 

@@ -51,6 +51,8 @@ bool en_int33=false;
 bool en_bios_ps2mouse=false;
 bool cell_granularity_disable=false;
 
+bool en_int33_pc98_show_graphics=true; // NEC MOUSE.COM behavior
+
 void DisableINT33() {
 	if (en_int33) {
 		LOG(LOG_MISC,LOG_DEBUG)("Disabling INT 33 services");
@@ -837,8 +839,16 @@ static void Mouse_ResetHardware(void){
 	if (MOUSE_IRQ != 0)
 		PIC_SetIRQMask(MOUSE_IRQ,false);
 
-    if (IS_PC98_ARCH)
+    if (IS_PC98_ARCH) {
         IO_WriteB(0x7FDD,IO_ReadB(0x7FDD) & (~0x10)); // remove interrupt inhibit
+
+ 		// NEC MOUSE.COM behavior: Driver startup and INT 33h AX=0 automatically show the graphics layer.
+ 		// Some games by "Orange House" depend on this behavior, without which the graphics are invisible.
+ 		if (en_int33_pc98_show_graphics) {
+ 			reg_eax = 0x40u << 8u; // AH=40h show graphics layer
+ 			CALLBACK_RunRealInt(0x18);
+ 		}
+ 	}
 }
 
 //Does way to much. Many things should be moved to mouse reset one day
@@ -1440,6 +1450,8 @@ void MOUSE_Startup(Section *sec) {
 	RealPt i33loc=0;
 
 	/* TODO: Needs to check for mouse, and fail to do anything if neither PS/2 nor serial mouse emulation enabled */
+
+	en_int33_pc98_show_graphics=section->Get_bool("pc-98 show graphics layer on initialize");
 
 	en_int33=section->Get_bool("int33");
 	if (!en_int33) {
