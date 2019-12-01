@@ -1733,6 +1733,7 @@ public:
 		color=CLR_WHITE;
 		enabled=true;
         invert=false;
+		press=false;
 	}
 	virtual void Draw(void) {
         Bit8u fg,bg;
@@ -1741,7 +1742,7 @@ public:
 
         if (!invert) {
             fg = color;
-            bg = bkcolor;
+            bg = press ? Bit8u(CLR_DARKGREEN) : bkcolor;
         }
         else {
             fg = bkcolor;
@@ -1780,15 +1781,22 @@ public:
         invert=inv;
         mapper.redraw=true;
     }
+	void SetPress(bool p) {
+		press=p;
+		mapper.redraw=true;
+	}
 	virtual void RebindRedraw(void) {}
 	void SetColor(Bit8u _col) { color=_col; }
 protected:
 	Bitu x,y,dx,dy;
 	Bit8u color;
     Bit8u bkcolor;
+	bool press;
     bool invert;
 	bool enabled;
 };
+
+static CButton *press_select = NULL;
 
 class CTextButton : public CButton {
 public:
@@ -1801,7 +1809,7 @@ public:
 
         if (!invert) {
             fg = color;
-            bg = bkcolor;
+            bg = press ? Bit8u(CLR_DARKGREEN) : bkcolor;
         }
         else {
             fg = bkcolor;
@@ -2911,7 +2919,7 @@ static void CreateLayout(void) {
 //	new CTextButton(PX(6),0,124,20,"Keyboard Layout");
 //	new CTextButton(PX(17),0,124,20,"Joystick Layout");
 
-	bind_but.action=new CCaptionButton(180,420,0,0);
+	bind_but.action=new CCaptionButton(180,426,0,0);
 
 	bind_but.event_title=new CCaptionButton(0,350,0,0);
 	bind_but.bind_title=new CCaptionButton(0,365,0,0);
@@ -2928,14 +2936,14 @@ static void CreateLayout(void) {
 	bind_but.del=new CBindButton(70,384,50,BH,"Del",BB_Del);
 	bind_but.next=new CBindButton(120,384,50,BH,"Next",BB_Next);
 
-	bind_but.save=new CBindButton(180,440,50,BH,"Save",BB_Save);
-	bind_but.exit=new CBindButton(230,440,50,BH,"Exit",BB_Exit);
-	bind_but.cap=new CBindButton(280,440,50,BH,"Capt",BB_Capture);
+	bind_but.save=new CBindButton(180,444,50,BH,"Save",BB_Save);
+	bind_but.exit=new CBindButton(230,444,50,BH,"Exit",BB_Exit);
+	bind_but.cap=new CBindButton(280,444,50,BH,"Capt",BB_Capture);
 
 	bind_but.dbg = new CCaptionButton(180, 462, 460, 20); // right below the Save button
 	bind_but.dbg->Change("(event debug)");
 
-	bind_but.dbg2 = new CCaptionButton(330, 440, 310, 20); // right next to the Save button
+	bind_but.dbg2 = new CCaptionButton(330, 444, 310, 20); // right next to the Save button
 	bind_but.dbg2->Change("");
 
 	bind_but.bind_title->Change("Bind Title");
@@ -3341,6 +3349,35 @@ void MAPPER_CheckEvent(SDL_Event * event) {
 	}
 }
 
+void PressRelease(void) {
+	if (press_select != NULL) {
+		press_select->SetPress(false);
+		press_select = NULL;
+	}
+}
+
+void PressSelect(CButton *b) {
+	if (press_select != b)
+		PressRelease();
+
+	if (b != NULL) {
+		press_select = b;
+		press_select->SetPress(true);
+	}
+}
+
+void Mapper_MousePressEvent(SDL_Event &event) {
+	PressRelease();
+
+	/* Check the press */
+	for (CButton_it but_it = buttons.begin();but_it!=buttons.end();++but_it) {
+		if ((*but_it)->OnTop(event.button.x,event.button.y)) {
+			PressSelect(*but_it);
+			break;
+		}
+	}
+}
+
 void Mapper_MouseInputEvent(SDL_Event &event) {
     /* Check the press */
     for (CButton_it but_it = buttons.begin();but_it!=buttons.end();but_it++) {
@@ -3351,6 +3388,19 @@ void Mapper_MouseInputEvent(SDL_Event &event) {
 }
 
 #if defined(C_SDL2)
+void Mapper_FingerPressEvent(SDL_Event &event) {
+	SDL_Event ev;
+
+	memset(&ev,0,sizeof(ev));
+	ev.type = SDL_MOUSEBUTTONDOWN;
+
+	/* NTS: Windows versions of SDL2 do normalize the coordinates */
+	ev.button.x = (Sint32)(event.tfinger.x * mapper.surface->w);
+	ev.button.y = (Sint32)(event.tfinger.y * mapper.surface->h);
+
+	Mapper_MousePressEvent(ev);
+}
+
 void Mapper_FingerInputEvent(SDL_Event &event) {
     SDL_Event ev;
 
@@ -3375,11 +3425,24 @@ void BIND_MappingEvents(void) {
 
 	while (SDL_PollEvent(&event)) {
 		switch (event.type) {
-#if defined(C_SDL2)
+#if defined(C_SDL2) && !defined(IGNORE_TOUCHSCREEN)
+		case SDL_FINGERDOWN:
+			Mapper_FingerPressEvent(event);
+			break;
+#endif
+#if defined(C_SDL2) && !defined(IGNORE_TOUCHSCREEN)
         case SDL_FINGERUP:
             Mapper_FingerInputEvent(event);
             break;
 #endif
+        case SDL_MOUSEBUTTONDOWN:
+#if defined(C_SDL2)
+			if (event.button.which != SDL_TOUCH_MOUSEID) /* don't handle mouse events faked by touchscreen */
+				Mapper_MousePressEvent(event);
+#else
+			Mapper_MousePressEvent(event);
+#endif
+             break;
     	case SDL_MOUSEBUTTONUP:
 #if defined(C_SDL2)
             if (event.button.which != SDL_TOUCH_MOUSEID) /* don't handle mouse events faked by touchscreen */
