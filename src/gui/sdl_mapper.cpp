@@ -52,11 +52,13 @@ bool mapper_addhandler_create_buttons = false;
 bool isJPkeyboard = false;
 
 enum {
-	CLR_BLACK=0,
-	CLR_WHITE=1,
-	CLR_RED=2,
-	CLR_BLUE=3,
-	CLR_GREEN=4
+	CLR_BLACK = 0,
+ 	CLR_GREY = 1,
+ 	CLR_WHITE = 2,
+ 	CLR_RED = 3,
+ 	CLR_BLUE = 4,
+ 	CLR_GREEN = 5,
+ 	CLR_DARKGREEN = 6
 };
 
 enum BB_Types {
@@ -225,6 +227,10 @@ public:
 	}
 	char * GetName(void) { return entry; }
 	virtual bool IsTrigger(void)=0;
+
+	/// TODO
+ 	virtual void RebindRedraw(void) {}
+
     std::string eventname;
     enum event_type type;
 	CBindList bindlist;
@@ -1727,6 +1733,7 @@ public:
 		color=CLR_WHITE;
 		enabled=true;
         invert=false;
+		press=false;
 	}
 	virtual void Draw(void) {
         Bit8u fg,bg;
@@ -1735,7 +1742,7 @@ public:
 
         if (!invert) {
             fg = color;
-            bg = bkcolor;
+            bg = press ? Bit8u(CLR_DARKGREEN) : bkcolor;
         }
         else {
             fg = bkcolor;
@@ -1774,14 +1781,22 @@ public:
         invert=inv;
         mapper.redraw=true;
     }
+	void SetPress(bool p) {
+		press=p;
+		mapper.redraw=true;
+	}
+	virtual void RebindRedraw(void) {}
 	void SetColor(Bit8u _col) { color=_col; }
 protected:
 	Bitu x,y,dx,dy;
 	Bit8u color;
     Bit8u bkcolor;
+	bool press;
     bool invert;
 	bool enabled;
 };
+
+static CButton *press_select = NULL;
 
 class CTextButton : public CButton {
 public:
@@ -1794,7 +1809,7 @@ public:
 
         if (!invert) {
             fg = color;
-            bg = bkcolor;
+            bg = press ? Bit8u(CLR_DARKGREEN) : bkcolor;
         }
         else {
             fg = bkcolor;
@@ -1850,12 +1865,18 @@ public:
 		event=_event;	
 	}
 	virtual ~CEventButton() {}
+	void BindColor(void) {
+ 		this->SetColor(event->bindlist.begin() == event->bindlist.end() ? CLR_GREY : CLR_WHITE);
+ 	}
 	void Click(void) {
-		if (last_clicked) last_clicked->SetColor(CLR_WHITE);
-		this->SetColor(CLR_GREEN);
+		if (last_clicked) last_clicked->BindColor();
+ 		this->SetColor(event->bindlist.begin() == event->bindlist.end() ? CLR_DARKGREEN : CLR_GREEN);
 		SetActiveEvent(event);
 		last_clicked=this;
 	}
+	void RebindRedraw(void) {
+ 		Click();//HACK!
+ 	}
 protected:
 	CEvent * event;
 };
@@ -1887,6 +1908,8 @@ void CCaptionButton::Change(const char * format,...) {
 static void change_action_text(const char* text,Bit8u col);
 
 static void MAPPER_SaveBinds(void);
+
+void RedrawMapperBindButton(CEvent *ev);
 class CBindButton : public CTextButton {
 public:	
 	CBindButton(Bitu _x,Bitu _y,Bitu _dx,Bitu _dy,const char * _text,BB_Types _type) 
@@ -1910,6 +1933,7 @@ public:
 			}
 			if (mapper.abindit!=mapper.aevent->bindlist.end()) SetActiveBind(*(mapper.abindit));
 			else SetActiveBind(0);
+			RedrawMapperBindButton(mapper.aevent);
 			break;
 		case BB_Next:
 			if (mapper.abindit!=mapper.aevent->bindlist.end()) 
@@ -2055,6 +2079,10 @@ public:
     void notifybutton(CTextButton *n) {
         notify_button = n;
     }
+	virtual void RebindRedraw(void) {
+ 		if (notify_button != NULL)
+ 			notify_button->RebindRedraw();
+ 	}
     CTextButton *notify_button;
 protected:
 	void SetOppositeAxis(CJAxisEvent * _opposite_axis) {
@@ -2083,6 +2111,10 @@ public:
     void notifybutton(CTextButton *n) {
         notify_button = n;
     }
+	virtual void RebindRedraw(void) {
+ 		if (notify_button != NULL)
+ 			notify_button->RebindRedraw();
+ 	}
     CTextButton *notify_button;
 protected:
 	Bitu stick,button;
@@ -2106,6 +2138,10 @@ public:
 	{
 		notify_button = n;
 	}
+	virtual void RebindRedraw(void) {
+ 		if (notify_button != NULL)
+ 			notify_button->RebindRedraw();
+ 	}
 	CTextButton *notify_button;
 protected:
 	Bitu stick,hat,dir;
@@ -2127,6 +2163,10 @@ public:
     void notifybutton(CTextButton *n) {
         notify_button = n;
     }
+	virtual void RebindRedraw(void) {
+ 		if (notify_button != NULL)
+ 			notify_button->RebindRedraw();
+ 	}
     CTextButton *notify_button;
 protected:
 	Bitu wmod;
@@ -2365,6 +2405,10 @@ public:
     void notifybutton(CTextButton *n) {
         notify_button = n;
     }
+	virtual void RebindRedraw(void) {
+ 		if (notify_button != NULL)
+ 			notify_button->RebindRedraw();
+ 	}
     CTextButton *notify_button;
 	MAPPER_Handler * handler;
 protected:
@@ -2713,12 +2757,13 @@ static void CreateLayout(void) {
         AddKeyButtonEvent(PX(XO+0),PY(YO+2),BW*2,BH,"NFER","nfer",KBD_nfer);
         AddKeyButtonEvent(PX(XO+2),PY(YO+2),BW*2,BH,"XFER","xfer",KBD_xfer);
 
+		AddKeyButtonEvent(PX(XO+2),PY(YO+3),BW*2,BH,"Ro / _","jp_ro",KBD_jp_ro);
+
         AddKeyButtonEvent(PX(XO+0),PY(YO+3),BW*1,BH,"VF1","vf1",KBD_vf1);
         AddKeyButtonEvent(PX(XO+1),PY(YO+3),BW*1,BH,"VF2","vf2",KBD_vf2);
-        AddKeyButtonEvent(PX(XO+2),PY(YO+3),BW*1,BH,"VF3","vf3",KBD_vf3);
-        AddKeyButtonEvent(PX(XO+0),PY(YO+4),BW*1,BH,"VF4","vf4",KBD_vf4);
-        AddKeyButtonEvent(PX(XO+1),PY(YO+4),BW*1,BH,"VF5","vf5",KBD_vf5);
-        AddKeyButtonEvent(PX(XO+2),PY(YO+4),BW*1,BH,"Ro","jp_ro",KBD_jp_ro);
+        AddKeyButtonEvent(PX(XO+0),PY(YO+4),BW*1,BH,"VF3","vf3",KBD_vf3);
+ 		AddKeyButtonEvent(PX(XO+1),PY(YO+4),BW*1,BH,"VF4","vf4",KBD_vf4);
+ 		AddKeyButtonEvent(PX(XO+2),PY(YO+4),BW*1,BH,"VF5","vf5",KBD_vf5);
     }
     else {
         /* F13-F24 block */
@@ -2821,35 +2866,39 @@ static void CreateLayout(void) {
 	AddJHatButton(PX(XO+8+2),PY(YO+1),BW,BH,"RGT",0,0,1);
 
 	/* Labels for the joystick */
+	CTextButton* btn;
 	if (joytype ==JOY_2AXIS) {
-		new CTextButton(PX(XO+0),PY(YO-1),3*BW,20,"Joystick 1");
-		new CTextButton(PX(XO+4),PY(YO-1),3*BW,20,"Joystick 2");
-		new CTextButton(PX(XO+8),PY(YO-1),3*BW,20,"Disabled");
+		new CTextButton(PX(XO+0),PY(YO-1),3*BW,BH,"Joystick 1");
+ 		new CTextButton(PX(XO+4),PY(YO-1),3*BW,BH,"Joystick 2");
+ 		btn = new CTextButton(PX(XO + 8), PY(YO - 1), 3 * BW, BH, "Disabled");
+ 		btn->SetColor(CLR_GREY);
 	} else if(joytype ==JOY_4AXIS || joytype == JOY_4AXIS_2) {
-		new CTextButton(PX(XO+0),PY(YO-1),3*BW,20,"Axis 1/2");
-		new CTextButton(PX(XO+4),PY(YO-1),3*BW,20,"Axis 3/4");
-		new CTextButton(PX(XO+8),PY(YO-1),3*BW,20,"Disabled");
+        new CTextButton(PX(XO+0),PY(YO-1),3*BW,BH,"Axis 1/2");
+ 		new CTextButton(PX(XO+4),PY(YO-1),3*BW,BH,"Axis 3/4");
+ 		btn = new CTextButton(PX(XO + 8), PY(YO - 1), 3 * BW, BH, "Disabled");
+ 		btn->SetColor(CLR_GREY);
 	} else if(joytype == JOY_CH) {
-		new CTextButton(PX(XO+0),PY(YO-1),3*BW,20,"Axis 1/2");
-		new CTextButton(PX(XO+4),PY(YO-1),3*BW,20,"Axis 3/4");
-		new CTextButton(PX(XO+8),PY(YO-1),3*BW,20,"Hat/D-pad");
+		new CTextButton(PX(XO+0),PY(YO-1),3*BW,BH,"Axis 1/2");
+ 		new CTextButton(PX(XO+4),PY(YO-1),3*BW,BH,"Axis 3/4");
+ 		new CTextButton(PX(XO+8),PY(YO-1),3*BW,BH,"Hat/D-pad");
 	} else if ( joytype==JOY_FCS) {
-		new CTextButton(PX(XO+0),PY(YO-1),3*BW,20,"Axis 1/2");
-		new CTextButton(PX(XO+4),PY(YO-1),3*BW,20,"Axis 3");
-		new CTextButton(PX(XO+8),PY(YO-1),3*BW,20,"Hat/D-pad");
+		new CTextButton(PX(XO+0),PY(YO-1),3*BW,BH,"Axis 1/2");
+ 		new CTextButton(PX(XO+4),PY(YO-1),3*BW,BH,"Axis 3");
+ 		new CTextButton(PX(XO+8),PY(YO-1),3*BW,BH,"Hat/D-pad");
 	} else if(joytype == JOY_NONE) {
-		new CTextButton(PX(XO+0),PY(YO-1),3*BW,20,"Disabled");
-		new CTextButton(PX(XO+4),PY(YO-1),3*BW,20,"Disabled");
-		new CTextButton(PX(XO+8),PY(YO-1),3*BW,20,"Disabled");
+		btn = new CTextButton(PX(XO + 0), PY(YO - 1), 3 * BW, BH, "Disabled");
+ 		btn->SetColor(CLR_GREY);
+ 		btn = new CTextButton(PX(XO + 4), PY(YO - 1), 3 * BW, BH, "Disabled");
+ 		btn->SetColor(CLR_GREY);
+ 		btn = new CTextButton(PX(XO + 8), PY(YO - 1), 3 * BW, BH, "Disabled");
+ 		btn->SetColor(CLR_GREY);
 	}
-   
-   
-   
+
 	/* The modifier buttons */
-	AddModButton(PX(0),PY(17),50,20,"Mod1",1);
-	AddModButton(PX(2),PY(17),50,20,"Mod2",2);
-	AddModButton(PX(4),PY(17),50,20,"Mod3",3);
-	AddModButton(PX(6),PY(17),50,20,"Host",4);
+	AddModButton(PX(0),PY(17),50,BH,"Mod1",1);
+	AddModButton(PX(2),PY(17),50,BH,"Mod2",2);
+	AddModButton(PX(4),PY(17),50,BH,"Mod3",3);
+	AddModButton(PX(6),PY(17),50,BH,"Host",4);
 	/* Create Handler buttons */
 	Bitu xpos=3;Bitu ypos=11;
 	for (CHandlerEventVector_it hit=handlergroup.begin();hit!=handlergroup.end();hit++) {
@@ -2870,31 +2919,31 @@ static void CreateLayout(void) {
 //	new CTextButton(PX(6),0,124,20,"Keyboard Layout");
 //	new CTextButton(PX(17),0,124,20,"Joystick Layout");
 
-	bind_but.action=new CCaptionButton(180,420,0,0);
+	bind_but.action=new CCaptionButton(180,426,0,0);
 
 	bind_but.event_title=new CCaptionButton(0,350,0,0);
 	bind_but.bind_title=new CCaptionButton(0,365,0,0);
 
 	/* Create binding support buttons */
 	
-	bind_but.mod1=new CCheckButton(20,410,60,20, "mod1",BC_Mod1);
-	bind_but.mod2=new CCheckButton(20,432,60,20, "mod2",BC_Mod2);
-	bind_but.mod3=new CCheckButton(20,454,60,20, "mod3",BC_Mod3);
-	bind_but.host=new CCheckButton(100,410,60,20,"host",BC_Host);
-	bind_but.hold=new CCheckButton(100,432,60,20,"hold",BC_Hold);
+	bind_but.mod1=new CCheckButton(20,410,60,BH, "mod1",BC_Mod1);
+	bind_but.mod2=new CCheckButton(20,432,60,BH, "mod2",BC_Mod2);
+	bind_but.mod3=new CCheckButton(20,454,60,BH, "mod3",BC_Mod3);
+	bind_but.host=new CCheckButton(100,410,60,BH,"host",BC_Host);
+	bind_but.hold=new CCheckButton(100,432,60,BH,"hold",BC_Hold);
 
-	bind_but.add=new CBindButton(20,384,50,20,"Add",BB_Add);
-	bind_but.del=new CBindButton(70,384,50,20,"Del",BB_Del);
-	bind_but.next=new CBindButton(120,384,50,20,"Next",BB_Next);
+	bind_but.add=new CBindButton(20,384,50,BH,"Add",BB_Add);
+	bind_but.del=new CBindButton(70,384,50,BH,"Del",BB_Del);
+	bind_but.next=new CBindButton(120,384,50,BH,"Next",BB_Next);
 
-	bind_but.save=new CBindButton(180,440,50,20,"Save",BB_Save);
-	bind_but.exit=new CBindButton(230,440,50,20,"Exit",BB_Exit);
-	bind_but.cap=new CBindButton(280,440,50,20,"Capt",BB_Capture);
+	bind_but.save=new CBindButton(180,444,50,BH,"Save",BB_Save);
+	bind_but.exit=new CBindButton(230,444,50,BH,"Exit",BB_Exit);
+	bind_but.cap=new CBindButton(280,444,50,BH,"Capt",BB_Capture);
 
 	bind_but.dbg = new CCaptionButton(180, 462, 460, 20); // right below the Save button
 	bind_but.dbg->Change("(event debug)");
 
-	bind_but.dbg2 = new CCaptionButton(330, 440, 310, 20); // right next to the Save button
+	bind_but.dbg2 = new CCaptionButton(330, 444, 310, 20); // right next to the Save button
 	bind_but.dbg2->Change("");
 
 	bind_but.bind_title->Change("Bind Title");
@@ -2902,13 +2951,15 @@ static void CreateLayout(void) {
     mapper_addhandler_create_buttons = true;
 }
 
-static SDL_Color map_pal[5]={
-	{0x00,0x00,0x00,0x00},			//0=black
-	{0xff,0xff,0xff,0x00},			//1=white
-	{0xff,0x00,0x00,0x00},			//2=red
-	{0x10,0x30,0xff,0x00},			//3=blue
-	{0x00,0xff,0x20,0x00}			//4=green
-};
+static SDL_Color map_pal[7]={
+ 	{0x00,0x00,0x00,0x00},          //0=black
+ 	{0x7f,0x7f,0x7f,0x00},          //1=grey
+ 	{0xff,0xff,0xff,0x00},          //2=white
+ 	{0xff,0x00,0x00,0x00},          //3=red
+ 	{0x10,0x30,0xff,0x00},          //4=blue
+ 	{0x00,0xff,0x20,0x00},          //5=green
+ 	{0x00,0x7f,0x10,0x00}           //6=dark green
+ };
 
 static void CreateStringBind(char * line,bool loading=false) {
     std::string o_line = line;
@@ -3240,6 +3291,9 @@ void MAPPER_AddHandler(MAPPER_Handler * handler,MapKeys key,Bitu mods,char const
                 event->MakeDefaultBind(tmp);
                 CreateStringBind(tmp);
             }
+
+			// color of the button needs to reflect binding
+ 			event->notify_button->BindColor();
         }
     }
 
@@ -3295,6 +3349,35 @@ void MAPPER_CheckEvent(SDL_Event * event) {
 	}
 }
 
+void PressRelease(void) {
+	if (press_select != NULL) {
+		press_select->SetPress(false);
+		press_select = NULL;
+	}
+}
+
+void PressSelect(CButton *b) {
+	if (press_select != b)
+		PressRelease();
+
+	if (b != NULL) {
+		press_select = b;
+		press_select->SetPress(true);
+	}
+}
+
+void Mapper_MousePressEvent(SDL_Event &event) {
+	PressRelease();
+
+	/* Check the press */
+	for (CButton_it but_it = buttons.begin();but_it!=buttons.end();++but_it) {
+		if ((*but_it)->OnTop(event.button.x,event.button.y)) {
+			PressSelect(*but_it);
+			break;
+		}
+	}
+}
+
 void Mapper_MouseInputEvent(SDL_Event &event) {
     /* Check the press */
     for (CButton_it but_it = buttons.begin();but_it!=buttons.end();but_it++) {
@@ -3305,6 +3388,19 @@ void Mapper_MouseInputEvent(SDL_Event &event) {
 }
 
 #if defined(C_SDL2)
+void Mapper_FingerPressEvent(SDL_Event &event) {
+	SDL_Event ev;
+
+	memset(&ev,0,sizeof(ev));
+	ev.type = SDL_MOUSEBUTTONDOWN;
+
+	/* NTS: Windows versions of SDL2 do normalize the coordinates */
+	ev.button.x = (Sint32)(event.tfinger.x * mapper.surface->w);
+	ev.button.y = (Sint32)(event.tfinger.y * mapper.surface->h);
+
+	Mapper_MousePressEvent(ev);
+}
+
 void Mapper_FingerInputEvent(SDL_Event &event) {
     SDL_Event ev;
 
@@ -3329,11 +3425,24 @@ void BIND_MappingEvents(void) {
 
 	while (SDL_PollEvent(&event)) {
 		switch (event.type) {
-#if defined(C_SDL2)
+#if defined(C_SDL2) && !defined(IGNORE_TOUCHSCREEN)
+		case SDL_FINGERDOWN:
+			Mapper_FingerPressEvent(event);
+			break;
+#endif
+#if defined(C_SDL2) && !defined(IGNORE_TOUCHSCREEN)
         case SDL_FINGERUP:
             Mapper_FingerInputEvent(event);
             break;
 #endif
+        case SDL_MOUSEBUTTONDOWN:
+#if defined(C_SDL2)
+			if (event.button.which != SDL_TOUCH_MOUSEID) /* don't handle mouse events faked by touchscreen */
+				Mapper_MousePressEvent(event);
+#else
+			Mapper_MousePressEvent(event);
+#endif
+             break;
     	case SDL_MOUSEBUTTONUP:
 #if defined(C_SDL2)
             if (event.button.which != SDL_TOUCH_MOUSEID) /* don't handle mouse events faked by touchscreen */
@@ -3626,7 +3735,7 @@ void MAPPER_RunInternal() {
     mapper.draw_rect=GFX_GetSDLSurfaceSubwindowDims(640,480);
     // Sorry, but SDL_SetSurfacePalette requires a full palette.
     SDL_Palette *sdl2_map_pal_ptr = SDL_AllocPalette(256);
-    SDL_SetPaletteColors(sdl2_map_pal_ptr, map_pal, 0, 6);
+    SDL_SetPaletteColors(sdl2_map_pal_ptr, map_pal, 0, 7);
     SDL_SetSurfacePalette(mapper.draw_surface, sdl2_map_pal_ptr);
     if (last_clicked) {
         last_clicked->SetColor(CLR_WHITE);
@@ -3637,9 +3746,9 @@ void MAPPER_RunInternal() {
 	if (mapper.surface == NULL) E_Exit("Could not initialize video mode for mapper: %s",SDL_GetError());
 
 	/* Set some palette entries */
-	SDL_SetPalette(mapper.surface, SDL_LOGPAL|SDL_PHYSPAL, map_pal, 0, 5);
+	SDL_SetPalette(mapper.surface, SDL_LOGPAL|SDL_PHYSPAL, map_pal, 0, 7);
 	if (last_clicked) {
-		last_clicked->SetColor(CLR_WHITE);
+		last_clicked->BindColor();
 		last_clicked=NULL;
 	}
 #endif
@@ -3735,6 +3844,9 @@ void MAPPER_Init(void) {
 	CreateLayout();
 	CreateBindGroups();
 	if (!MAPPER_LoadBinds()) CreateDefaultBinds();
+	for (CButton_it but_it = buttons.begin(); but_it != buttons.end(); ++but_it) {
+ 		(*but_it)->BindColor();
+ 	}
 	if (SDL_GetModState()&KMOD_CAPS) {
 		for (CBindList_it bit=caps_lock_event->bindlist.begin();bit!=caps_lock_event->bindlist.end();bit++) {
 #if SDL_VERSION_ATLEAST(1, 2, 14)
@@ -3959,5 +4071,15 @@ void MAPPER_Shutdown() {
 	handlergroup.clear();
 }
 
+void RedrawMapperBindButton(CEvent *ev) {
+	if (ev != NULL) ev->RebindRedraw();
+}
+
+std::string mapper_event_keybind_string(const std::string &x) {
+	CEvent *ev = get_mapper_event_by_name(x);
+	if (ev != NULL) return ev->GetBindMenuText();
+	return std::string();
+}
+ 
 // save state support
 void *MAPPER_RunEvent_PIC_Event = (void*)MAPPER_RunEvent;

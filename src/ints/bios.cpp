@@ -31,6 +31,7 @@
 #include "joystick.h"
 #include "mouse.h"
 #include "callback.h"
+#include "dma.h"
 #include "setup.h"
 #include "bios_disk.h"
 #include "serialport.h"
@@ -3894,6 +3895,12 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
                 }
             }
 
+			/* need to clear DMA terminal count after read as BIOS would, I assume (Arsys Star Cruiser) */
+			{
+				DmaChannel *dma = GetDMAChannel(2);
+				if (dma) dma->tcount = false;
+			}
+			
             reg_ah = 0x00;
             CALLBACK_SCF(false);
             break;
@@ -7879,6 +7886,9 @@ private:
 				case CPU_ARCHTYPE_P55CSLOW:
 					cpu = "Pentium MMX";
 					break;
+				case CPU_ARCHTYPE_MIXED:
+					cpu = "Auto (mixed)";
+					break;
 			};
 
 			extern bool enable_fpu;
@@ -7978,6 +7988,10 @@ private:
             }
 
             IO_Write(0x6A,0x00);    // switch back to 8-color mode
+
+			reg_eax = 0x4200;   // setup 640x200 graphics
+ 			reg_ecx = 0x8000;   // lower
+ 			CALLBACK_RunRealInt(0x18);
         }
         else {
             // restore 80x25 text mode

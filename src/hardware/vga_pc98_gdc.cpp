@@ -409,8 +409,15 @@ Bit16u PC98_GDC_state::read_fifo(void) {
 }
 
 void PC98_GDC_state::next_line(void) {
+    /* */
+
     row_line++;
-    if (row_line == row_height) {
+    if (row_line == row_height || /*HACK! See comments!*/(!master_sync/*graphics layer*/ && (pc98_gdc_vramop & (1u << VOPBIT_VGA)))) {
+        /* NTS: According to real PC-9821 hardware, doublescan is ignored entirely in 256-color mode.
+         *      The bits are still there in the GDC, and doublescan comes right back when 256-color mode is switched off.
+         *      Perhaps the hardware uses an entirely different address counting register during video raster?
+         *      Forcing this case at all times for 256-color mode is meant to emulate that fact.
+         *      This fixes issues with booting an HDI image of "Alone in the Dark" */
         scan_address += display_pitch >> (IM_bit ? 1u : 0u);
         row_line = 0;
     }
@@ -805,6 +812,24 @@ Bitu pc98_gdc_read(Bitu port,Bitu iolen) {
                 return gdc->read_status();//FIXME this stops "Battle Skin Panic" from getting stuck is this correct behavior?
 
             return gdc->rfifo_read_data();
+		case 0x04:      /* 0x64: nothing */
+						/* 0xA4: Bit 0 select display "plane" */
+			if (port == 0x64) {
+				goto unknown;
+			}
+			else {
+				return GDC_display_plane_pending;
+			}
+			break;
+		case 0x06:    	/* 0x66: ??
+						0xA6: Bit 0 indicates current CPU access "plane" */
+			if (port == 0xA6) {
+				return (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 1 : 0;
+			}
+			else {
+				goto unknown;
+			}
+			break;
         case 0x08:
             if (port == 0xA8) {
                 if (gdc_analog) { /* 16/256-color mode */

@@ -76,6 +76,7 @@ artifacts/
 *.pgc
 *.pgd
 *.rsp
+*.res
 *.sbr
 *.tlb
 *.tli

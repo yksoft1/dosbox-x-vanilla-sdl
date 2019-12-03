@@ -780,6 +780,8 @@ public:
    
 	void Run(void) {
 		std::string bios;
+		bool pc98_640x200 = true;
+		bool pc98_show_graphics = false;
 		bool bios_boot = false;
         bool swaponedrive = false;
 		bool force = false;
@@ -799,6 +801,14 @@ public:
 			
 		if (cmd->FindString("-bios",bios,true))
 			bios_boot = true;
+
+		// debugging options
+ 		if (cmd->FindExist("-pc98-640x200",true))
+ 			pc98_640x200 = true;
+ 		if (cmd->FindExist("-pc98-640x400",true))
+ 			pc98_640x200 = false;
+		if (cmd->FindExist("-pc98-graphics",true))
+ 			pc98_show_graphics = true;
 
 		/* In secure mode don't allow people to boot stuff. 
 		 * They might try to corrupt the data on it */
@@ -1378,15 +1388,34 @@ public:
                 reg_eax = 0x30;
                 reg_edx = 0x1;
 
-				/* Guess: If the boot sector is smaller than 512 bytes/sector, the PC-98 BIOS
-				 * probably sets the graphics layer to 640x200. Some games (Ys) do not
-				 * set but assume instead that is the mode of the graphics layer */
-				if (pc98_sect128) {
+				/* It seems 640x200 8-color digital mode is the state of the graphics hardware when the
+ 				 * BIOS boots the OS, and some games like Ys II assume the hardware is in this state.
+   
+                 * If I am wrong, you can pass --pc98-640x400 as a command line option to disable this. */
+ 				if (pc98_640x200) {
 					reg_eax = 0x4200; // setup 640x200 graphics
 					reg_ecx = 0x8000; // lower
 					CALLBACK_RunRealInt(0x18);
 				}
-				
+				else {
+ 					reg_eax = 0x4200;   // setup 640x400 graphics
+ 					reg_ecx = 0xC000;   // full
+ 					CALLBACK_RunRealInt(0x18);
+ 				}
+
+ 				/* Some HDI images of Orange House games need this option because it assumes NEC MOUSE.COM
+ 				 * behavior where mouse driver init and reset show the graphics layer. Unfortunately the HDI
+ 				 * image uses QMOUSE which does not show the graphics layer. Use this option with those
+ 				 * HDI images to make them playable anyway. */
+ 				if (pc98_show_graphics) {
+ 					reg_eax = 0x4000;   // show graphics
+ 					CALLBACK_RunRealInt(0x18);
+ 				}
+ 				else {
+ 					reg_eax = 0x4100;   // hide graphics (normal state of graphics layer on startup). INT 33h emulation might have enabled it.
+ 					CALLBACK_RunRealInt(0x18);
+ 				}
+
                 /* PC-98 MS-DOS boot sector behavior suggests that the BIOS does a CALL FAR
                  * to the boot sector, and the boot sector can RETF back to the BIOS on failure. */
                 CPU_Push16(BIOS_bootfail_code_offset >> 4); /* segment */
@@ -2122,7 +2151,7 @@ restart_int:
 			fwrite(&sbuf,512,1,f);
 		}
 		// write VHD footer if requested, largely copied from RAW2VHD program, no license was included
-		if((mediadesc = 0xF8) && (temp_line.find(".vhd"))) {
+		if((mediadesc == 0xF8) && (temp_line.find(".vhd")) != std::string::npos) {
 			int i;
 			Bit8u footer[512];
 			// basic information

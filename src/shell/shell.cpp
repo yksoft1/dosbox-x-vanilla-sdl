@@ -28,6 +28,7 @@
 #include "callback.h"
 #include "support.h"
 #include "builtin.h"
+#include "mapper.h"
 #include "build_timestamp.h"
 
 extern bool enable_config_as_shell_commands;
@@ -347,6 +348,8 @@ void DOS_Shell::Run(void) {
     if (this == first_shell) {
         /* Start a normal shell and check for a first command init */
         WriteOut(MSG_Get("SHELL_STARTUP_BEGIN"),VERSION,UPDATED_STR);
+		WriteOut(MSG_Get("SHELL_STARTUP_BEGIN2"));
+		WriteOut(MSG_Get("SHELL_STARTUP_BEGIN3"));
 #if C_DEBUG
         WriteOut(MSG_Get("SHELL_STARTUP_DEBUG"));
 #endif
@@ -703,6 +706,28 @@ void SHELL_Init() {
 	MSG_Add("SHELL_CMD_SUBST_NO_REMOVE","Unable to remove, drive not in use.\n");
 	MSG_Add("SHELL_CMD_SUBST_FAILURE","SUBST failed. You either made an error in your commandline or the target drive is already used.\nIt's only possible to use SUBST on Local drives\n");
 
+    std::string mapper_keybind = mapper_event_keybind_string("host");
+    if (mapper_keybind.empty()) mapper_keybind = "unbound";
+
+    /* NTS: MSG_Add() takes the string as const char * but it does make a copy of the string when entering into the message map,
+     *      so there is no problem here of causing use-after-free crashes when we exit. */
+    std::string host_key_help; // SHELL_STARTUP_BEGIN2
+
+    if (machine == MCH_PC98) {
+// "\x86\x46 To activate the keymapper \033[31mhost+m\033[37m. Host key is F12.                 \x86\x46\n"
+        host_key_help =
+            std::string("\x86\x46 To activate the keymapper \033[31mhost+m\033[37m. Host key is ") +
+            (mapper_keybind + "                                     ").substr(0,20) +
+            std::string(" \x86\x46\n");
+    }
+    else {
+// "\xBA To activate the keymapper \033[31mhost+m\033[37m. Host key is F12.                 \xBA\n"
+        host_key_help =
+            std::string("\xBA To activate the keymapper \033[31mhost+m\033[37m. Host key is ") +
+            (mapper_keybind + "                                     ").substr(0,20) +
+            std::string(" \xBA\n");
+    }
+
     if (machine == MCH_PC98) {
         MSG_Add("SHELL_STARTUP_BEGIN",
                 "\x86\x52\x86\x44\x86\x44\x86\x44\x86\x44\x86\x44\x86\x44\x86\x44\x86\x44\x86\x44\x86\x44\x86\x44"
@@ -716,8 +741,10 @@ void SHELL_Init() {
                 "\x86\x46 For a short introduction for new users type: \033[33mINTRO\033[37m                 \x86\x46\n"
                 "\x86\x46 For supported shell commands type: \033[33mHELP\033[37m                            \x86\x46\n"
                 "\x86\x46                                                                    \x86\x46\n"
-                "\x86\x46 To adjust the emulated CPU speed, use \033[31mhost -\033[37m and \033[31mhost +\033[37m.           \x86\x46\n"
-                "\x86\x46 To activate the keymapper \033[31mhost+m\033[37m. Host key is F12.                 \x86\x46\n"
+                "\x86\x46 To adjust the emulated CPU speed, use \033[31mhost -\033[37m and \033[31mhost +\033[37m.           \x86\x46\n");
+        MSG_Add("SHELL_STARTUP_BEGIN2",
+               host_key_help.c_str());
+        MSG_Add("SHELL_STARTUP_BEGIN3",
                 "\x86\x46 For more information read the \033[36mREADME\033[37m file in the DOSBox directory. \x86\x46\n"
                 "\x86\x46                                                                    \x86\x46\n"
                );
@@ -769,8 +796,10 @@ void SHELL_Init() {
                 "\xBA For a short introduction for new users type: \033[33mINTRO\033[37m                 \xBA\n"
                 "\xBA For supported shell commands type: \033[33mHELP\033[37m                            \xBA\n"
                 "\xBA                                                                    \xBA\n"
-                "\xBA To adjust the emulated CPU speed, use \033[31mhost -\033[37m and \033[31mhost +\033[37m.           \xBA\n"
-                "\xBA To activate the keymapper \033[31mhost+m\033[37m. Host key is F12.                 \xBA\n"
+                "\xBA To adjust the emulated CPU speed, use \033[31mhost -\033[37m and \033[31mhost +\033[37m.           \xBA\n");
+        MSG_Add("SHELL_STARTUP_BEGIN2",
+                host_key_help.c_str());
+        MSG_Add("SHELL_STARTUP_BEGIN3",
                 "\xBA For more information read the \033[36mREADME\033[37m file in the DOSBox directory. \xBA\n"
                 "\xBA                                                                    \xBA\n"
                );

@@ -32,6 +32,13 @@
 static Bitu read_cga(Bitu /*port*/,Bitu /*iolen*/);
 static void write_cga(Bitu port,Bitu val,Bitu /*iolen*/);
 
+void UpdateCGAFromSaveState(void) {
+	if (machine==MCH_CGA || machine==MCH_MCGA || machine==MCH_AMSTRAD) {
+		write_cga(0x3D8,vga.tandy.mode_control,1); // restore CGA
+		write_cga(0x3D9,vga.tandy.color_select,1); // restore CGA
+	}
+}
+
 static unsigned char mcga_crtc_dat_org = 0x00;
 
 static void write_crtc_index_other(Bitu /*port*/,Bitu val,Bitu /*iolen*/) {
@@ -1152,20 +1159,13 @@ void VGA_SetupOther(void) {
 		IO_RegisterReadHandler(base+1,read_crtc_data_other,IO_MB);
 	}
 	if (machine==MCH_AMSTRAD) {
-		Bitu base=machine==(MCH_HERC || machine==MCH_MDA) ? 0x3b4 : 0x3d4;
+		Bitu base=0x3d4;
 		IO_RegisterWriteHandler(base,write_crtc_index_other,IO_MB);
 		IO_RegisterWriteHandler(base+1,write_crtc_data_other,IO_MB);
 		IO_RegisterReadHandler(base,read_crtc_index_other,IO_MB);
 		IO_RegisterReadHandler(base+1,read_crtc_data_other,IO_MB);
 
-		// Check for CGA CRTC port mirroring (Prohibition).
-		if( base==0x3d4 ) {
-			base=0x3d0;
-			IO_RegisterWriteHandler(base,write_crtc_index_other,IO_MB);
-			IO_RegisterWriteHandler(base+1,write_crtc_data_other,IO_MB);
-			IO_RegisterReadHandler(base,read_crtc_index_other,IO_MB);
-			IO_RegisterReadHandler(base+1,read_crtc_data_other,IO_MB);
-		}
+		// TODO: Does MCH_AMSTRAD need to emulate CGA mirroring of I/O ports?
 	}
 	// AMSTRAD
 }
