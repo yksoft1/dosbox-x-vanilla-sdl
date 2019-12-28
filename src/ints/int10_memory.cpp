@@ -98,7 +98,26 @@ void INT10_LoadFont(PhysPt font,bool reload,Bitu count,Bitu offset,Bitu map,Bitu
 		//Rows setting in bios segment
 		real_writeb(BIOSMEM_SEG,BIOSMEM_NB_ROWS,rows-1);
 		real_writeb(BIOSMEM_SEG,BIOSMEM_CHAR_HEIGHT,(Bit8u)height);
-		//TODO Reprogram cursor size?
+		//Page size
+		Bitu pagesize=rows*real_readb(BIOSMEM_SEG,BIOSMEM_NB_COLS)*2;
+		pagesize+=0x100; // bios adds extra on reload
+		real_writew(BIOSMEM_SEG,BIOSMEM_PAGE_SIZE,(Bit16u)pagesize);
+		//Cursor shape
+		if (height>=14) height--; // move up one line on 14+ line fonts
+		INT10_SetCursorShape(height-2,height-1);
+		//Clip the cursor within range in case it is now beyond the new height. To fix 28.COM and 50.COM (issue #1324 and #1325).
+		//FIXME: Remove this code *IF* it turns out BIOSes do not clip the row value when calling INT 10h AX=1111h/1113h
+		//       If BIOSes are inconsistent about it, note which ones do and don't and try to match behavior with machine= type.
+		//       At the very least, if the IBM PS/2 VGA BIOS does not, then this code should be coded NOT to clip the cursor
+		//       when machine=vgaonly.
+		{
+			Bit8u page=real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
+			Bit8u cur_row=CURSOR_POS_ROW(page);
+			Bit8u cur_col=CURSOR_POS_COL(page);
+
+			if (cur_row >= rows)
+				INT10_SetCursorPos(rows-1,cur_col,page);
+		}
 	}
 }
 
