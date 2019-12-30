@@ -136,6 +136,7 @@
 #include "mixer.h"
 #include "menu.h"
 #include "mem.h"
+#include "render.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -220,6 +221,9 @@ unsigned int vga_display_start_hretrace = 0;
 float hretrace_fx_avg_weight = 3;
 
 bool allow_vesa_lowres_modes = true;
+bool allow_unusual_vesa_modes = true;
+bool allow_explicit_vesa_24bpp = true;
+bool allow_hd_vesa_modes = true;
 bool vesa12_modes_32bpp = true;
 bool allow_vesa_32bpp = true;
 bool allow_vesa_24bpp = true;
@@ -768,6 +772,8 @@ void VGA_Reset(Section*) {
 	hack_lfb_yadjust = section->Get_int("vesa lfb base scanline adjust");
 	allow_vesa_lowres_modes = section->Get_bool("allow low resolution vesa modes");
 	vesa12_modes_32bpp = section->Get_bool("vesa vbe 1.2 modes are 32bpp");
+	allow_explicit_vesa_24bpp = section->Get_bool("allow explicit 24bpp vesa modes");
+	allow_hd_vesa_modes = section->Get_bool("allow high definition vesa modes");
 	allow_vesa_32bpp = section->Get_bool("allow 32bpp vesa modes");
 	allow_vesa_24bpp = section->Get_bool("allow 24bpp vesa modes");
 	allow_vesa_16bpp = section->Get_bool("allow 16bpp vesa modes");
@@ -1444,6 +1450,7 @@ void VGA_Init() {
 	vga.tandy.mem_base = NULL;
     vga.vmemsize_alloced = 0;
 	LOG(LOG_MISC,LOG_DEBUG)("Initializing VGA");
+	LOG(LOG_MISC,LOG_DEBUG)("Render scaler maximum resolution is %u x %u",SCALER_MAXWIDTH,SCALER_MAXHEIGHT);
 
 	VGA_TweakUserVsyncOffset(0.0f);
 
