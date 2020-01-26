@@ -2676,7 +2676,7 @@ void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
 void DOS_UnsetupMemory();
 void DOS_Casemap_Free();
 
-extern Bit8u ZDRIVE_NUM;
+extern Bitu ZDRIVE_NUM;
 
 void DOS_EnableDriveMenu(char drv) {
 	if (drv >= 'A' && drv <= 'Z') {
