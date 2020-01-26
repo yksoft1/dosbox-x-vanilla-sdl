@@ -26,12 +26,16 @@
 #include "mem.h"
 #include "inout.h"
 #include "int10.h"
+#include "render.h"
 #include "dos_inc.h"
 
 int hack_lfb_yadjust = 0;
 
 extern int vesa_mode_width_cap;
 extern int vesa_mode_height_cap;
+extern bool allow_hd_vesa_modes;
+extern bool allow_unusual_vesa_modes;
+extern bool allow_explicit_vesa_24bpp;
 extern bool allow_vesa_lowres_modes;
 extern bool vesa12_modes_32bpp;
 extern bool allow_vesa_32bpp;
@@ -295,6 +299,7 @@ foundit:
 		break;
 	case M_LIN24:
 		if (!allow_vesa_24bpp || !allow_res) return VESA_FAIL;
+		if (mode >= 0x120 && !allow_explicit_vesa_24bpp) return VESA_FAIL;
 		pageSize = mblock->sheight * mblock->swidth*3;
 		var_write(&minfo.BytesPerScanLine,mblock->swidth*3);
 		var_write(&minfo.NumberOfPlanes,0x1);
@@ -688,9 +693,22 @@ Bitu INT10_WriteVESAModeList(Bitu max_modes) {
 
 		if (canuse_mode) {
 			if (ModeList_VGA[i].mode >= 0x100) {
-				bool allow_res = allow_vesa_lowres_modes ||
-					(ModeList_VGA[i].swidth >= 640 && ModeList_VGA[i].sheight >= 400);
-
+					bool allow1 = allow_vesa_lowres_modes ||
+						(ModeList_VGA[i].swidth >= 640 && ModeList_VGA[i].sheight >= 400);
+					bool allow2 =
+						allow_explicit_vesa_24bpp || ModeList_VGA[i].type != M_LIN24 ||
+						(ModeList_VGA[i].type == M_LIN24 && ModeList_VGA[i].mode < 0x120);
+					bool allow3 =
+						allow_hd_vesa_modes ||
+						!(ModeList_VGA[i].special & _HIGH_DEFINITION);
+					bool allow4 =
+						allow_unusual_vesa_modes ||
+						!(ModeList_VGA[i].special & _UNUSUAL_MODE);
+					bool allow5 = /* either user modified or within the limits of the render scaler architecture */
+							(ModeList_VGA[i].special & _USER_MODIFIED) ||
+							(ModeList_VGA[i].swidth <= SCALER_MAXWIDTH && ModeList_VGA[i].sheight <= SCALER_MAXHEIGHT);
+					bool allow_res = allow1 && allow2 && allow3 && allow4 && allow5;
+					 
 					switch (ModeList_VGA[i].type) {
 						case M_LIN32: canuse_mode=allow_vesa_32bpp && allow_res; break;
 						case M_LIN24: canuse_mode=allow_vesa_24bpp && allow_res; break;

@@ -649,6 +649,7 @@ static const char *def_menu__toplevel[] = {
     "SoundMenu",
     "DOSMenu",
     "CaptureMenu",
+	"DriveMenu",
     NULL
 };
 
@@ -877,6 +878,8 @@ static const char *def_menu_dos[] = {
     "--",
     "mapper_swapimg",
     "mapper_swapcd",	
+    "--",
+	"mapper_rescanall",
 	NULL
 };
 
@@ -932,6 +935,44 @@ static const char *def_menu_capture_format[] = {
     NULL
 };
 
+/* Drive menu ("DriveMenu") */
+static const char *def_menu_drive[] =
+{
+	"DriveA",
+	"DriveB",
+	"DriveC",
+	"DriveD",
+	"DriveE",
+	"DriveF",
+	"DriveG",
+	"DriveH",
+	"DriveI",
+	"DriveJ",
+	"DriveK",
+	"DriveL",
+	"DriveM",
+
+#if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
+	"||",
+#endif
+
+	"DriveN",
+	"DriveO",
+	"DriveP",
+	"DriveQ",
+	"DriveR",
+	"DriveS",
+	"DriveT",
+	"DriveU",
+	"DriveV",
+	"DriveW",
+	"DriveX",
+	"DriveY",
+	"DriveZ",
+
+	NULL
+};
+
 static DOSBoxMenu::item_handle_t separator_alloc = 0;
 static std::vector<DOSBoxMenu::item_handle_t> separators;
 
@@ -976,6 +1017,10 @@ void ConstructSubMenu(DOSBoxMenu::item_handle_t item_id, const char * const * li
             mainMenu.displaylist_append(
                 mainMenu.get_item(item_id).display_list, separator_get(DOSBoxMenu::separator_type_id));
         }
+		else if (!strcmp(ref,"||")) {
+			mainMenu.displaylist_append(
+				mainMenu.get_item(item_id).display_list, separator_get(DOSBoxMenu::vseparator_type_id));
+		}
         else if (mainMenu.item_exists(ref)) {
             mainMenu.displaylist_append(
                 mainMenu.get_item(item_id).display_list, mainMenu.get_item_id_by_name(ref));
@@ -983,6 +1028,7 @@ void ConstructSubMenu(DOSBoxMenu::item_handle_t item_id, const char * const * li
     }
 }
 
+extern const char*                                  drive_opts[][2];
 extern const char *scaler_menu_opts[][2];
 
 void ConstructMenu(void) {
@@ -1074,6 +1120,21 @@ void ConstructMenu(void) {
 	
 	/* capture format menu */
 	ConstructSubMenu(mainMenu.get_item("CaptureFormatMenu").get_master_id(), def_menu_capture_format);
+
+    /* Drive menu */
+	ConstructSubMenu(mainMenu.get_item("DriveMenu").get_master_id(), def_menu_drive);
+	for (char drv='A';drv <= 'Z';drv++) {
+		const std::string dname = std::string("Drive") + drv;
+		for (size_t i=0;drive_opts[i][0] != NULL;i++) {
+			const std::string name = std::string("drive_") + drv + "_" + drive_opts[i][0];
+
+			if (mainMenu.item_exists(name)) {
+				mainMenu.displaylist_append(
+					mainMenu.get_item(dname).display_list,
+					mainMenu.get_item_id_by_name(name));
+			}
+		}
+	}
 }
 
 bool MENU_SetBool(std::string secname, std::string value) {
@@ -1160,7 +1221,7 @@ MENU_Block menu;
 
 unsigned int hdd_defsize=16000;
 char hdd_size[20]="";
-
+ 
 bool DOSBox_isMenuVisible(void) {
 	return menu.toggle;
 }

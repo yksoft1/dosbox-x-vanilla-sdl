@@ -48,6 +48,8 @@
 bool Mouse_Drv=true;
 bool Mouse_Vertical = false;
 
+void DOS_EnableDriveMenu(char drv);
+
 #if defined(OS2)
 #define INCL DOSFILEMGR
 #define INCL_DOSERRORS
@@ -149,6 +151,48 @@ static void MOUSE_ProgramStart(Program * * make) {
 void MSCDEX_SetCDInterface(int intNr, int forceCD);
 Bitu ZDRIVE_NUM = 25;
 
+static const char* UnmountHelper(char umount) {
+    int i_drive;
+    if (umount < '0' || umount > 3+'0')
+        i_drive = toupper(umount) - 'A';
+    else
+        i_drive = umount - '0';
+
+    if (i_drive >= DOS_DRIVES || i_drive < 0)
+        return MSG_Get("PROGRAM_MOUNT_UMOUNT_NOT_MOUNTED");
+
+    if (i_drive < MAX_DISK_IMAGES && Drives[i_drive] == NULL && imageDiskList[i_drive] == NULL)
+        return MSG_Get("PROGRAM_MOUNT_UMOUNT_NOT_MOUNTED");
+
+    if (i_drive >= MAX_DISK_IMAGES && Drives[i_drive] == NULL)
+        return MSG_Get("PROGRAM_MOUNT_UMOUNT_NOT_MOUNTED");
+
+    if (Drives[i_drive]) {
+        switch (DriveManager::UnmountDrive(i_drive)) {
+            case 1: return MSG_Get("PROGRAM_MOUNT_UMOUNT_NO_VIRTUAL");
+            case 2: return MSG_Get("MSCDEX_ERROR_MULTIPLE_CDROMS");
+        }
+        Drives[i_drive] = 0;
+        DOS_EnableDriveMenu(i_drive+'A');
+        mem_writeb(Real2Phys(dos.tables.mediaid)+(unsigned int)i_drive*dos.tables.dpb_size,0);
+        if (i_drive == DOS_GetDefaultDrive()) {
+            DOS_SetDrive(ZDRIVE_NUM);
+        }
+
+    }
+
+    if (i_drive < MAX_DISK_IMAGES && imageDiskList[i_drive]) {
+        delete imageDiskList[i_drive];
+        imageDiskList[i_drive] = NULL;
+    }
+
+    return MSG_Get("PROGRAM_MOUNT_UMOUNT_SUCCESS");
+}
+
+void MenuUnmountDrive(char drv) {
+    UnmountHelper(drv);
+}
+
 class MOUNT : public Program {
 public:
 	void ListMounts(void) {
@@ -219,6 +263,7 @@ public:
 					switch (DriveManager::UnmountDrive(i_drive)) {
 					case 0:
 						Drives[i_drive] = 0;
+						DOS_EnableDriveMenu(i_drive+'A');
 						mem_writeb(Real2Phys(dos.tables.mediaid)+i_drive*dos.tables.dpb_size,0);
 						if(i_drive == DOS_GetDefaultDrive()) 
 							DOS_SetDrive(ZDRIVE_NUM);
@@ -248,6 +293,8 @@ public:
 				/* remap drives */
 				Drives[i_newz] = Drives[25];
 				Drives[25] = 0;
+				DOS_EnableDriveMenu(i_newz+'A');
+				DOS_EnableDriveMenu(25+'A');
 				DOS_Shell *fs = static_cast<DOS_Shell *>(first_shell); //dynamic ?				
 				/* Update environment */
 				std::string line = "";
@@ -523,6 +570,7 @@ public:
 		}
 		if (!newdrive) E_Exit("DOS:Can't create drive");
 		Drives[drive-'A']=newdrive;
+		DOS_EnableDriveMenu(drive);
 		/* Set the correct media byte in the table */
 		mem_writeb(Real2Phys(dos.tables.mediaid)+(drive-'A')*dos.tables.dpb_size,newdrive->GetMediaByte());
 		if (!quiet) WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_2"),drive,newdrive->GetInfo());
@@ -3133,6 +3181,7 @@ private:
 					if (cdrom) IDE_CDROM_Detach(i_drive);
 
 					Drives[i_drive] = NULL;
+					DOS_EnableDriveMenu(i_drive+'A');
 					if (i_drive == DOS_GetDefaultDrive())
 						DOS_SetDrive(toupper('Z') - 'A');
 					WriteOut(MSG_Get("PROGRAM_MOUNT_UMOUNT_SUCCESS"), letter);

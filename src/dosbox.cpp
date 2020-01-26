@@ -972,7 +972,7 @@ void DOSBOX_SetupConfigSections(void) {
 			"what you want. Recommended values -1, 0 to 2000.");
 
 	Pint = secprop->Add_int("vmemsize", Property::Changeable::WhenIdle,-1);
-	Pint->SetMinMax(-1,8);
+	Pint->SetMinMax(-1,16);
 	Pint->Set_help(
 		"Amount of video memory in megabytes.\n"
 		"  The maximum resolution and color depth the svga_s3 will be able to display\n"
@@ -1478,11 +1478,11 @@ void DOSBOX_SetupConfigSections(void) {
 			"                                           reads the modelist into. DOSBox-X's normal modelist is too long and\n"
 			"                                           the game will overrun the buffer and crash without this setting.");
 
-	Pint = secprop->Add_int("vesa modelist width limit",Property::Changeable::Always,0);
+	Pint = secprop->Add_int("vesa modelist width limit",Property::Changeable::Always,1280);
 	Pint->Set_help("IF nonzero, VESA modes with horizontal resolution higher than the specified pixel count will not be listed.\n"
 			"This is another way the modelist can be capped for DOS applications that have trouble with long modelists.");
 
-	Pint = secprop->Add_int("vesa modelist height limit",Property::Changeable::Always,0);
+	Pint = secprop->Add_int("vesa modelist height limit",Property::Changeable::Always,1024);
 	Pint->Set_help("IF nonzero, VESA modes with vertical resolution higher than the specified pixel count will not be listed.\n"
 			"This is another way the modelist can be capped for DOS applications that have trouble with long modelists.");
 
@@ -1500,6 +1500,25 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool->Set_help("If set, allow low resolution VESA modes (320x200x16/24/32bpp and so on). You could set this to false to simulate\n"
 			"SVGA hardware with a BIOS that does not support the lowres modes for testing purposes.");
 
+	Pbool = secprop->Add_bool("allow explicit 24bpp vesa modes",Property::Changeable::Always,false);
+	Pbool->Set_help("If set, additional 24bpp modes are listed in the modelist regardless whether modes 0x100-0x11F are\n"
+					"configured to be 24bpp or 32bpp. Setting this option can provide the best testing and development\n"
+					"environment for new retro DOS code. If clear, 24bpp will only be available in the 0x100-0x11F range\n"
+					"if the \"vesa vbe 1.2 modes are 32bpp\" is false. Setting to false helps to emulate typical SVGA\n"
+					"hardware in which either 24bpp is supported, or 32bpp is supported, but not both.");
+
+	Pbool = secprop->Add_bool("allow high definition vesa modes",Property::Changeable::Always,false);
+	Pbool->Set_help("If set, offer HD video modes in the VESA modelist (such as 1280x720 aka 720p or 1920x1080 aka 1080p).\n"
+					"This option also offers 4:3 versions (960x720 and 1440x1080) for DOS games that cannot properly handle\n"
+					"a 16:9 aspect ratio, and several other HD modes. The modes enabled by this option are still limited by the\n"
+					"width and height limits and available video memory.\n"
+					"This is unusual for VESA BIOSes to do and is disabled by default.");
+				
+	Pbool = secprop->Add_bool("allow unusual vesa modes",Property::Changeable::Always,false);
+	Pbool->Set_help("If set, unusual (uncommon) modes are added to the list. The modes reflect uncommon resolutions\n"
+					"added by external drivers (UNIVBE), some VESA BIOSes, some laptop and netbook displays, and\n"
+					"some added by DOSBox-X for additional fun. Disabled by default.");
+					 
 	Pbool = secprop->Add_bool("allow 32bpp vesa modes",Property::Changeable::Always,true);
 	Pbool->Set_help("If the DOS game or demo has problems with 32bpp VESA modes, set to 'false'");
 
