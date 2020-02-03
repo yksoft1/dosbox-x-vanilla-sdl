@@ -11,12 +11,12 @@ CXXFLAGS =  -nologo -O2 -MT -DNDEBUG -DHAVE_OPENGL \
 CFLAGS	=	-nologo -O2 -MT -DNDEBUG -DHAVE_OPENGL \
 			 -Iinclude \
 
-LFLAGS	=	-nologo -subsystem:windows,"5.01"
+LFLAGS	=	-nologo -subsystem:windows
 
 TESTGL	=	testgl.exe
 TESTSPRITE =	testsprite.exe
 
-LIBS = kernel32.lib user32.lib gdi32.lib winmm.lib dxguid.lib opengl32.lib
+LIBS = kernel32.lib user32.lib gdi32.lib winmm.lib dxguid.lib opengl32.lib advapi32.lib
 
 .SUFFIXES: .c.o
 .SUFFIXES: .cpp.o

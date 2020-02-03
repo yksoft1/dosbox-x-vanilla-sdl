@@ -7,7 +7,7 @@ WINDRES =	rc
 DBX_PATH	= ..
 
 CXXFLAGS =  -nologo -O2 -MT -EHsc -DNDEBUG -DWIN32 -D_FILE_OFFSET_BITS=64 -DC_OPENGL=1 -DC_DYNREC=1 -DC_MT32=1 -I. \
-			-D_WIN32_WINNT=0x0501 \
+			-D_WIN32_WINNT=0x0501 -Zm400 -GR \
 			-Dmain=SDL_main -Isdl\include \
 			-Ilibpng -Izlib \
 			-I$(DBX_PATH) \
@@ -36,7 +36,7 @@ CFLAGS	=	-nologo -O2 -MT -DNDEBUG -DWIN32 -D_WIN32_WINNT=0x0501 -I. \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/x11 \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus 
 
-LFLAGS	=	-nologo -SUBSYSTEM:Windows,"5.01"
+LFLAGS	=	-nologo -subsystem:WINDOWS,5.01
 
 TARGET	=	dosbox-x.exe
 
@@ -114,12 +114,10 @@ OBJS	=	$(DBX_PATH)\src\dosbox.obj \
 			$(DBX_PATH)\src\dos\drive_local.obj \
 			$(DBX_PATH)\src\dos\drive_virtual.obj \
 			$(DBX_PATH)\src\fpu\fpu.obj \
-			$(DBX_PATH)\src\gui\bitop.obj \
 			$(DBX_PATH)\src\gui\direct3d.obj \
 			$(DBX_PATH)\src\gui\hq2x_d3d.obj \
 			$(DBX_PATH)\src\gui\menu.obj \
 			$(DBX_PATH)\src\gui\midi.obj \
-			$(DBX_PATH)\src\gui\ptrop.obj \
 			$(DBX_PATH)\src\gui\render.obj \
 			$(DBX_PATH)\src\gui\render_scalers.obj \
 			$(DBX_PATH)\src\gui\ScalingEffect.obj \

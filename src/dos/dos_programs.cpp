@@ -2209,7 +2209,7 @@ restart_int:
 			struct tm tm20000101 = { 0,0,0, 1,0,100, 0,0,0 };
 			time_t basetime = mktime(&tm20000101);
 			time_t vhdtime = time(NULL) - basetime;
-#if defined (_MSC_VER)
+#if defined (_MSC_VER) && (_MSC_VER > 1400)
 			*(Bit32u*)(footer+0x18) = SDL_SwapBE32((__time32_t)vhdtime);
 #else
 			*(Bit32u*)(footer+0x18) = SDL_SwapBE32((long)vhdtime);

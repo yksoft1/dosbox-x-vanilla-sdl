@@ -60,7 +60,9 @@ void GFX_OpenGLRedrawScreen(void);
 # include <process.h>
 # if !defined(__MINGW32__) /* MinGW does not have these headers */
 //#  include <shcore.h>
+#if defined(_MSC_VER) && (_MSC_VER > 1400)
 #  include <shellscalingapi.h>
+#endif
 # endif
 #endif
 
@@ -80,11 +82,11 @@ void GFX_OpenGLRedrawScreen(void);
 #include "menu.h"
 #include "SDL_video.h"
 #include "ide.h"
-#include "bitop.h"
-#include "ptrop.h"
+/*#include "bitop.h"
+#include "ptrop.h"*/
 #include "mapper.h"
 
-#if defined(WIN32) && defined(__MINGW32__) /* MinGW does not have this */
+#if defined(WIN32) && (defined(__MINGW32__) || (defined(_MSC_VER) && (_MSC_VER < 1400))) /* MinGW does not have this */
 typedef enum PROCESS_DPI_AWARENESS {
     PROCESS_DPI_UNAWARE             = 0,
     PROCESS_SYSTEM_DPI_AWARE        = 1,
@@ -2355,13 +2357,13 @@ dosurface:
 #if defined(C_SDL2)
 		GFX_SetupSurfaceScaledOpenGL(SDL_WINDOW_RESIZABLE, 0);
 #else
-		GFX_SetupSurfaceScaledOpenGL(SDL_RESIZABLE, 0);
+		LOG_MSG("GFX_SetupSurfaceScaledOpenGL");
+		GFX_SetupSurfaceScaledOpenGL(SDL_RESIZABLE, 0);	
 #endif
 		if (!sdl.surface || sdl.surface->format->BitsPerPixel<15) {
 			LOG_MSG("SDL:OPENGL:Can't open drawing surface, are you running in 16bpp(or higher) mode?");
 			goto dosurface;
 		}
-
         glFinish();
         glFlush();
 
@@ -4005,6 +4007,7 @@ static void GUI_StartUp() {
     sdl.update_window=true;
 #endif
 
+	LOG(LOG_GUI,LOG_DEBUG)("GFX_SetIcon");
 	GFX_SetIcon();
 
 	sdl.desktop.lazy_fullscreen=false;
@@ -4013,14 +4016,16 @@ static void GUI_StartUp() {
 
 	Section_prop * section=static_cast<Section_prop *>(control->GetSection("sdl"));
 	assert(section != NULL);
-
+	LOG(LOG_GUI,LOG_DEBUG)("sdl.desktop.fullscreen=section->Get_bool");
 	sdl.desktop.fullscreen=section->Get_bool("fullscreen");
 	sdl.wait_on_error=section->Get_bool("waitonerror");
-
+#if 0
+	LOG(LOG_GUI,LOG_DEBUG)("Prop_multival* p=section->Get_multival");
 	Prop_multival* p=section->Get_multival("priority");
+	LOG(LOG_GUI,LOG_DEBUG)("std::string focus = p->GetSection()->Get_string(");
 	std::string focus = p->GetSection()->Get_string("active");
 	std::string notfocus = p->GetSection()->Get_string("inactive");
-
+	LOG(LOG_GUI,LOG_DEBUG)("if      (focus ==");
 	if      (focus == "lowest")  { sdl.priority.focus = PRIORITY_LEVEL_LOWEST;  }
 	else if (focus == "lower")   { sdl.priority.focus = PRIORITY_LEVEL_LOWER;   }
 	else if (focus == "normal")  { sdl.priority.focus = PRIORITY_LEVEL_NORMAL;  }
@@ -4038,8 +4043,9 @@ static void GUI_StartUp() {
 		 */
 		sdl.priority.nofocus=PRIORITY_LEVEL_PAUSE;
 	}
-
+	LOG(LOG_GUI,LOG_DEBUG)("SetPriority");
 	SetPriority(sdl.priority.focus); //Assume focus on startup
+#endif
 	sdl.mouse.locked=false;
 	mouselocked=false; //Global for mapper
 	sdl.mouse.requestlock=false;
@@ -4142,7 +4148,7 @@ static void GUI_StartUp() {
 	else if (emulation == "never")
 		sdl.mouse.emulation = MOUSE_EMULATION_NEVER;
 
-
+	LOG(LOG_GUI,LOG_DEBUG)("GFX_CaptureMouse");
 	/* Setup Mouse correctly if fullscreen */
 	if(sdl.desktop.fullscreen) GFX_CaptureMouse();
 
@@ -4227,7 +4233,7 @@ static void GUI_StartUp() {
 	}
 #endif
 	GFX_LogSDLState();
-
+	LOG(LOG_GUI,LOG_DEBUG)("GFX_LogSDLState();");
 	GFX_Stop();
 
 #if defined(C_SDL2)
@@ -4290,7 +4296,7 @@ static void GUI_StartUp() {
 	if(keystate&KMOD_NUM) startup_state_numlock = true;
 	if(keystate&KMOD_CAPS) startup_state_capslock = true;
 #endif
-
+	LOG(LOG_GUI,LOG_DEBUG)("UpdateWindowDimensions();");
 	UpdateWindowDimensions();
 }
 
@@ -7790,8 +7796,8 @@ int main(int argc, char* argv[]) {
     CommandLine com_line(argc,argv);
     Config myconf(&com_line);
 
-	bitop::self_test();
-	ptrop::self_test();
+	/*bitop::self_test();
+	ptrop::self_test();*/
 	
     memset(&sdl,0,sizeof(sdl)); // struct sdl isn't initialized anywhere that I can tell
 
@@ -8159,7 +8165,6 @@ int main(int argc, char* argv[]) {
 		Reflect_Menu();
 # endif
 #endif
-
 		if (control->opt_startui)
 			GUI_Run(false);
 
@@ -8185,7 +8190,6 @@ int main(int argc, char* argv[]) {
 				if (!sdl.desktop.fullscreen) GFX_SwitchFullScreen();
 			}
 		}
-
         /* stock top-level menu items */
         {
             DOSBoxMenu::item &item = mainMenu.alloc_item(DOSBoxMenu::submenu_type_id,"MainMenu");
@@ -8378,7 +8382,7 @@ int main(int argc, char* argv[]) {
 #endif
 			}
 		}
-
+	
 #if (HAVE_D3D9_H) && defined(WIN32)
 		D3D_reconfigure();
 #endif
@@ -8417,7 +8421,6 @@ int main(int argc, char* argv[]) {
 			enable_hook_special_keys = sec->Get_bool("keyboard hook");
 		}
 #endif
-
 		MSG_Init();
 		MAPPER_StartUp();
 		DOSBOX_InitTickLoop();

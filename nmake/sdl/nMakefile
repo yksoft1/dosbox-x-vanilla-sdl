@@ -4,9 +4,9 @@ LD		= 	link
 LIBR	=	lib
 WINDRES =	rc
 
-CXXFLAGS =  -arch:IA32 -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
+CXXFLAGS =  -arch:IA32 -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -D_WIN32_WINNT=0x0500 -Iinclude
 
-CFLAGS	=	-arch:IA32 -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -Iinclude
+CFLAGS	=	-arch:IA32 -nologo -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -D_WIN32_WINNT=0x0500 -Iinclude
 
 LFLAGS	=	-nologo
 

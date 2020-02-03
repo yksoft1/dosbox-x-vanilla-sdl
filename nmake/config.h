@@ -333,8 +333,13 @@ typedef         double     Real64;
   typedef unsigned long Bit64u;
   typedef   signed long Bit64s;
 #elif SIZEOF_UNSIGNED_LONG_LONG == 8
+#if defined(_MSC_VER) && (_MSC_VER < 1400)
+  typedef unsigned __int64 Bit64u;
+  typedef   signed __int64 Bit64s;
+#else
   typedef unsigned long long Bit64u;
   typedef   signed long long Bit64s;
+#endif
 #else
 #  error "can't find data type of 8 bytes"
 #endif

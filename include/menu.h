@@ -168,8 +168,8 @@ class DOSBoxMenu {
             protected:
                 bool                    items_changed;
                 bool                    order_changed;
-                std::vector<item_handle_t> disp_list;
             public:
+                std::vector<item_handle_t> disp_list;
                 const std::vector<item_handle_t> &get_disp_list(void) const {
                     return disp_list;
                 }
@@ -288,12 +288,13 @@ class DOSBoxMenu {
                 void                    nsAppendMenu(void *nsMenu);
 #endif
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW
-            protected:
+			public:
                 SDL_Rect                screenBox;      /* absolute screen coords */
                 SDL_Rect                checkBox;       /* relative to screenbox */
                 SDL_Rect                textBox;        /* relative to screenbox */
                 SDL_Rect                shortBox;       /* relative to screenbox */
                 SDL_Rect                popupBox;       /* absolute screen coords */
+            protected:
                 bool                    boxInit;
                 bool                    itemHover;
                 bool                    needRedraw;
