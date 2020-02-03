@@ -7,7 +7,7 @@ WINDRES =	rc
 DBX_PATH	= ..
 
 CXXFLAGS =  -nologo -O2 -MT -EHsc -DNDEBUG -DWIN32 -D_FILE_OFFSET_BITS=64 -DC_OPENGL=1 -DC_DYNREC=1 -DC_MT32=1 -I. \
-			-D_WIN32_WINNT=0x0501 -Zm400 -GR \
+			-D_WIN32_WINNT=0x0500 -Zm400 -GR \
 			-Dmain=SDL_main -Isdl\include \
 			-Ilibpng -Izlib \
 			-I$(DBX_PATH) \
