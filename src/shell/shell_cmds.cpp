@@ -1880,7 +1880,7 @@ void DOS_Shell::CMD_ADDKEY(char * args){
 		}
 		if (!word[1]) {
 			const int shiftflag = 0x1000000;
-			const int map[256] = {
+			int map[256] = {
 				0,0,0,0,0,0,0,0,
 				KBD_backspace,
 				KBD_tab,

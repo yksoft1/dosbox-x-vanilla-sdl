@@ -21,7 +21,7 @@ int riff_std_read(void *a,void *b,size_t c) {
 	if (rs->trk_file_pointer < (int64_t)0) return -1;
 	rd = (int)read(rs->fd,b,c);
 
-	if (rd < 0) rs->trk_file_pointer = -1LL;
+	if (rd < 0) rs->trk_file_pointer = -1;
 	else rs->trk_file_pointer += rd;
 
 	return rd;
@@ -36,7 +36,7 @@ int riff_std_write(void *a,const void *b,size_t c) {
 	if (rs->trk_file_pointer < (int64_t)0) return -1;
 	rd = (int)write(rs->fd,b,c);
 
-	if (rd < 0) rs->trk_file_pointer = -1LL;
+	if (rd < 0) rs->trk_file_pointer = -1;
 	else rs->trk_file_pointer += rd;
 
 	return rd;
@@ -73,7 +73,7 @@ int riff_buf_write(void *a,const void *b,size_t c) {
 int64_t riff_buf_seek(void *a,int64_t offset) {
 	riff_stack *rs = (riff_stack*)a;
 	if (rs->buffer == NULL) return -1;
-	if (offset < 0LL) offset = 0LL;
+	if (offset < 0) offset = 0;
 	else if (offset > (int64_t)(rs->buflen)) offset = (int64_t)(rs->buflen);
 	rs->bufofs = (size_t)offset;
 	return rs->bufofs;
@@ -103,7 +103,7 @@ int riff_stack_assign_fd(riff_stack *s,int fd) {
 	s->read = riff_std_read;
 	s->seek = riff_std_seek;
 	s->write = riff_std_write;
-	s->trk_file_pointer = -1LL;
+	s->trk_file_pointer = -1;
 	return 1;
 }
 
@@ -120,7 +120,7 @@ int riff_stack_assign_buffer(riff_stack *s,void *buffer,size_t len) {
 	s->read = riff_buf_read;
 	s->seek = riff_buf_seek;
 	s->write = riff_buf_write;
-	s->trk_file_pointer = -1LL;
+	s->trk_file_pointer = -1;
 	return 1;
 }
 
@@ -250,8 +250,8 @@ int riff_stack_push(riff_stack *s,riff_chunk *c) {
 
 int64_t riff_stack_current_chunk_offset(riff_stack *s) {
 	int64_t o;
-	if (s == NULL) return -1LL;
-	if (s->top->read_offset > (s->top->data_length-8LL)) return -1LL;
+	if (s == NULL) return -1;
+	if (s->top->read_offset > (s->top->data_length-8)) return -1;
 	o = s->top->absolute_data_offset+s->top->read_offset;
 	return o;
 }
@@ -283,7 +283,7 @@ int riff_stack_streamwrite(riff_stack *s,riff_chunk *c,const void *buf,size_t le
 			return -1;
 
 		/* AVI chunks are limited to 2GB or less */
-		if ((c->write_offset+len) >= 0x80000000LL)
+		if ((c->write_offset+len) >= 0x80000000)
 			return -1;
 
 		/* assume the write will complete and setup pointers now */
@@ -346,7 +346,7 @@ int riff_stack_write(riff_stack *s,riff_chunk *c,const void *buf,size_t len) {
 			return -1;
 
 		/* AVI chunks are limited to 2GB or less */
-		if ((c->write_offset+len) >= 0x80000000LL)
+		if ((c->write_offset+len) >= 0x80000000)
 			return -1;
 
 		if (s->seek(s,c->absolute_data_offset+c->write_offset) !=
@@ -471,7 +471,7 @@ int riff_stack_readchunk(riff_stack *s,riff_chunk *pc,riff_chunk *c) {
 	c->wmode = 0;
 	c->read_offset = 0;
 	c->write_offset = 0;
-	c->absolute_data_offset = c->absolute_header_offset + 8LL;
+	c->absolute_data_offset = c->absolute_header_offset + 8;
 	c->list_fourcc = (riff_fourcc_t)(0UL);
 	c->fourcc = __le_u32(buf+0);
 	c->data_length = __le_u32(buf+4); /* <-- NOTE this is why AVI files have a 2GB limit */
@@ -546,10 +546,10 @@ void riff_stack_debug_print(FILE *fp,int level,riff_chunk *chunk) {
 		fprintf(fp,"'%s' ",tmp);
 	}
 	fprintf(fp,"hdr=%lld data=%lld len=%lu data-end=%lld",
-		(unsigned long long)(chunk->absolute_header_offset),
-		(unsigned long long)(chunk->absolute_data_offset),
+		(uint64_t)(chunk->absolute_header_offset),
+		(uint64_t)(chunk->absolute_data_offset),
 		(unsigned long)(chunk->data_length),
-		(unsigned long long)(chunk->absolute_data_offset+chunk->data_length));
+		(uint64_t)(chunk->absolute_data_offset+chunk->data_length));
 	fprintf(fp,"\n");
 }
 
@@ -557,7 +557,7 @@ void riff_stack_debug_chunk_dump(FILE *fp,riff_stack *riff,riff_chunk *chunk) {
 	unsigned char tmp[64];
 	int rd,i,col=0,o;
 
-	if (riff_stack_seek(riff,chunk,0LL) != 0LL)
+	if (riff_stack_seek(riff,chunk,0) != 0)
 		return;
 
 	rd = (int)riff_stack_read(riff,chunk,tmp,sizeof(tmp));
@@ -600,8 +600,8 @@ void riff_chunk_improvise(riff_chunk *c,uint64_t ofs,uint32_t size) {
 	c->data_length = size;
 	c->absolute_data_length = size;
 	c->list_fourcc = 0U;
-	c->read_offset = 0ULL;
-	c->write_offset = 0ULL;
+	c->read_offset = 0;
+	c->write_offset = 0;
 	c->wmode = 0;
 }
 
@@ -613,7 +613,7 @@ int riff_stack_prepare_for_writing(riff_stack *r,int wmode) {
 	if (r->current >= 0) return 0;
 
 	/* no state changes while reading an AVI chunk */
-	if (r->next_read != 0LL && !r->eof) return 0;
+	if (r->next_read != 0 && !r->eof) return 0;
 
 	r->wmode = wmode > 0 ? 1 : 0;
 	return 1;
@@ -646,7 +646,7 @@ int riff_stack_begin_new_chunk_here(riff_stack *s,riff_chunk *c) {
 	else
 		c->absolute_header_offset = s->next_write;
 
-	c->absolute_data_offset = (int64_t)(-1LL);
+	c->absolute_data_offset = (int64_t)(-1);
 	c->wmode = 1;
 	return 1;
 }
@@ -702,14 +702,14 @@ int riff_stack_header_sync_all(riff_stack *s) {
 int riff_stack_set_chunk_data_type(riff_chunk *c,riff_fourcc_t fcc) {
 	if (!c->wmode)
 		return 0;
-	if (c->write_offset != 0LL) {
+	if (c->write_offset != 0) {
 		fprintf(stderr,"BUG: riff_stack_set_chunk_data_type() caller attempted to set type after writing data!\n");
 		return 0;
 	}
 
 	c->fourcc = fcc;
 	c->list_fourcc = (riff_fourcc_t)0;
-	c->absolute_data_offset = c->absolute_header_offset + 8LL; /* <fourcc> <len> */
+	c->absolute_data_offset = c->absolute_header_offset + 8; /* <fourcc> <len> */
 	return 1;
 }
 
@@ -718,14 +718,14 @@ int riff_stack_set_chunk_data_type(riff_chunk *c,riff_fourcc_t fcc) {
 int riff_stack_set_chunk_list_type(riff_chunk *c,riff_fourcc_t list,riff_fourcc_t fcc) {
 	if (!c->wmode)
 		return 0;
-	if (c->write_offset != 0LL) {
+	if (c->write_offset != 0) {
 		fprintf(stderr,"BUG: riff_stack_set_chunk_list_type() caller attempted to set type after writing data!\n");
 		return 0;
 	}
 
 	c->fourcc = fcc;
 	c->list_fourcc = list;
-	c->absolute_data_offset = c->absolute_header_offset + 12LL; /* RIFF <len> <fourcc> */
+	c->absolute_data_offset = c->absolute_header_offset + 12; /* RIFF <len> <fourcc> */
 	return 1;
 }
 
@@ -759,7 +759,7 @@ void riff_stack_writing_sync(riff_stack *s) {
  * new chunks to continue on */
 int riff_stack_chunk_limit(riff_stack *s,int len) {
 	riff_chunk *lowest,*highest;
-	unsigned long long base;
+	uint64_t base;
 
 	if (s->current < 0) return 0;
 
@@ -771,11 +771,11 @@ int riff_stack_chunk_limit(riff_stack *s,int len) {
 	base = lowest->absolute_data_offset;
 
 	for (;highest >= lowest;highest--) {
-		signed long long rel = (signed long long)(highest->absolute_data_offset - base);
+		int64_t rel = (int64_t)(highest->absolute_data_offset - base);
 		/* subchunks should not be all over the place---sanity check! */
 		assert(rel >= 0);
 
-		if ((rel + highest->write_offset + len) >= 0x40000000LL) /* 1GB mark */
+		if ((rel + highest->write_offset + len) >= 0x40000000) /* 1GB mark */
 			return 1;
 	}
 

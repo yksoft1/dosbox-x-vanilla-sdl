@@ -196,9 +196,9 @@ using namespace std;
 
 
 //Private constants.
-	const Bit64u QCow2Image::copy_flag = 0x8000000000000000ULL;
-	const Bit64u QCow2Image::empty_mask = 0xFFFFFFFFFFFFFFFFULL;
-	const Bit64u QCow2Image::table_entry_mask = 0x00FFFFFFFFFFFFFFULL;
+	const Bit64u QCow2Image::copy_flag = 0x8000000000000000;
+	const Bit64u QCow2Image::empty_mask = 0xFFFFFFFFFFFFFFFF;
+	const Bit64u QCow2Image::table_entry_mask = 0x00FFFFFFFFFFFFFF;
 
 
 //Helper functions for endianness. QCOW format is big endian so we need different functions than those defined in mem.h.

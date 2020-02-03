@@ -160,12 +160,12 @@ void imageDiskMemory::init(diskGeo diskParams, bool isHardDrive, imageDisk* unde
 
 	//calculate the total number of sectors on the drive, and check for overflows
 	Bit64u absoluteSectors = (Bit64u)diskParams.cylcount * (Bit64u)diskParams.headscyl;
-	if (absoluteSectors > 0x100000000ULL) {
+	if (absoluteSectors > 0x100000000) {
 		LOG_MSG("Image size too large in imageDiskMemory constructor.\n");
 		return;
 	}
 	absoluteSectors *= (Bit64u)diskParams.secttrack;
-	if (absoluteSectors > 0x100000000ULL) {
+	if (absoluteSectors > 0x100000000) {
 		LOG_MSG("Image size too large in imageDiskMemory constructor.\n");
 		return;
 	}
@@ -177,7 +177,7 @@ void imageDiskMemory::init(diskGeo diskParams, bool isHardDrive, imageDisk* unde
 
 	//calculate total size of the drive in kilobytes, and check for overflow
 	Bit64u diskSizeK = ((Bit64u)diskParams.headscyl * (Bit64u)diskParams.cylcount * (Bit64u)diskParams.secttrack * (Bit64u)diskParams.bytespersect + (Bit64u)1023) / (Bit64u)1024;
-	if (diskSizeK >= 0x100000000ULL)
+	if (diskSizeK >= 0x100000000)
 	{
 		LOG_MSG("Image size too large in imageDiskMemory constructor.\n");
 		return;

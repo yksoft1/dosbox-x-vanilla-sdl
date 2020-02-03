@@ -107,9 +107,9 @@ struct PIT_Block {
         double c_delay;
 
         if (counter == 0)
-            c_delay = ((double)(1000ull * 0x10000)) / PIT_TICK_RATE;
+            c_delay = ((double)(1000 * 0x10000)) / PIT_TICK_RATE;
         else
-            c_delay = ((double)(1000ull * counter)) / PIT_TICK_RATE;
+            c_delay = ((double)(1000 * counter)) / PIT_TICK_RATE;
 
         start = (t - c_delay);
 	}

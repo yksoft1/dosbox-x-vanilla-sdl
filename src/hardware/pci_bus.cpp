@@ -28,7 +28,9 @@
 #include "callback.h"
 #include "regs.h"
 #include "../ints/int10.h"
+#if 0
 #include "voodoo.h"
+#endif
 #include "control.h"
 
 bool pcibus_enable = false;
@@ -154,7 +156,7 @@ public:
 	}
 };
 
-
+#if 0
 class PCI_SSTDevice:public PCI_Device {
 private:
 	static const Bit16u vendor=0x121a;	// 3dfx
@@ -263,6 +265,7 @@ public:
 		}
 	}
 };
+#endif
 
 static bool initialized = false;
 
@@ -401,6 +404,7 @@ void PCI_RemoveSVGAS3_Device(void) {
 	}
 }
 
+#if 0
 void PCI_AddSST_Device(Bitu type) {
 	if (!pcibus_enable) return;
 
@@ -432,6 +436,7 @@ void PCI_RemoveSST_Device(void) {
 		SST_PCI = NULL;
 	}
 }
+#endif
 
 PhysPt PCI_GetPModeInterface(void) {
 	if (!pcibus_enable) return 0;

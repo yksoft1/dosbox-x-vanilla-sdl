@@ -630,7 +630,7 @@ static inline bool Mixer_irq_important(void) {
 	return (ticksLocked || (CaptureState & (CAPTURE_WAVE|CAPTURE_VIDEO|CAPTURE_MULTITRACK_WAVE)));
 }
 
-unsigned long long mixer_sample_counter = 0;
+Bit64u mixer_sample_counter = 0;
 double mixer_start_pic_time = 0;
 
 /* once a millisecond, render 1ms of audio, up to whole samples */

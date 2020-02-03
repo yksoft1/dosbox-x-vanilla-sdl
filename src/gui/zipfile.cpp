@@ -44,11 +44,11 @@ bool ZIPFileEntry::rewind(void) {
 }
 
 off_t ZIPFileEntry::seek_file(off_t pos) {
-    if (file == NULL || file_offset == (off_t)0 || can_write) return (off_t)(-1LL);
+    if (file == NULL || file_offset == (off_t)0 || can_write) return (off_t)(-1);
     if (pos < (off_t)0) pos = (off_t)0;
     if (pos > file_length) pos = file_length;
     pos = file->seek_file(pos + file_offset) - file_offset;
-    if (pos < 0 || pos > file_length) return (off_t)(-1LL);
+    if (pos < 0 || pos > file_length) return (off_t)(-1);
     position = pos;
     return pos;
 }
@@ -301,7 +301,7 @@ int ZIPFile::open(const char *path,int mode) {
 }
 
 off_t ZIPFile::seek_file(off_t pos) {
-    if (file_fd < 0) return (off_t)(-1LL);
+    if (file_fd < 0) return (off_t)(-1);
     return ::lseek(file_fd,pos,SEEK_SET);
 }
 

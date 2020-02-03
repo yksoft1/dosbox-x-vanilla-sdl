@@ -134,8 +134,8 @@ bool				dbg_zero_on_ems_allocmem = true;
 
 /* the exact frequency of the NTSC color subcarrier ~3.579545454...MHz or 315/88 */
 /* see: http://en.wikipedia.org/wiki/Colorburst */
-#define				NTSC_COLOR_SUBCARRIER_NUM		(315000000ULL)
-#define				NTSC_COLOR_SUBCARRIER_DEN		(88ULL)
+#define				NTSC_COLOR_SUBCARRIER_NUM		(315000000)
+#define				NTSC_COLOR_SUBCARRIER_DEN		(88)
 
 /* PCI bus clock
  * Usual setting: 100MHz / 3 = 33.333MHz
@@ -247,42 +247,42 @@ void				INT10_Init(Section*);
 void				NE2K_Init(Section* sec);
 #endif
 
-signed long long time_to_clockdom(ClockDomain &src,double t) {
-	signed long long lt = (signed long long)t;
+Bit64s time_to_clockdom(ClockDomain &src,double t) {
+	Bit64s lt = (Bit64s)t;
 
-	lt *= (signed long long)src.freq;
-	lt /= (signed long long)src.freq_div;
+	lt *= (Bit64s)src.freq;
+	lt /= (Bit64s)src.freq_div;
 	return lt;
 }
 
-unsigned long long update_clockdom_from_now(ClockDomain &dst) {
-	signed long long s;
+Bit64u update_clockdom_from_now(ClockDomain &dst) {
+	Bit64s s;
 
 	/* PIC_Ticks (if I read the code correctly) is millisecond ticks, units of 1/1000 seconds.
 	 * PIC_TickIndexND() units of submillisecond time in units of 1/CPU_CycleMax. */
-	s  = (signed long long)PIC_Ticks * dst.freq;
-	s += ((signed long long)PIC_TickIndexND() * dst.freq) / (signed long long)CPU_CycleMax;
+	s  = (Bit64s)PIC_Ticks * dst.freq;
+	s += ((Bit64s)PIC_TickIndexND() * dst.freq) / (Bit64s)CPU_CycleMax;
 	/* convert down to frequency counts, not freq x 1000 */
-	s /= 1000LL * (signed long long)dst.freq_div;
+	s /= 1000 * (Bit64s)dst.freq_div;
 
 	/* guard against time going backwards slightly (as PIC_TickIndexND() will do sometimes by tiny amounts) */
-	if (dst.counter < (unsigned long long)s) dst.counter = (unsigned long long)s;
+	if (dst.counter < (Bit64u)s) dst.counter = (Bit64u)s;
 
 	return dst.counter;
 }
 
 /* for ISA components that rely on dividing down from OSC */
-unsigned long long update_ISA_OSC_clock() {
+Bit64u update_ISA_OSC_clock() {
 	return update_clockdom_from_now(clockdom_ISA_OSC);
 }
 
 /* for ISA components */
-unsigned long long update_ISA_BCLK_clock() {
+Bit64u update_ISA_BCLK_clock() {
 	return update_clockdom_from_now(clockdom_ISA_BCLK);
 }
 
 /* for PCI components */
-unsigned long long update_PCI_BCLK_clock() {
+Bit64u update_PCI_BCLK_clock() {
 	return update_clockdom_from_now(clockdom_PCI_BCLK);
 }
 
@@ -538,7 +538,7 @@ void notifyError(const std::string& message)
 /* TODO: move to utility header */
 #ifdef _MSC_VER /* Microsoft C++ does not have strtoull */
 # if _MSC_VER < 1800 /* But Visual Studio 2013 apparently does (http://www.vogons.org/viewtopic.php?f=41&t=31881&sid=49ff69ebc0459ed6523f5a250daa4d8c&start=400#p355770) */
-unsigned long long strtoull(const char *s,char **endptr,int base) {
+Bit64u strtoull(const char *s,char **endptr,int base) {
 	return _strtoui64(s,endptr,base); /* pfff... whatever Microsoft */
 }
 # endif
@@ -551,35 +551,35 @@ void parse_busclk_setting_str(ClockDomain *cd,const char *s) {
 	/* we're expecting an integer, a float, or an integer ratio */
 	d = strchr(s,'/');
 	if (d != NULL) { /* it has a slash therefore an integer ratio */
-		unsigned long long num,den;
+		Bit64u num,den;
 
 		while (*d == ' ' || *d == '/') d++;
 		num = strtoull(s,NULL,0);
 		den = strtoull(d,NULL,0);
-		if (num >= 1ULL && den >= 1ULL) cd->set_frequency(num,den);
+		if (num >= 1 && den >= 1) cd->set_frequency(num,den);
 	}
 	else {
 		d = strchr(s,'.');
 		if (d != NULL) { /* it has a dot, floating point */
 			double f = atof(s);
-			unsigned long long fi = (unsigned long long)floor((f*1000000)+0.5);
-			unsigned long long den = 1000000;
+			Bit64u fi = (Bit64u)floor((f*1000000)+0.5);
+			Bit64u den = 1000000;
 
-			while (den > 1ULL) {
-				if ((fi%10ULL) == 0) {
-					den /= 10ULL;
-					fi /= 10ULL;
+			while (den > 1) {
+				if ((fi%10) == 0) {
+					den /= 10;
+					fi /= 10;
 				}
 				else {
 					break;
 				}
 			}
 
-			if (fi >= 1ULL) cd->set_frequency(fi,den);
+			if (fi >= 1) cd->set_frequency(fi,den);
 		}
 		else {
-			unsigned long long f = strtoull(s,NULL,10);
-			if (f >= 1ULL) cd->set_frequency(f,1);
+			Bit64u f = strtoull(s,NULL,10);
+			if (f >= 1) cd->set_frequency(f,1);
 		}
 	}
 }
@@ -787,7 +787,7 @@ void DOSBOX_RealInit() {
     else if (isabclk == "std5")
         clockdom_ISA_BCLK.set_frequency(PIT_TICK_RATE_PC98_10MHZ * 2ul,1);          /* 5Mhz (PC-98) */
 	else if (isabclk == "std4.77")
-		clockdom_ISA_BCLK.set_frequency(clockdom_ISA_OSC.freq,clockdom_ISA_OSC.freq_div*3LL); /* 14.31818MHz / 3 = 4.77MHz */
+		clockdom_ISA_BCLK.set_frequency(clockdom_ISA_OSC.freq,clockdom_ISA_OSC.freq_div*3); /* 14.31818MHz / 3 = 4.77MHz */
 	else if (isabclk == "oc10")
 		clockdom_ISA_BCLK.set_frequency(10000000,1);	/* 10MHz */
 	else if (isabclk == "oc12")
@@ -812,8 +812,8 @@ void DOSBOX_RealInit() {
     LOG_MSG("%s BCLK: %.3fHz (%llu/%llu)",
         IS_PC98_ARCH ? "C-BUS" : "ISA",
         (double)clockdom_ISA_BCLK.freq / clockdom_ISA_BCLK.freq_div,
-        (unsigned long long)clockdom_ISA_BCLK.freq,
-        (unsigned long long)clockdom_ISA_BCLK.freq_div);
+        (Bit64u)clockdom_ISA_BCLK.freq,
+        (Bit64u)clockdom_ISA_BCLK.freq_div);
 		
 	clockdom_ISA_OSC.set_name("ISA OSC");
 	clockdom_ISA_BCLK.set_name("ISA BCLK");

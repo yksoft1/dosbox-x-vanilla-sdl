@@ -94,7 +94,9 @@ typedef enum PROCESS_DPI_AWARENESS {
 } PROCESS_DPI_AWARENESS;
 #endif
 
+#if 0
 #include "../src/libs/gui_tk/gui_tk.h"
+#endif
 
 #ifdef __WIN32__
 # include "callback.h"
@@ -445,9 +447,12 @@ enum PRIORITY_LEVELS {
 # define MAPPERFILE				"mapper-" VERSION ".map"
 #endif
 
+
 void                        GUI_ResetResize(bool);
+#if 0
 void						GUI_LoadFonts();
 void						GUI_Run(bool);
+#endif
 
 void						Restart(bool pressed);
 bool						RENDER_GetAspect(void);
@@ -1271,9 +1276,11 @@ static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) 
 	Bit16u windowHeight;
 
 retry:
+#if 0
     int Voodoo_OGL_GetWidth();
     int Voodoo_OGL_GetHeight();
     bool Voodoo_OGL_Active();
+#endif
 
 #if defined(C_SDL2)
     if (sdl.desktop.prevent_fullscreen) /* 3Dfx openGL do not allow resize */
@@ -1333,6 +1340,7 @@ retry:
 	}
 #endif
 
+#if 0
     if (Voodoo_OGL_GetWidth() != 0 && Voodoo_OGL_GetHeight() != 0 &&
         Voodoo_OGL_Active() && sdl.desktop.prevent_fullscreen) { /* 3Dfx openGL do not allow resize */
         sdl.clip.x=0;sdl.clip.y=0;
@@ -1340,6 +1348,9 @@ retry:
 		sdl.clip.h=windowHeight=(Bit16u)Voodoo_OGL_GetHeight();
     }
     else if (fixedWidth && fixedHeight) {
+#else
+	if (fixedWidth && fixedHeight) {
+#endif
         if (render.aspect) {
             double ratio_w=(double)fixedWidth/(sdl.draw.width*sdl.draw.scalex);
             double ratio_h=(double)fixedHeight/(sdl.draw.height*sdl.draw.scaley);
@@ -2477,7 +2488,7 @@ dosurface:
 			glGenTextures(1,&SDLDrawGenFontTexture);
 			if (SDLDrawGenFontTexture == (GLuint)(~0UL) || (err=glGetError()) != 0) {
 				LOG_MSG("WARNING: Unable to make font texture. id=%llu err=%lu",
-					(unsigned long long)SDLDrawGenFontTexture,(unsigned long)err);
+					(Bit64u)SDLDrawGenFontTexture,(unsigned long)err);
 			}
 			else {
 				LOG_MSG("font texture id=%lu will make %u x %u",
@@ -3999,8 +4010,9 @@ static void GUI_StartUp() {
 #endif
 
 	AddExitFunction(AddExitFunctionFuncPair(GUI_ShutDown));
+#if 0
 	GUI_LoadFonts();
-
+#endif
 	sdl.active=false;
 	sdl.updating=false;
 #if defined(C_SDL2)
@@ -4272,9 +4284,10 @@ static void GUI_StartUp() {
 #else
 	MAPPER_AddHandler(&PauseDOSBox, MK_pause, MMOD2, "pause", "Pause");
 #endif
+#if 0
 	MAPPER_AddHandler(&GUI_Run, MK_nothing, 0, "gui", "ShowGUI", &item);
 	item->set_text("Configuration GUI");
-
+#endif
 	MAPPER_AddHandler(&GUI_ResetResize, MK_nothing, 0, "resetsize", "ResetSize", &item);
 	item->set_text("Reset window size");
 
@@ -5853,10 +5866,12 @@ void GFX_Events() {
                             extern void MAPPER_Run(bool pressed);
                             MAPPER_Run(false);
                             break;
+#if 0
                         case ID_WIN_SYSMENU_CFG_GUI:
                             extern void GUI_Run(bool pressed);
                             GUI_Run(false);
                             break;
+#endif
 #endif							
 					}
 				default:
@@ -7027,7 +7042,9 @@ void ISAPNP_Cfg_Init();
 void FPU_Init();
 #endif
 void KEYBOARD_Init();
+#if 0
 void VOODOO_Init();
+#endif
 void MIXER_Init();
 void MIDI_Init();
 
@@ -7290,7 +7307,7 @@ bool dos_mouse_y_axis_reverse_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::
 }
 
 bool dos_mouse_sensitivity_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
-	GUI_Shortcut(2);
+	//GUI_Shortcut(2);
 	return true;
 }
 
@@ -7542,7 +7559,7 @@ bool vsync_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuit
 
 bool vsync_set_syncrate_menu_callback(DOSBoxMenu * const menu,DOSBoxMenu::item * const menuitem) {
 #if !defined(C_SDL2)
-	GUI_Shortcut(17);
+	//GUI_Shortcut(17);
 #endif
 	return true;
 }
@@ -7743,7 +7760,7 @@ void SetCyclesCount_mapper_shortcut_RunInternal(void) {
 
 	GFX_LosingFocus();
 
-	GUI_Shortcut(16);
+	//GUI_Shortcut(16);
 
 	void MAPPER_ReleaseAllKeys(void);
 	MAPPER_ReleaseAllKeys();
@@ -8165,8 +8182,10 @@ int main(int argc, char* argv[]) {
 		Reflect_Menu();
 # endif
 #endif
+#if 0
 		if (control->opt_startui)
 			GUI_Run(false);
+#endif
 
 		if (control->opt_editconf.length() != 0)
 			launcheditor(control->opt_editconf);
@@ -8471,7 +8490,9 @@ int main(int argc, char* argv[]) {
 		DEBUG_Init(); /* <- NTS: Relies on callback system */
 #endif
 		Init_VGABIOS();
+#if 0
 		VOODOO_Init();
+#endif
 		PROGRAMS_Init(); /* <- NTS: Does not init programs, it inits the callback used later when creating the .COM programs on drive Z: */
 		PCSPEAKER_Init();
 		TANDYSOUND_Init();
@@ -8926,7 +8947,9 @@ fresh_boot:
 
 	/* GUI font registry shutdown */
 #if !defined(C_SDL2)
+#if 0
 	GUI::Font::registry_freeall();
+#endif
 #endif
 	DOS_ShutdownDrives();
 	DOS_ShutdownFiles();

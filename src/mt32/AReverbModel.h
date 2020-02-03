@@ -21,14 +21,14 @@
 namespace MT32Emu {
 
 struct AReverbSettings {
-	const Bit32u * const allpassSizes;
-	const Bit32u * const combSizes;
-	const Bit32u * const outLPositions;
-	const Bit32u * const outRPositions;
-	const Bit32u * const filterFactor;
-	const Bit32u * const decayTimes;
-	const Bit32u * const wetLevels;
-	const Bit32u lpfAmp;
+	Bit32u * allpassSizes;
+	Bit32u * combSizes;
+	Bit32u * outLPositions;
+	Bit32u * outRPositions;
+	Bit32u * filterFactor;
+	Bit32u * decayTimes;
+	Bit32u * wetLevels;
+	Bit32u lpfAmp;
 };
 
 class RingBuffer {

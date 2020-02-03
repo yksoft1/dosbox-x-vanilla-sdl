@@ -801,10 +801,10 @@ Module::Module( Section* configuration ) : Module_base(configuration) {
 
 	mixerChan = mixerObject.Install(OPL_CallBack,rate,"FM");
 	mixerChan->SetScale( 2.0 );
-	if (oplemu == "fast") {
+	/*if (oplemu == "fast") {
 		handler = new DBOPL::Handler();
 	}
-	else if (oplemu == "compat") {
+	else*/ if (oplemu == "compat") {
 		if (oplmode == OPL_opl2) {
 			handler = new OPL2::Handler();
 		}
@@ -814,7 +814,7 @@ Module::Module( Section* configuration ) : Module_base(configuration) {
 	} else if (oplemu == "nuked") {
 		handler = new NukedOPL::Handler();
 	} else {
-		handler = new DBOPL::Handler();
+		handler = new OPL3::Handler();
 	}
 	handler->Init( rate );
 	bool single = false;

@@ -298,12 +298,12 @@ void dosbox_integration_trigger_read() {
             break;
 
         case 0x434D56: { /* read user mouse cursor position (normalized for Windows 3.x) */
-            signed long long x = ((signed long long)user_cursor_x << 16LL) / (signed long long)(user_cursor_sw-1);
-            signed long long y = ((signed long long)user_cursor_y << 16LL) / (signed long long)(user_cursor_sh-1);
-            if (x < 0x0000LL) x = 0x0000LL;
-            if (x > 0xFFFFLL) x = 0xFFFFLL;
-            if (y < 0x0000LL) y = 0x0000LL;
-            if (y > 0xFFFFLL) y = 0xFFFFLL;
+            Bit64s x = ((Bit64s)user_cursor_x << 16) / (Bit64s)(user_cursor_sw-1);
+            Bit64s y = ((Bit64s)user_cursor_y << 16) / (Bit64s)(user_cursor_sh-1);
+            if (x < 0x0000) x = 0x0000;
+            if (x > 0xFFFF) x = 0xFFFF;
+            if (y < 0x0000) y = 0x0000;
+            if (y > 0xFFFF) y = 0xFFFF;
             dosbox_int_register = ((unsigned int)y << 16UL) | (unsigned int)x;
             } break;
 

@@ -614,6 +614,7 @@ static void MOUNT_ProgramStart(Program * * make) {
 	*make=new MOUNT;
 }
 
+#if 0
 void GUI_Run(bool pressed);
 
 class SHOWGUI : public Program {
@@ -626,6 +627,7 @@ public:
 static void SHOWGUI_ProgramStart(Program * * make) {
 	*make=new SHOWGUI;
 }
+#endif
 
 extern bool custom_bios;
 extern Bit32u floppytype;
@@ -2010,8 +2012,8 @@ restart_int:
 						printHelp();
 						return;
 					}
-					size = c*h*s*512LL;
-					if((size < 3*1024*1024) || (size > 0x1FFFFFFFFLL)) {
+					size = c*h*s*512;
+					if((size < 3*1024*1024) || (size > 0x1FFFFFFFF)) {
 						// user picked geometry resulting in wrong size
 						printHelp();
 						return;
@@ -2021,10 +2023,10 @@ restart_int:
 				// got -size
 				std::istringstream stream(isize);
 				stream >> size;
-				size *= 1024*1024LL; // size in megabytes
+				size *= 1024*1024; // size in megabytes
 				// low limit: 3 megs, high limit: 2 gigs
 				// Int13 limit would be 8 gigs
-				if((size < 3*1024*1024LL) || (size > 0x1FFFFFFFFLL)) {
+				if((size < 3*1024*1024) || (size > 0x1FFFFFFFF)) {
 					// wrong size
 					printHelp();
 					return;
@@ -2052,9 +2054,9 @@ restart_int:
 			t2 = "-bat";
 		}
 
-		size = c*h*s*512LL;
+		size = c*h*s*512;
 		Bits bootsect_pos = 0; // offset of the boot sector in clusters
-		if(cmd->FindExist("-nofs",true) || (size>(2048*1024*1024LL))) {
+		if(cmd->FindExist("-nofs",true) || (size>(2048*1024*1024))) {
 			bootsect_pos = -1;
 		}
 
@@ -4873,7 +4875,7 @@ void DOS_SetupPrograms(void) {
         PROGRAMS_MakeFile("MOUSE.COM", MOUSE_ProgramStart);
 
 	PROGRAMS_MakeFile("A20GATE.COM",A20GATE_ProgramStart);
-	PROGRAMS_MakeFile("SHOWGUI.COM",SHOWGUI_ProgramStart);
+	//PROGRAMS_MakeFile("SHOWGUI.COM",SHOWGUI_ProgramStart);
 	PROGRAMS_MakeFile("NMITEST.COM",NMITEST_ProgramStart);
     PROGRAMS_MakeFile("RE-DOS.COM",REDOS_ProgramStart);
 

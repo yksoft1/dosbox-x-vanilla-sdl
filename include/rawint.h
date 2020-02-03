@@ -135,21 +135,21 @@ static inline int32_t __be_s32(void *p) {
 
 static inline uint64_t __be_u64(void *p) {
 	const unsigned char *c = (const unsigned char *)p;
-	return	(((uint64_t)c[0]) << 56ULL) |
-		(((uint64_t)c[1]) << 48ULL) |
-		(((uint64_t)c[2]) << 40ULL) |
-		(((uint64_t)c[3]) << 32ULL) |
-		(((uint64_t)c[4]) << 24ULL) |
-		(((uint64_t)c[5]) << 16ULL) |
-		(((uint64_t)c[6]) <<  8ULL) |
-		(((uint64_t)c[7]) <<  0ULL);
+	return	(((uint64_t)c[0]) << 56) |
+		(((uint64_t)c[1]) << 48) |
+		(((uint64_t)c[2]) << 40) |
+		(((uint64_t)c[3]) << 32) |
+		(((uint64_t)c[4]) << 24) |
+		(((uint64_t)c[5]) << 16) |
+		(((uint64_t)c[6]) <<  8) |
+		(((uint64_t)c[7]) <<  0);
 }
 
 static inline void __w_be_u64(const void *p,const uint64_t val) {
-	((uint8_t*)(p))[0] = val >> 56ULL;
-	((uint8_t*)(p))[1] = val >> 48ULL;
-	((uint8_t*)(p))[2] = val >> 40ULL;
-	((uint8_t*)(p))[3] = val >> 32ULL;
+	((uint8_t*)(p))[0] = val >> 56;
+	((uint8_t*)(p))[1] = val >> 48;
+	((uint8_t*)(p))[2] = val >> 40;
+	((uint8_t*)(p))[3] = val >> 32;
 	((uint8_t*)(p))[4] = val >> 24UL;
 	((uint8_t*)(p))[5] = val >> 16UL;
 	((uint8_t*)(p))[6] = val >> 8UL;

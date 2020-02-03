@@ -121,7 +121,7 @@ typedef union {
 #pragma pack(pop)
 
 #define FPU_Reg_64_exponent_bias	(1023)
-static const uint64_t FPU_Reg_64_implied_bit = ((uint64_t)1ULL << (uint64_t)52ULL);
+static const uint64_t FPU_Reg_64_implied_bit = ((uint64_t)1 << (uint64_t)52);
 
 #pragma pack(push,1)
 typedef union {

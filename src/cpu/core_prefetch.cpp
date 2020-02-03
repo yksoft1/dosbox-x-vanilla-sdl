@@ -135,42 +135,88 @@ static Bitu pq_reload;
 static double pq_next_dbg=0;
 static unsigned int pq_hit=0,pq_miss=0;
 
-/* MUST BE POWER OF 2 */
-#define prefetch_unit       (4ul)
-
-//#define PREFETCH_DEBUG
-
-#define PREFETCH_CORE
-
-/* WARNING: This code needs MORE TESTING. So far, it seems to work fine. */
-
-template <class T> static inline bool prefetch_hit(const Bitu w) {
-    return pq_valid && (w >= pq_start && (w + sizeof(T)) <= pq_fill);
+static Bit8u Fetchb() {
+	Bit8u temp;
+	if (pq_valid && (core.cseip>=pq_start) && (core.cseip<pq_start+CPU_PrefetchQueueSize)) {
+		temp=prefetch_buffer[core.cseip-pq_start];
+		if ((core.cseip+1>=pq_start+CPU_PrefetchQueueSize-4) &&
+			(core.cseip+1<pq_start+CPU_PrefetchQueueSize)) {
+			Bitu remaining_bytes=pq_start+CPU_PrefetchQueueSize-(core.cseip+1);
+			for (Bitu i=0; i<remaining_bytes; i++) prefetch_buffer[i]=prefetch_buffer[core.cseip+1-pq_start+i];
+			for (Bitu i=remaining_bytes; i<CPU_PrefetchQueueSize; i++) prefetch_buffer[i]=LoadMb(core.cseip+1+i);
+			pq_start=core.cseip+1;
+			pq_valid=true;
+		}
+	} else {
+		for (Bitu i=0; i<CPU_PrefetchQueueSize; i++) prefetch_buffer[i]=LoadMb(core.cseip+i);
+		pq_start=core.cseip;
+		pq_valid=true;
+		temp=prefetch_buffer[0];
+	}
+/*	if (temp!=LoadMb(core.cseip)) {
+		LOG_MSG("prefetch queue content!=memory at %x:%x",SegValue(cs),reg_eip);
+	} */
+	core.cseip+=1;
+	return temp;
 }
 
-template <class T> static inline T prefetch_read(const Bitu w);
-
-template <class T> static inline void prefetch_read_check(const Bitu w) {
-#ifdef PREFETCH_DEBUG
-    if (!pq_valid) E_Exit("CPU: Prefetch read when not valid!");
-    if (w < pq_start) E_Exit("CPU: Prefetch read below prefetch base");
-    if ((w+sizeof(T)) > pq_fill) E_Exit("CPU: Prefetch read beyond prefetch fill");
-#endif
+static Bit16u Fetchw() {
+	Bit16u temp;
+	if (pq_valid && (core.cseip>=pq_start) && (core.cseip+2<pq_start+CPU_PrefetchQueueSize)) {
+		temp=prefetch_buffer[core.cseip-pq_start]|
+			(prefetch_buffer[core.cseip-pq_start+1]<<8);
+		if ((core.cseip+2>=pq_start+CPU_PrefetchQueueSize-4) &&
+			(core.cseip+2<pq_start+CPU_PrefetchQueueSize)) {
+			Bitu remaining_bytes=pq_start+CPU_PrefetchQueueSize-(core.cseip+2);
+			for (Bitu i=0; i<remaining_bytes; i++) prefetch_buffer[i]=prefetch_buffer[core.cseip+2-pq_start+i];
+			for (Bitu i=remaining_bytes; i<CPU_PrefetchQueueSize; i++) prefetch_buffer[i]=LoadMb(core.cseip+2+i);
+			pq_start=core.cseip+2;
+			pq_valid=true;
+		}
+	} else {
+		for (Bitu i=0; i<CPU_PrefetchQueueSize; i++) prefetch_buffer[i]=LoadMb(core.cseip+i);
+		pq_start=core.cseip;
+		pq_valid=true;
+		temp=prefetch_buffer[0] | (prefetch_buffer[1]<<8);
+	}
+/*	if (temp!=LoadMw(core.cseip)) {
+		LOG_MSG("prefetch queue content!=memory at %x:%x",SegValue(cs),reg_eip);
+	} */
+	core.cseip+=2;
+	return temp;
 }
 
-template <> uint8_t prefetch_read<uint8_t>(const Bitu w) {
-    prefetch_read_check<uint8_t>(w);
-    return prefetch_buffer[w - pq_start];
+static Bit32u Fetchd() {
+	Bit32u temp;
+	if (pq_valid && (core.cseip>=pq_start) && (core.cseip+4<pq_start+CPU_PrefetchQueueSize)) {
+		temp=prefetch_buffer[core.cseip-pq_start]|
+			(prefetch_buffer[core.cseip-pq_start+1]<<8)|
+			(prefetch_buffer[core.cseip-pq_start+2]<<16)|
+			(prefetch_buffer[core.cseip-pq_start+3]<<24);
+		if ((core.cseip+4>=pq_start+CPU_PrefetchQueueSize-4) &&
+			(core.cseip+4<pq_start+CPU_PrefetchQueueSize)) {
+			Bitu remaining_bytes=pq_start+CPU_PrefetchQueueSize-(core.cseip+4);
+			for (Bitu i=0; i<remaining_bytes; i++) prefetch_buffer[i]=prefetch_buffer[core.cseip+4-pq_start+i];
+			for (Bitu i=remaining_bytes; i<CPU_PrefetchQueueSize; i++) prefetch_buffer[i]=LoadMb(core.cseip+4+i);
+			pq_start=core.cseip+4;
+			pq_valid=true;
+		}
+	} else {
+		for (Bitu i=0; i<CPU_PrefetchQueueSize; i++) prefetch_buffer[i]=LoadMb(core.cseip+i);
+		pq_start=core.cseip;
+		pq_valid=true;
+		temp=prefetch_buffer[0] | (prefetch_buffer[1]<<8) |
+			(prefetch_buffer[2]<<16) | (prefetch_buffer[3]<<24);
+	}
+/*	if (temp!=LoadMd(core.cseip)) {
+		LOG_MSG("prefetch queue content!=memory at %x:%x",SegValue(cs),reg_eip);
+	} */
+	core.cseip+=4;
+	return temp;
 }
 
-template <> uint16_t prefetch_read<uint16_t>(const Bitu w) {
-    prefetch_read_check<uint16_t>(w);
-    return host_readw(&prefetch_buffer[w - pq_start]);
-}
-
-template <> uint32_t prefetch_read<uint32_t>(const Bitu w) {
-    prefetch_read_check<uint32_t>(w);
-    return host_readd(&prefetch_buffer[w - pq_start]);
+static INLINE void FetchDiscardb() {
+	core.cseip += 1;
 }
 
 static inline void prefetch_init(const Bitu start) {
@@ -179,13 +225,17 @@ static inline void prefetch_init(const Bitu start) {
     pq_valid = true;
 }
 
+static inline bool prefetch_hitb(const Bitu w) {
+    return pq_valid && (w >= pq_start && (w + 1) <= pq_fill);
+}
+
+uint8_t prefetch_readb(const Bitu w) {
+    return prefetch_buffer[w - pq_start];
+}
+
 static inline void prefetch_filldword(void) {
     host_writed(&prefetch_buffer[pq_fill - pq_start],LoadMd(pq_fill));
     pq_fill += 4/*DWORD*/;
-}
-
-static inline void prefetch_refill(const Bitu stop) {
-    while (pq_fill < stop) prefetch_filldword();
 }
 
 static inline void prefetch_lazyflush(const Bitu w) {
@@ -200,118 +250,40 @@ static inline void prefetch_lazyflush(const Bitu w) {
         pq_start += 4;
 
         prefetch_filldword();
-	}
-
 #ifdef PREFETCH_DEBUG
-		assert(pq_fill >= pq_start);
-		assert((pq_fill - pq_start) <= pq_limit);
-#endif
-}
-
-/* this implementation follows what I think the Intel 80386/80486 is more likely
- * to do when fetching from prefetch and refilling prefetch --J.C. */
-template <class T> static inline T Fetch(void) {
-    T temp;
-
-    if (prefetch_hit<T>(core.cseip)) {
-        /* as long as prefetch hits are occurring, keep loading more! */
-        prefetch_lazyflush(core.cseip+sizeof(T));
-		if ((pq_fill - pq_start) < pq_limit)
-            prefetch_filldword();
-
-		if (sizeof(T) >= prefetch_unit) {
-			if ((pq_fill - pq_start) < pq_limit)
-                prefetch_filldword();
-        }
-        else {
-            prefetch_lazyflush(core.cseip + 4 + sizeof(T));
-        }
-
-        temp = prefetch_read<T>(core.cseip);
-#ifdef PREFETCH_DEBUG
-        pq_hit++;
+        assert(pq_start+pq_limit == pq_fill);
 #endif
     }
-    else {
-        prefetch_init(core.cseip & (~0x3)); /* fill prefetch starting on DWORD boundary */
-        prefetch_refill(pq_start + pq_reload); /* perhaps in the time it takes for a prefetch miss the 80486 can load two DWORDs */
-        temp = prefetch_read<T>(core.cseip);
-#ifdef PREFETCH_DEBUG
-        pq_miss++;
-#endif
-    }
-
-#ifdef PREFETCH_DEBUG
-    if (pq_valid) {
-        assert(core.cseip >= pq_start && (core.cseip+sizeof(T)) <= pq_fill);
-        assert(pq_fill >= pq_start && (pq_fill - pq_start) <= pq_limit);
-    }
-#endif
-
-    core.cseip += sizeof(T);
-    return temp;
 }
 
-template <class T> static inline void FetchDiscard(void) {
-	core.cseip += sizeof(T);
+static inline void prefetch_refill(const Bitu stop) {
+    while (pq_fill < stop) prefetch_filldword();
 }
 
-template <class T> static inline T FetchPeek(void) {
-	T temp;
+static INLINE Bit8u FetchPeekb() {
+	Bit8u temp;
 
-	if (prefetch_hit<T>(core.cseip)) {
+	if (prefetch_hitb(core.cseip)) {
 		/* as long as prefetch hits are occurring, keep loading more! */
-		prefetch_lazyflush(core.cseip+sizeof(T));
+		prefetch_lazyflush(core.cseip+1);
 		if ((pq_fill - pq_start) < pq_limit)
 			prefetch_filldword();
 
-		if (sizeof(T) >= prefetch_unit) {
-			if ((pq_fill - pq_start) < pq_limit)
-				prefetch_filldword();
-		}
-
-		temp = prefetch_read<T>(core.cseip);
+		temp = prefetch_readb(core.cseip);
 #ifdef PREFETCH_DEBUG
 		pq_hit++;
 #endif
 	}
 	else {
-		prefetch_init(core.cseip & (~(prefetch_unit-1ul))); /* fill prefetch starting on DWORD boundary */
+		prefetch_init(core.cseip & (~0x3)); /* fill prefetch starting on DWORD boundary */
 		prefetch_refill(pq_start + pq_reload); /* perhaps in the time it takes for a prefetch miss the 80486 can load two DWORDs */
-		temp = prefetch_read<T>(core.cseip);
+		temp = prefetch_readb(core.cseip);
 #ifdef PREFETCH_DEBUG
 		pq_miss++;
 #endif
 	}
 
-#ifdef PREFETCH_DEBUG
-	if (pq_valid) {
-		assert(core.cseip >= pq_start && (core.cseip+sizeof(T)) <= pq_fill);
-		assert(pq_fill >= pq_start && (pq_fill - pq_start) <= pq_limit);
-	}
-#endif
-
 	return temp;
-}
-
-static INLINE void FetchDiscardb() {
-	FetchDiscard<uint8_t>();
-}
-
-static INLINE Bit8u FetchPeekb() {
-	return FetchPeek<uint8_t>();
-}
-
-static Bit8u Fetchb() {
-	return Fetch<uint8_t>();
-}
-
-static Bit16u Fetchw() {
-	return Fetch<uint16_t>();
-}
-
-static Bit32u Fetchd() {
-	return Fetch<uint32_t>();
 }
 
 #define Push_16 CPU_Push16

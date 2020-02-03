@@ -2293,7 +2293,7 @@ void IDE_EmuINT13DiskReadByBIOS_LBA(unsigned char disk,uint64_t lba) {
 	Bitu idx,ms;
 
 	if (disk < 0x80) return;
-	if (lba >= (1ULL << 28ULL)) return; /* this code does not support LBA48 */
+	if (lba >= (1 << 28)) return; /* this code does not support LBA48 */
 
 	for (idx=0;idx < MAX_IDE_CONTROLLERS;idx++) {
 		ide = GetIDEController(idx);
@@ -3352,8 +3352,8 @@ void IDEATADevice::writecommand(uint8_t cmd) {
 
 			n = ((drivehead&0xF)<<24)+(lba[2]<<16)+(lba[1]<<8)+lba[0];
 			LOG_MSG("IDE ATA command %02x dh=0x%02x count=0x%02x lba=%07llx/%07llx\n",cmd,
-				drivehead,count,(unsigned long long)n,
-				(unsigned long long)(phys_sects * phys_cyls * phys_heads));
+				drivehead,count,(Bit64u)n,
+				(Bit64u)(phys_sects * phys_cyls * phys_heads));
 		}
 		else {
 			LOG_MSG("IDE ATA command %02x dh=0x%02x count=0x%02x chs=%02x/%02x/%02x\n",cmd,

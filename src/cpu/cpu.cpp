@@ -2752,7 +2752,7 @@ void CPU_SyncCycleMaxToProp(void) {
  	Section_prop * secprop = static_cast<Section_prop *>(sec);
     Prop_multival* p = secprop->Get_multival("cycles");
     Property* prop = p->GetSection()->Get_prop("type");
-    sprintf(tmp,"%llu",(unsigned long long)CPU_CycleMax);
+    sprintf(tmp,"%llu",(Bit64u)CPU_CycleMax);
     prop->SetValue(tmp);
 }
 

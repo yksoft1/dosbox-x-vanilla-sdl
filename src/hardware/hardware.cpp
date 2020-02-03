@@ -309,7 +309,7 @@ Bitu CaptureState = 0;
 #define MIDI_BUF 4*1024
 #define AVI_HEADER_SIZE	500
 
-static struct {
+static struct t_capture {
 	struct {
 		riff_wav_writer *writer;
 		Bit16s buf[WAVE_BUF][2];
@@ -317,7 +317,7 @@ static struct {
 		Bit32u length;
 		Bit32u freq;
 	} wave;
-    struct {
+    struct s_multitrack_wave {
         avi_writer  *writer;
 		Bitu		audiorate;
         std::map<std::string,size_t> name_to_stream_index;

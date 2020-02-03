@@ -252,7 +252,7 @@ Bit8u imageDisk::Read_AbsoluteSector(Bit32u sectnum, void * data) {
 	res = ftello64(diskimg);
 	if (res != bytenum) {
 		LOG_MSG("fseek() failed in Read_AbsoluteSector for sector %lu. Want=%llu Got=%llu\n",
-			(unsigned long)sectnum,(unsigned long long)bytenum,(unsigned long long)res);
+			(unsigned long)sectnum,(Bit64u)bytenum,(Bit64u)res);
 		return 0x05;
 	}
 

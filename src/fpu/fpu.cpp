@@ -825,15 +825,15 @@ void FPU_Selftest_64() {
 	};
 	static const struct ftest test[] = {
 		// name			// val		// exponent (no bias)		// sign		// 52-bit mantissa without 52rd implied bit (max 2^52-1 = 0x1FFFFFFFFFFFFF)
-		{"0.0d",		0.0,		-FPU_Reg_64_exponent_bias,	0,		0x0000000000000ULL},	// IEEE standard way to encode zero
-		{"1.0d",		1.0,		0,				0,		0x0000000000000ULL},	// 1.0 x 2^0 = 1.0 x 1 = 1.0
-		{"2.0d",		2.0,		1,				0,		0x0000000000000ULL},	// 1.0 x 2^1 = 1.0 x 2 = 2.0
-		{"3.0d",		3.0,		1,				0,		0x8000000000000ULL},	// 1.5 x 2^1 = 1.5 x 2 = 3.0
-		{"4.0d",		4.0,		2,				0,		0x0000000000000ULL},	// 1.0 x 2^2 = 1.0 x 4 = 4.0
-		{"-1.0d",		-1.0,		0,				1,		0x0000000000000ULL},	// 1.0 x 2^0 = 1.0 x 1 = 1.0
-		{"-2.0d",		-2.0,		1,				1,		0x0000000000000ULL},	// 1.0 x 2^1 = 1.0 x 2 = 2.0
-		{"-3.0d",		-3.0,		1,				1,		0x8000000000000ULL},	// 1.5 x 2^1 = 1.5 x 2 = 3.0
-		{"-4.0d",		-4.0,		2,				1,		0x0000000000000ULL}	// 1.0 x 2^2 = 1.0 x 4 = 4.0
+		{"0.0d",		0.0,		-FPU_Reg_64_exponent_bias,	0,		0x0000000000000},	// IEEE standard way to encode zero
+		{"1.0d",		1.0,		0,				0,		0x0000000000000},	// 1.0 x 2^0 = 1.0 x 1 = 1.0
+		{"2.0d",		2.0,		1,				0,		0x0000000000000},	// 1.0 x 2^1 = 1.0 x 2 = 2.0
+		{"3.0d",		3.0,		1,				0,		0x8000000000000},	// 1.5 x 2^1 = 1.5 x 2 = 3.0
+		{"4.0d",		4.0,		2,				0,		0x0000000000000},	// 1.0 x 2^2 = 1.0 x 4 = 4.0
+		{"-1.0d",		-1.0,		0,				1,		0x0000000000000},	// 1.0 x 2^0 = 1.0 x 1 = 1.0
+		{"-2.0d",		-2.0,		1,				1,		0x0000000000000},	// 1.0 x 2^1 = 1.0 x 2 = 2.0
+		{"-3.0d",		-3.0,		1,				1,		0x8000000000000},	// 1.5 x 2^1 = 1.5 x 2 = 3.0
+		{"-4.0d",		-4.0,		2,				1,		0x0000000000000}	// 1.0 x 2^2 = 1.0 x 4 = 4.0
 	};
 	static const size_t tests = sizeof(test) / sizeof(test[0]);
 	FPU_Reg_64 ft;
@@ -848,17 +848,17 @@ void FPU_Selftest_64() {
 	}
 
 	// make sure bitfields line up
-	ft.raw = 1ULL << 63ULL;
+	ft.raw = 1 << 63;
 	if (ft.f.sign != 1 || ft.f.exponent != 0 || ft.f.mantissa != 0) {
 		LOG(LOG_FPU,LOG_WARN)("FPU64 bitfield test #1 failed");
 		return;
 	}
-	ft.raw = 1ULL << 52ULL;
+	ft.raw = 1 << 52;
 	if (ft.f.sign != 0 || ft.f.exponent != 1 || ft.f.mantissa != 0) {
 		LOG(LOG_FPU,LOG_WARN)("FPU64 bitfield test #2 failed");
 		return;
 	}
-	ft.raw = 1ULL << 0ULL;
+	ft.raw = 1 << 0;
 	if (ft.f.sign != 0 || ft.f.exponent != 0 || ft.f.mantissa != 1) {
 		LOG(LOG_FPU,LOG_WARN)("FPU64 bitfield test #3 failed");
 		return;
@@ -873,8 +873,8 @@ void FPU_Selftest_64() {
 				test[t].val,
 				test[t].sign,
 				(int)test[t].exponent,
-				(unsigned long long)test[t].mantissa,
-				(unsigned long long)test[t].mantissa);
+				(Bit64u)test[t].mantissa,
+				(Bit64u)test[t].mantissa);
 			goto dump;
 		}
 	}
@@ -886,8 +886,8 @@ dump:
 		ft.v,
 		(int)ft.f.sign,
 		(int)ft.f.exponent - FPU_Reg_64_exponent_bias,
-		(unsigned long long)ft.f.mantissa,
-		(unsigned long long)ft.f.mantissa);
+		(Bit64u)ft.f.mantissa,
+		(Bit64u)ft.f.mantissa);
 }
 
 // test routine at startup to make sure our typedef struct bitfields
@@ -911,15 +911,15 @@ void FPU_Selftest_80() {
 	};
 	static const struct ftest test[] = {
 		// name			// val		// exponent (no bias)		// sign		// 64-bit mantissa WITH whole integer bit #63
-		{"0.0L",		0.0,		-FPU_Reg_80_exponent_bias,	0,		0x0000000000000000ULL},	// IEEE standard way to encode zero
-		{"1.0L",		1.0,		0,				0,		0x8000000000000000ULL},	// 1.0 x 2^0 = 1.0 x 1 = 1.0
-		{"2.0L",		2.0,		1,				0,		0x8000000000000000ULL},	// 1.0 x 2^1 = 1.0 x 2 = 2.0
-		{"3.0L",		3.0,		1,				0,		0xC000000000000000ULL},	// 1.5 x 2^1 = 1.5 x 2 = 3.0
-		{"4.0L",		4.0,		2,				0,		0x8000000000000000ULL},	// 1.0 x 2^2 = 1.0 x 4 = 4.0
-		{"-1.0L",		-1.0,		0,				1,		0x8000000000000000ULL},	// 1.0 x 2^0 = 1.0 x 1 = 1.0
-		{"-2.0L",		-2.0,		1,				1,		0x8000000000000000ULL},	// 1.0 x 2^1 = 1.0 x 2 = 2.0
-		{"-3.0L",		-3.0,		1,				1,		0xC000000000000000ULL},	// 1.5 x 2^1 = 1.5 x 2 = 3.0
-		{"-4.0L",		-4.0,		2,				1,		0x8000000000000000ULL}	// 1.0 x 2^2 = 1.0 x 4 = 4.0
+		{"0.0L",		0.0,		-FPU_Reg_80_exponent_bias,	0,		0x0000000000000000},	// IEEE standard way to encode zero
+		{"1.0L",		1.0,		0,				0,		0x8000000000000000},	// 1.0 x 2^0 = 1.0 x 1 = 1.0
+		{"2.0L",		2.0,		1,				0,		0x8000000000000000},	// 1.0 x 2^1 = 1.0 x 2 = 2.0
+		{"3.0L",		3.0,		1,				0,		0xC000000000000000},	// 1.5 x 2^1 = 1.5 x 2 = 3.0
+		{"4.0L",		4.0,		2,				0,		0x8000000000000000},	// 1.0 x 2^2 = 1.0 x 4 = 4.0
+		{"-1.0L",		-1.0,		0,				1,		0x8000000000000000},	// 1.0 x 2^0 = 1.0 x 1 = 1.0
+		{"-2.0L",		-2.0,		1,				1,		0x8000000000000000},	// 1.0 x 2^1 = 1.0 x 2 = 2.0
+		{"-3.0L",		-3.0,		1,				1,		0xC000000000000000},	// 1.5 x 2^1 = 1.5 x 2 = 3.0
+		{"-4.0L",		-4.0,		2,				1,		0x8000000000000000}	// 1.0 x 2^2 = 1.0 x 4 = 4.0
 	};
 	static const size_t tests = sizeof(test) / sizeof(test[0]);
 #endif
@@ -946,19 +946,19 @@ void FPU_Selftest_80() {
 	ft.raw.l = 0;
 	ft.raw.h = 1U << 15U;
 	if (ft.f.sign != 1 || ft.f.exponent != 0 || ft.f.mantissa != 0) {
-		LOG(LOG_FPU,LOG_WARN)("FPU80 bitfield test #1 failed. h=%04x l=%016llx",(unsigned int)ft.raw.h,(unsigned long long)ft.raw.l);
+		LOG(LOG_FPU,LOG_WARN)("FPU80 bitfield test #1 failed. h=%04x l=%016llx",(unsigned int)ft.raw.h,(Bit64u)ft.raw.l);
 		return;
 	}
 	ft.raw.l = 0;
 	ft.raw.h = 1U << 0U;
 	if (ft.f.sign != 0 || ft.f.exponent != 1 || ft.f.mantissa != 0) {
-		LOG(LOG_FPU,LOG_WARN)("FPU80 bitfield test #2 failed. h=%04x l=%016llx",(unsigned int)ft.raw.h,(unsigned long long)ft.raw.l);
+		LOG(LOG_FPU,LOG_WARN)("FPU80 bitfield test #2 failed. h=%04x l=%016llx",(unsigned int)ft.raw.h,(Bit64u)ft.raw.l);
 		return;
 	}
-	ft.raw.l = 1ULL << 0ULL;
+	ft.raw.l = 1 << 0;
 	ft.raw.h = 0;
 	if (ft.f.sign != 0 || ft.f.exponent != 0 || ft.f.mantissa != 1) {
-		LOG(LOG_FPU,LOG_WARN)("FPU80 bitfield test #3 failed. h=%04x l=%016llx",(unsigned int)ft.raw.h,(unsigned long long)ft.raw.l);
+		LOG(LOG_FPU,LOG_WARN)("FPU80 bitfield test #3 failed. h=%04x l=%016llx",(unsigned int)ft.raw.h,(Bit64u)ft.raw.l);
 		return;
 	}
 
@@ -996,16 +996,16 @@ void FPU_Selftest() {
 	FPU_Reg freg;
 
 	/* byte order test */
-	freg.ll = 0x0123456789ABCDEFULL;
+	freg.ll = 0x0123456789ABCDEF;
 #ifndef WORDS_BIGENDIAN
 	if (freg.l.lower != 0x89ABCDEFUL || freg.l.upper != 0x01234567UL) {
 		LOG(LOG_FPU,LOG_WARN)("FPU_Reg field order is wrong. ll=0x%16llx l=0x%08lx h=0x%08lx",
-			(unsigned long long)freg.ll,	(unsigned long)freg.l.lower,	(unsigned long)freg.l.upper);
+			(Bit64u)freg.ll,	(unsigned long)freg.l.lower,	(unsigned long)freg.l.upper);
 	}
 #else
 	if (freg.l.upper != 0x89ABCDEFUL || freg.l.lower != 0x01234567UL) {
 		LOG(LOG_FPU,LOG_WARN)("FPU_Reg field order is wrong. ll=0x%16llx l=0x%08lx h=0x%08lx",
-			(unsigned long long)freg.ll,	(unsigned long)freg.l.lower,	(unsigned long)freg.l.upper);
+			(Bit64u)freg.ll,	(unsigned long)freg.l.lower,	(unsigned long)freg.l.upper);
 	}
 #endif
 
