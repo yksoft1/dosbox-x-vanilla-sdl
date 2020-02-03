@@ -36,7 +36,7 @@ CFLAGS	=	-nologo -O2 -MT -DNDEBUG -DWIN32 -D_WIN32_WINNT=0x0501 -I. \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/x11 \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus 
 
-LFLAGS	=	-nologo -subsystem:WINDOWS,5.01
+LFLAGS	=	-nologo -subsystem:WINDOWS
 
 TARGET	=	dosbox-x.exe
 
