@@ -24,6 +24,8 @@
 #include "cpu.h"
 #include "fpu.h"
 
+#if C_FPU
+
 MMX_reg reg_mmx[8];
 
 
@@ -100,3 +102,4 @@ void setFPU(Bit16u tag) {
 	FPU_SetTag(tag);
 }
 
+#endif

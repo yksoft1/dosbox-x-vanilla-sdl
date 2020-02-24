@@ -19,6 +19,8 @@
 #ifndef DOSBOX_MMX_H
 #define DOSBOX_MMX_H
 
+#if C_FPU
+
 typedef union {
 
 	Bit64u q;
@@ -86,4 +88,5 @@ Bit16u SaturateDwordSToWordU(Bit32s value);
 
 void   setFPU(Bit16u tag);
 
+#endif
 #endif
