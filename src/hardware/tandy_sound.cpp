@@ -448,6 +448,14 @@ public:
 			enable_hw_tandy_dac=false;
 		}
 
+		/* ports from second DMA controller conflict with tandy ports at 0xC0.
+		 * Furthermore, the default I/O handlers after de-registration are needed
+		 * to ensure the SN76496 is writeable at port 0xC0 whether you're doing
+		 * normal 8-bit I/O or your a weirdo like Prince of Persia using 16-bit
+		 * I/O to write frequency values. (bugfix for Tandy mode of Prince of
+		 * Persia). */
+ 		CloseSecondDMAController();
+		
 		BIOS_tandy_D4_flag = 0;
 		if (IS_TANDY_ARCH) {
 			/* enable tandy sound if tandy=true/auto */
@@ -458,9 +466,6 @@ public:
 			/* only enable tandy sound if tandy=true */
 			if ((strcmp(section->Get_string("tandy"),"true")!=0) &&
 				(strcmp(section->Get_string("tandy"),"on")!=0)) return;
-
-			/* ports from second DMA controller conflict with tandy ports */
-			CloseSecondDMAController();
 
 			if (enable_hw_tandy_dac) {
 				WriteHandler[2].Install(0x1e0,TandySN76496Write,IO_MB,2);
