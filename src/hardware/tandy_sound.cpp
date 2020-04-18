@@ -448,6 +448,8 @@ public:
 			enable_hw_tandy_dac=false;
 		}
 
+		BIOS_tandy_D4_flag = 0;
+
 		/* ports from second DMA controller conflict with tandy ports at 0xC0.
 		 * Furthermore, the default I/O handlers after de-registration are needed
 		 * to ensure the SN76496 is writeable at port 0xC0 whether you're doing
@@ -455,8 +457,7 @@ public:
 		 * I/O to write frequency values. (bugfix for Tandy mode of Prince of
 		 * Persia). */
  		CloseSecondDMAController();
-		
-		BIOS_tandy_D4_flag = 0;
+
 		if (IS_TANDY_ARCH) {
 			/* enable tandy sound if tandy=true/auto */
 			if ((strcmp(section->Get_string("tandy"),"true")!=0) &&
