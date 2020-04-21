@@ -425,6 +425,21 @@ static void TandyDACUpdate(Bitu length) {
 				tandy.dac.chan->AddSamples_m8(1,&tandy.dac.dma.last_sample);
 			}
 		}
+		/* even if the DAC is disabled hold the last sample and SLOWLY restore DC.
+ 		 * jumping to silence quickly here causes loud annoying pops in Prince of Persia
+ 		 * when sound effects play. Prince of Persia seems to emit some very non-zero DC
+ 		 * value (like 0x08) when not playing sound effects, so this is needed to
+ 		 * recover from that without pops. This behavior also seems to match DAC behavior
+ 		 * with Prince of Persia according to real Tandy 1000 TL/3 hardware, complete
+ 		 * with the 8-bit DAC stepping noise on return to zero. In any case, this
+ 		 * modification makes the Tandy DAC sound effects in Prince of Persia much
+ 		 * more enjoyable to listen to and match the apparent sound of real hardware. */
+  	} else if (tandy.dac.dma.last_sample != 128) {
+  		for (Bitu ct=0; ct < length; ct++) {
+  			tandy.dac.chan->AddSamples_m8(1,&tandy.dac.dma.last_sample);
+ 			if (tandy.dac.dma.last_sample != 128)
+  				tandy.dac.dma.last_sample = (Bit8u)(((((int)tandy.dac.dma.last_sample - 128) * 63) / 64) + 128);
+  		}
 	} else {
 		tandy.dac.chan->AddSilence();
 	}
@@ -488,6 +503,8 @@ public:
 
 			tandy.dac.enabled=true;
 			tandy.dac.chan=MixerChanDAC.Install(&TandyDACUpdate,sample_rate,"TANDYDAC");
+			tandy.dac.chan->SetLowpassFreq(6000);
+  			tandy.dac.chan->SetSlewFreq(22050);
 
 			tandy.dac.hw.base=0xc4;
 			tandy.dac.hw.irq =7;
