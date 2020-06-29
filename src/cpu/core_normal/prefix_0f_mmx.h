@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2013  The DOSBox Team
+ *  Copyright (C) 2002-2019  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,14 +13,14 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA.
  */
 
 /* State Management */
 	CASE_0F_MMX(0x77)												/* EMMS */
 	{
 		if (CPU_ArchitectureType<CPU_ARCHTYPE_P55CSLOW) goto illegal_opcode;
-		setFPU(TAG_Empty);
+		setFPUTagEmpty();
 		break;
 	}
 
@@ -63,7 +63,7 @@
 		GetRM;
 		MMX_reg* dest=lookupRMregMM[rm];
 		if (rm>=0xc0) {
-			MMX_reg* src=&reg_mmx[rm&7];
+			MMX_reg* src=reg_mmx[rm&7];
 			dest->q = src->q;
 		} else {
 			GetEAa;
@@ -77,8 +77,8 @@
 		GetRM;
 		MMX_reg* dest=lookupRMregMM[rm];
 		if (rm>=0xc0) {
-			MMX_reg* src=&reg_mmx[rm&7];
-			dest->q = src->q;
+			MMX_reg* src=reg_mmx[rm&7];
+			src->q = dest->q;
 		} else {
 			GetEAa;
 			SaveMq(eaa,dest->q);
@@ -93,7 +93,7 @@
 		GetRM;
 		MMX_reg* dest=lookupRMregMM[rm];
 		if (rm>=0xc0) {
-			MMX_reg* src=&reg_mmx[rm&7];
+			MMX_reg* src=reg_mmx[rm&7];
 			dest->q ^= src->q;
 		} else {
 			GetEAa;
@@ -108,7 +108,7 @@
 		GetRM;
 		MMX_reg* dest=lookupRMregMM[rm];
 		if (rm>=0xc0) {
-			MMX_reg* src=&reg_mmx[rm&7];
+			MMX_reg* src=reg_mmx[rm&7];
 			dest->q |= src->q;
 		} else {
 			GetEAa;
@@ -122,7 +122,7 @@
 		GetRM;
 		MMX_reg* dest=lookupRMregMM[rm];
 		if (rm>=0xc0) {
-			MMX_reg* src=&reg_mmx[rm&7];
+			MMX_reg* src=reg_mmx[rm&7];
 			dest->q &= src->q;
 		} else {
 			GetEAa;
@@ -136,7 +136,7 @@
 		GetRM;
 		MMX_reg* dest=lookupRMregMM[rm];
 		if (rm>=0xc0) {
-			MMX_reg* src=&reg_mmx[rm&7];
+			MMX_reg* src=reg_mmx[rm&7];
 			dest->q = ~dest->q & src->q;
 		} else {
 			GetEAa;
@@ -153,12 +153,12 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q=LoadMq(eaa);
 		}
-		if (src.q > 15) dest->q = 0;
+		if (src.ub.b0 > 15) dest->q = 0;
 		else {
 			dest->uw.w0 <<= src.ub.b0;
 			dest->uw.w1 <<= src.ub.b0;
@@ -174,12 +174,12 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q=LoadMq(eaa);
 		}
-		if (src.q > 15) dest->q = 0;
+		if (src.ub.b0 > 15) dest->q = 0;
 		else {
 			dest->uw.w0 >>= src.ub.b0;
 			dest->uw.w1 >>= src.ub.b0;
@@ -197,13 +197,13 @@
 		MMX_reg tmp;
 		tmp.q = dest->q;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q=LoadMq(eaa);
 		}
 		if (!src.q) break;
-		if (src.q > 15) {
+		if (src.ub.b0 > 15) {
 			dest->uw.w0 = (tmp.uw.w0&0x8000)?0xffff:0;
 			dest->uw.w1 = (tmp.uw.w1&0x8000)?0xffff:0;
 			dest->uw.w2 = (tmp.uw.w2&0x8000)?0xffff:0;
@@ -226,7 +226,7 @@
 		GetRM;
 		Bit8u op=(rm>>3)&7;
 		Bit8u shift=Fetchb();
-		MMX_reg* dest=&reg_mmx[rm&7];
+		MMX_reg* dest=reg_mmx[rm&7];
 		switch (op) {
 			case 0x06: 	/*PSLLW*/
 				if (shift > 15) dest->q = 0;
@@ -276,12 +276,12 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q=LoadMq(eaa);
 		}
-		if (src.q > 31) dest->q = 0;
+		if (src.ub.b0 > 31) dest->q = 0;
 		else {
 			dest->ud.d0 <<= src.ub.b0;
 			dest->ud.d1 <<= src.ub.b0;
@@ -295,12 +295,12 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q=LoadMq(eaa);
 		}
-		if (src.q > 31) dest->q = 0;
+		if (src.ub.b0 > 31) dest->q = 0;
 		else {
 			dest->ud.d0 >>= src.ub.b0;
 			dest->ud.d1 >>= src.ub.b0;
@@ -316,13 +316,13 @@
 		MMX_reg tmp;
 		tmp.q = dest->q;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q=LoadMq(eaa);
 		}
 		if (!src.q) break;
-		if (src.q > 31) {
+		if (src.ub.b0 > 31) {
 			dest->ud.d0 = (tmp.ud.d0&0x80000000)?0xffffffff:0;
 			dest->ud.d1 = (tmp.ud.d1&0x80000000)?0xffffffff:0;
 		} else {
@@ -339,7 +339,7 @@
 		GetRM;
 		Bit8u op=(rm>>3)&7;
 		Bit8u shift=Fetchb();
-		MMX_reg* dest=&reg_mmx[rm&7];
+		MMX_reg* dest=reg_mmx[rm&7];
 		switch (op) {
 			case 0x06: 	/*PSLLD*/
 				if (shift > 31) dest->q = 0;
@@ -380,12 +380,12 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q=LoadMq(eaa);
 		}
-		if (src.q > 63) dest->q = 0;
+		if (src.ub.b0 > 63) dest->q = 0;
 		else dest->q <<= src.ub.b0;
 		break;
 	}
@@ -396,12 +396,12 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q=LoadMq(eaa);
 		}
-		if (src.q > 63) dest->q = 0;
+		if (src.ub.b0 > 63) dest->q = 0;
 		else dest->q >>= src.ub.b0;
 		break;
 	}
@@ -410,7 +410,7 @@
 		if (CPU_ArchitectureType<CPU_ARCHTYPE_P55CSLOW) goto illegal_opcode;
 		GetRM;
 		Bit8u shift=Fetchb();
-		MMX_reg* dest=&reg_mmx[rm&7];
+		MMX_reg* dest=reg_mmx[rm&7];
 		if (shift > 63) dest->q = 0;
 		else {
 			Bit8u op=rm&0x20;
@@ -431,7 +431,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -453,7 +453,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -471,7 +471,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -487,7 +487,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -509,7 +509,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -527,7 +527,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -549,7 +549,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -567,7 +567,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -589,7 +589,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -607,7 +607,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -623,7 +623,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -645,7 +645,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -664,7 +664,7 @@
 		MMX_reg src;
 		MMX_reg result;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -690,7 +690,7 @@
 		MMX_reg src;
 		MMX_reg result;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -710,7 +710,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -732,7 +732,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -754,7 +754,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q = reg_mmx[rm&7].q;
+			src.q = reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -764,14 +764,14 @@
 		else {
 			Bit32s product0 = (Bit32s)dest->sw.w0 * (Bit32s)src.sw.w0;
 			Bit32s product1 = (Bit32s)dest->sw.w1 * (Bit32s)src.sw.w1;
-			dest->ud.d0 = product0 + product1;
+			dest->ud.d0 = (uint32_t)(product0 + product1);
 		}
 		if (dest->ud.d1 == 0x80008000 && src.ud.d1 == 0x80008000)
 			dest->ud.d1 = 0x80000000;
 		else {
 			Bit32s product2 = (Bit32s)dest->sw.w2 * (Bit32s)src.sw.w2;
 			Bit32s product3 = (Bit32s)dest->sw.w3 * (Bit32s)src.sw.w3;
-			dest->sd.d1 = product2 + product3;
+			dest->sd.d1 = (int32_t)(product2 + product3);
 		}
 		break;
 	}
@@ -784,7 +784,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -806,7 +806,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -824,7 +824,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -840,7 +840,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -862,7 +862,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -880,7 +880,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -898,7 +898,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -920,7 +920,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -938,7 +938,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -960,7 +960,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -982,7 +982,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -1000,7 +1000,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -1016,7 +1016,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -1028,7 +1028,6 @@
 		dest->ub.b3 = src.ub.b1;
 		dest->ub.b2 = dest->ub.b1;
 		dest->ub.b1 = src.ub.b0;
-		dest->ub.b0 = dest->ub.b0;
 		break;
 	}
 	CASE_0F_MMX(0x61)												/* PUNPCKLWD Pq,Qq */
@@ -1038,7 +1037,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);
@@ -1046,7 +1045,6 @@
 		dest->uw.w3 = src.uw.w1;
 		dest->uw.w2 = dest->uw.w1;
 		dest->uw.w1 = src.uw.w0;
-		dest->uw.w0 = dest->uw.w0;
 		break;
 	}
 	CASE_0F_MMX(0x62)												/* PUNPCKLDQ Pq,Qq */
@@ -1056,7 +1054,7 @@
 		MMX_reg* dest=lookupRMregMM[rm];
 		MMX_reg src;
 		if (rm>=0xc0) {
-			src.q=reg_mmx[rm&7].q;
+			src.q=reg_mmx[rm&7]->q;
 		} else {
 			GetEAa;
 			src.q = LoadMq(eaa);

@@ -23,6 +23,8 @@
 #include "mem.h"
 #endif
 
+#include "mmx.h"
+
 void FPU_ESC0_Normal(Bitu rm);
 void FPU_ESC0_EA(Bitu func,PhysPt ea);
 void FPU_ESC1_Normal(Bitu rm);
@@ -61,6 +63,7 @@ typedef union {
     } l;
 #endif
     Bit64s ll;
+	MMX_reg reg_mmx;
 } FPU_Reg;
 
 // dynamic x86 core needs this
@@ -153,17 +156,24 @@ enum FPU_Round {
 };
 
 typedef struct {
+#if defined(HAS_LONG_DOUBLE)//probably shouldn't allow struct to change size based on this
+	FPU_Reg		_do_not_use__regs[9];
+#else
 	FPU_Reg		regs[9];
+#endif
 	FPU_P_Reg	p_regs[9];
 	FPU_Reg_80	regs_80[9];
+#if defined(HAS_LONG_DOUBLE)//probably shouldn't allow struct to change size based on this
+	bool		_do_not_use__use80[9];		// if set, use the 80-bit precision version
+#else
 	bool		use80[9];		// if set, use the 80-bit precision version
+#endif
 	FPU_Tag		tags[9];
 	Bit16u		cw,cw_mask_all;
 	Bit16u		sw;
 	Bit32u		top;
 	FPU_Round	round;
 } FPU_rec;
-
 
 //get pi from a real library
 #define PI		3.14159265358979323846
