@@ -41,6 +41,8 @@ struct XGAStatus {
 
 	Bit32u forecolor;
 	Bit32u backcolor;
+	
+	uint32_t color_compare;
 
 	Bitu curcommand;
 
@@ -161,6 +163,21 @@ void XGA_DrawPoint(Bitu x, Bitu y, Bitu c) {
 			break;
 	}
 
+}
+
+Bitu XGA_PointMask() {
+	switch(XGA_COLOR_MODE) {
+		case M_LIN8:
+			return 0xFFul;
+		case M_LIN15:
+		case M_LIN16:
+			return 0xFFFFul;
+		case M_LIN32:
+			return 0xFFFFFFFFul;
+		default:
+			break;
+	}
+	return 0;
 }
 
 Bitu XGA_GetPoint(Bitu x, Bitu y) {
@@ -734,6 +751,7 @@ void XGA_BlitRect(Bitu val) {
 	Bit32u xat, yat;
 	Bitu srcdata;
 	Bitu dstdata;
+	Bitu colorcmpdata;
 
 	Bitu srcval;
 	Bitu destval;
@@ -745,6 +763,8 @@ void XGA_BlitRect(Bitu val) {
 
 	if(((val >> 5) & 0x01) != 0) dx = 1;
 	if(((val >> 7) & 0x01) != 0) dy = 1;
+	
+	colorcmpdata = xga.color_compare & XGA_PointMask();
 
 	srcx = xga.curx;
 	srcy = xga.cury;
@@ -811,10 +831,21 @@ void XGA_BlitRect(Bitu val) {
 					break;
 			}
 
-			destval = XGA_GetMixResult(mixmode, srcval, dstdata);
-			//LOG_MSG("XGA: DrawPattern: Mixmode: %x Mixselect: %x", mixmode, mixselect);
+			bool doit = true;
 
-			XGA_DrawPoint(tarx, tary, destval);
+			if (xga.control1 & 0x100) { /* COLOR_CMP enabled. control1 corresponds to XGA register BEE8h */
+				/* control1 bit 7 is SRC_NE.
+				 * If clear, don't update if source value == COLOR_CMP.
+				 * If set, don't update if source value != COLOR_CMP */
+				doit = !!(((srcval == colorcmpdata)?0:1)^((xga.control1>>7u)&1u));
+			}
+
+			if (doit) {
+				destval = XGA_GetMixResult(mixmode, srcval, dstdata);
+				//LOG_MSG("XGA: DrawPattern: Mixmode: %x Mixselect: %x", mixmode, mixselect);
+
+				XGA_DrawPoint((Bitu)tarx, (Bitu)tary, destval);
+			}
 
 			srcx += dx;
 			tarx += dx;
@@ -1150,7 +1181,7 @@ void XGA_Write(Bitu port, Bitu val, Bitu len) {
 			xga.destx = val&0x3fff;
 			break;
 		case 0xb2e8:
-			//LOG_MSG("COLOR_CMP not implemented");
+			XGA_SetDualReg(xga.color_compare, val);
 			break;
 		case 0xb6e8:
 			xga.backmix = val;
@@ -1220,6 +1251,8 @@ Bitu XGA_Read(Bitu port, Bitu len) {
 			else return 0x0;
 		case 0xbee8:
 			return XGA_Read_Multifunc();
+		case 0xb2e8:
+			return XGA_GetDualReg(xga.color_compare);
 		case 0xa2e8:
 			return XGA_GetDualReg(xga.backcolor);
 			break;
