@@ -1050,6 +1050,17 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
                         ClearAnsi();
                     }
                     break;
+				case 'n':/* Device Status Report */
+					switch (ansi.data[0]) {
+						case 6: /* report active position */
+							dev_con_max = sprintf((char*)dev_con_readbuf,"\x1B[%d;%dR",CURSOR_POS_ROW(page),CURSOR_POS_COL(page));
+							break;
+						default:
+							LOG(LOG_IOCTL,LOG_NORMAL)("ANSI: unhandled Device Status Report code %d",ansi.data[0]);
+							break;
+					};
+					ClearAnsi();
+					break;
                 case 'l':/* (if code =7) disable linewrap */
                 case 'p':/* reassign keys (needs strings) */
                 case 'i':/* printer stuff */
